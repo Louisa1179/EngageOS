@@ -463,7 +463,15 @@
       <div class="nav-left"><div class="nav-dot" style="background:#a78bfa;"></div><span class="nav-label">Wales</span></div>
       <span class="nav-count count-gray" id="org-count-wales">–</span>
     </div>
+    <div class="nav-item" id="org-filter-country-unassigned" onclick="setOrgFilter('country-unassigned',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:#e2e8f0;"></div><span class="nav-label" style="color:var(--tee-muted);">Unassigned</span></div>
+      <span class="nav-count count-gray" id="org-count-country-unassigned">–</span>
+    </div>
     <div class="sidebar-section" style="margin-top:1rem;margin-bottom:0.5rem;">Size</div>
+    <div class="nav-item" id="org-filter-no-country" onclick="setOrgFilter('no-country',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:#e2e8f0;"></div><span class="nav-label">Unassigned</span></div>
+      <span class="nav-count count-gray" id="org-count-no-country">–</span>
+    </div>
     <div id="org-size-filters"></div>
   </div>
   <!-- ORG MAIN LIST -->
@@ -2772,6 +2780,8 @@ function updateOrgCounts() {
   const eEl = document.getElementById('org-count-england'); if (eEl) eEl.textContent = allOrgs.filter(o => o.country === 'England').length;
   const sEl = document.getElementById('org-count-scotland'); if (sEl) sEl.textContent = allOrgs.filter(o => o.country === 'Scotland').length;
   const wEl = document.getElementById('org-count-wales'); if (wEl) wEl.textContent = allOrgs.filter(o => o.country === 'Wales').length;
+  const ucEl = document.getElementById('org-count-no-country'); if (ucEl) ucEl.textContent = allOrgs.filter(o => !o.country).length;
+  const cuEl = document.getElementById('org-count-country-unassigned'); if (cuEl) cuEl.textContent = allOrgs.filter(o => !o.country).length;
   // Build size filters dynamically from data
   const sizeContainer = document.getElementById('org-size-filters');
   if (sizeContainer) {
@@ -2779,6 +2789,7 @@ function updateOrgCounts() {
     if (sizes.length === 0) {
       sizeContainer.innerHTML = '<div style="font-size:0.78rem;color:var(--tee-muted);padding:0.25rem 0.75rem;">No size data yet</div>';
     } else {
+      const unassignedSize = allOrgs.filter(o => !o.size).length;
       sizeContainer.innerHTML = sizes.map(sz => {
         const count = allOrgs.filter(o => o.size === sz).length;
         const filterId = 'size:' + sz;
@@ -2787,7 +2798,10 @@ function updateOrgCounts() {
           <div class="nav-left"><div class="nav-dot" style="background:#6ee7b7;"></div><span class="nav-label">${sz}</span></div>
           <span class="nav-count count-gray">${count}</span>
         </div>`;
-      }).join('');
+      }).join('') + `<div class="nav-item${currentOrgFilter==='size-unassigned'?' active':''}" onclick="setOrgFilter('size-unassigned',this)" style="cursor:pointer;">
+          <div class="nav-left"><div class="nav-dot" style="background:#e2e8f0;"></div><span class="nav-label" style="color:var(--tee-muted);">Unassigned</span></div>
+          <span class="nav-count count-gray">${unassignedSize}</span>
+        </div>`;
     }
   }
 }
@@ -2822,6 +2836,9 @@ function filterOrgs() {
   else if (currentOrgFilter === 'scotland') orgs = orgs.filter(o => o.country === 'Scotland');
   else if (currentOrgFilter === 'wales') orgs = orgs.filter(o => o.country === 'Wales');
   else if (currentOrgFilter && currentOrgFilter.startsWith('size:')) { const sz = currentOrgFilter.slice(5); orgs = orgs.filter(o => o.size === sz); }
+  else if (currentOrgFilter === 'country-unassigned') orgs = orgs.filter(o => !o.country);
+  else if (currentOrgFilter === 'no-country') orgs = orgs.filter(o => !o.country);
+  else if (currentOrgFilter === 'size-unassigned') orgs = orgs.filter(o => !o.size);
   if (query.length >= 2) orgs = orgs.filter(o => (o.name||'').toLowerCase().includes(query) || (o.region||'').toLowerCase().includes(query) || (o.subsector||'').toLowerCase().includes(query));
   document.getElementById('org-subtitle').textContent = `${orgs.length} organisation${orgs.length !== 1 ? 's' : ''}`;
   updateOrgCounts();
