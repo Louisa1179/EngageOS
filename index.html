@@ -2567,7 +2567,9 @@ function switchWorkspace(ws) {
     bdBody.style.display = 'flex';
     tabBd.classList.add('active');
     if (deskBar) deskBar.style.display = 'flex';
+    setTimeout(updateAddBtn, 0);
   } else if (ws === 'orgs') {
+    setTimeout(updateAddBtn, 0);
     if (deskBar) deskBar.style.display = 'none';
     orgsBody.style.display = 'flex';
     tabOrgs.classList.add('active');
