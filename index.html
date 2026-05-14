@@ -383,7 +383,7 @@
         <button id="toggle-all" onclick="switchUser('All')" style="border:none;border-radius:6px;padding:0.3rem 0.875rem;font-family:'DM Sans',sans-serif;font-size:0.78rem;font-weight:500;cursor:pointer;transition:all 0.2s;">All</button>
       </div>
       <button class="refresh-btn" onclick="toggleTheme()" id="theme-toggle" title="Toggle dark/light mode">☀️</button>
-      <button class="refresh-btn" onclick="openAddContactModal()" style="color:var(--tee-accent);border-color:rgba(53,150,194,0.3);">+ Add contact</button>
+      <button class="refresh-btn" id="add-btn" onclick="handleAddBtn()" style="color:var(--tee-accent);border-color:rgba(53,150,194,0.3);">+ Add contact</button>
       <button class="refresh-btn" onclick="loadContacts()">↻ Refresh</button>
       <button class="refresh-btn" onclick="resetSetup()" style="color: #ff6b6b; border-color: rgba(255,107,107,0.3);">Sign out</button>
     </div>
@@ -3401,6 +3401,16 @@ function openEditModal() {
   ensureOrgsLoaded();
 }
 
+function handleAddBtn() {
+  const orgsVisible = document.getElementById('orgs-workspace') && document.getElementById('orgs-workspace').style.display !== 'none';
+  if (orgsVisible) { openNewOrgModal(); } else { openAddContactModal(); }
+}
+function updateAddBtn() {
+  const btn = document.getElementById('add-btn');
+  if (!btn) return;
+  const orgsVisible = document.getElementById('orgs-workspace') && document.getElementById('orgs-workspace').style.display !== 'none';
+  btn.textContent = orgsVisible ? '+ Add organisation' : '+ Add contact';
+}
 function openAddContactModal() {
   editMode = 'add';
   document.getElementById('edit-modal-title').textContent = 'Add new contact';
