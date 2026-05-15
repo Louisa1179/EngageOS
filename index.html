@@ -1874,7 +1874,8 @@ function switchJohnView(bucket) {
         <div class="contact-avatar" style="background:${avatarColors[colorIdx]}22;color:${avatarColors[colorIdx]};">${initials}</div>
         <div class="contact-info">
           <div class="contact-name">${c.name}</div>
-          <div class="contact-meta">${c.role}${c.orgName ? ' · ' + c.orgName : ''}</div>
+          <div class="contact-meta">${c.role}</div>
+          ${c.orgName ? `<div class="contact-meta" style="color:var(--tee-accent);opacity:0.8;">${c.orgName}</div>` : ''}
         </div>
         <div class="contact-right">${ownerBadge}<span class="due-pill ${due.cls}">${due.label}</span></div>
       </div>`;
@@ -2143,7 +2144,8 @@ function renderView() {
       <div class="contact-avatar" style="background: ${avatarColors[colorIdx]}22; color: ${avatarColors[colorIdx]};">${initials}</div>
       <div class="contact-info">
         <div class="contact-name">${c.name}</div>
-        <div class="contact-meta">${c.role}${c.orgName ? ' · ' + c.orgName : ''}</div>
+        <div class="contact-meta">${c.role}</div>
+        ${c.orgName ? `<div class="contact-meta" style="color:var(--tee-accent);opacity:0.8;">${c.orgName}</div>` : ''}
       </div>
       <div class="contact-right">
         ${getViewUser() === 'All' && c.owner ? `<span style="font-size:0.65rem;padding:1px 6px;border-radius:8px;background:rgba(53,150,194,0.1);color:var(--tee-accent);margin-bottom:2px;">${c.owner.split(' ')[0]}</span>` : ''}
