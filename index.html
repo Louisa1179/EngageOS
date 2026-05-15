@@ -78,6 +78,28 @@
   .workspace-tab.active { background: var(--tee-accent); color: white; }
   #orgs-workspace { display: none; flex-direction: row; overflow: hidden; position: fixed; top: 65px; left: 0; right: 0; bottom: 0; z-index: 10; }
   #candidates-workspace { display: none; flex-direction: row; overflow: hidden; position: fixed; top: 65px; left: 0; right: 0; bottom: 0; z-index: 10; }
+  #assignments-workspace { display: none; flex-direction: row; overflow: hidden; position: fixed; top: 65px; left: 0; right: 0; bottom: 0; z-index: 10; }
+
+  /* ASSIGNMENT STATUS BADGES */
+  .assign-status { display:inline-block; padding:0.2rem 0.6rem; border-radius:20px; font-size:0.72rem; font-weight:500; }
+  .assign-status-Active { background:rgba(53,150,194,0.12); color:var(--tee-accent); }
+  .assign-status-Shortlisting { background:rgba(64,202,233,0.12); color:#0891b2; }
+  .assign-status-Interviewing { background:rgba(124,58,237,0.12); color:#7c3aed; }
+  .assign-status-Offer { background:rgba(5,150,105,0.12); color:#059669; }
+  .assign-status-Closed { background:rgba(107,114,153,0.12); color:var(--tee-muted); }
+  .assign-status-Lost { background:rgba(220,38,38,0.1); color:#dc2626; }
+
+  /* ASSIGNMENT CARD */
+  .assign-card {
+    background: var(--tee-mid); border: 1px solid var(--tee-border); border-radius: 12px;
+    padding: 1rem 1.25rem; margin-bottom: 0.6rem; cursor: pointer;
+    transition: all 0.15s; border-left: 3px solid transparent;
+  }
+  .assign-card:hover { border-color: var(--tee-accent); background: var(--tee-hover); }
+  .assign-card.selected { border-left-color: var(--tee-accent); background: var(--tee-hover); }
+  .assign-card-title { font-size: 0.9rem; font-weight: 500; color: var(--tee-text); margin-bottom: 0.25rem; }
+  .assign-card-org { font-size: 0.78rem; color: var(--tee-muted); margin-bottom: 0.5rem; }
+  .assign-card-meta { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
   .desk-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 2rem; background: var(--tee-mid); border-bottom: 1px solid var(--tee-border); }
   .desk-btn { border: 1px solid var(--tee-border); background: transparent; border-radius: 20px; padding: 0.25rem 0.875rem; font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 500; cursor: pointer; color: var(--tee-muted); transition: all 0.2s; }
   .desk-btn:hover { border-color: var(--tee-accent); color: var(--tee-accent); }
@@ -366,6 +388,7 @@
       <button class="workspace-tab active" id="tab-bd" onclick="switchWorkspace('bd')">BD</button>
       <button class="workspace-tab" id="tab-orgs" onclick="switchWorkspace('orgs')">Organisations</button>
       <button class="workspace-tab" id="tab-candidates" onclick="switchWorkspace('candidates')">Candidates</button>
+      <button class="workspace-tab" id="tab-assignments" onclick="switchWorkspace('assignments')">Assignments</button>
     </div>
     <div class="header-right">
       <div style="position:relative;">
@@ -922,6 +945,170 @@
     <div class="empty-state">
       <div class="empty-state-title">Select a candidate</div>
       <div class="empty-state-text">Click a candidate to see their details and log actions</div>
+    </div>
+  </div>
+</div>
+
+<!-- ASSIGNMENTS WORKSPACE -->
+<div id="assignments-workspace">
+
+  <!-- ASSIGNMENTS SIDEBAR -->
+  <div style="width:220px;flex-shrink:0;background:var(--tee-mid);border-right:1px solid var(--tee-border);overflow-y:auto;padding:1.25rem 0;">
+    <div class="sidebar-section">Status</div>
+    <div class="nav-item active" id="assign-filter-all" onclick="setAssignFilter('all',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:var(--tee-accent);"></div><span class="nav-label">All assignments</span></div>
+      <span class="nav-count count-gray" id="assign-count-all">–</span>
+    </div>
+    <div class="nav-item" id="assign-filter-Active" onclick="setAssignFilter('Active',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:var(--tee-accent);"></div><span class="nav-label">Active</span></div>
+      <span class="nav-count count-gray" id="assign-count-Active">–</span>
+    </div>
+    <div class="nav-item" id="assign-filter-Shortlisting" onclick="setAssignFilter('Shortlisting',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:#0891b2;"></div><span class="nav-label">Shortlisting</span></div>
+      <span class="nav-count count-gray" id="assign-count-Shortlisting">–</span>
+    </div>
+    <div class="nav-item" id="assign-filter-Interviewing" onclick="setAssignFilter('Interviewing',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:#7c3aed;"></div><span class="nav-label">Interviewing</span></div>
+      <span class="nav-count count-gray" id="assign-count-Interviewing">–</span>
+    </div>
+    <div class="nav-item" id="assign-filter-Offer" onclick="setAssignFilter('Offer',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:#059669;"></div><span class="nav-label">Offer</span></div>
+      <span class="nav-count count-gray" id="assign-count-Offer">–</span>
+    </div>
+    <div class="nav-item" id="assign-filter-Closed" onclick="setAssignFilter('Closed',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:var(--tee-muted);"></div><span class="nav-label">Closed</span></div>
+      <span class="nav-count count-gray" id="assign-count-Closed">–</span>
+    </div>
+    <div class="nav-item" id="assign-filter-Lost" onclick="setAssignFilter('Lost',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:#dc2626;"></div><span class="nav-label">Lost</span></div>
+      <span class="nav-count count-gray" id="assign-count-Lost">–</span>
+    </div>
+    <div style="padding:1.25rem 1.25rem 0.25rem;margin-top:0.5rem;border-top:1px solid var(--tee-border);">
+      <button onclick="openAssignEditModal(null)" style="width:100%;background:var(--tee-accent);color:white;border:none;border-radius:8px;padding:0.6rem;font-family:'DM Sans',sans-serif;font-size:0.82rem;font-weight:500;cursor:pointer;">+ New assignment</button>
+    </div>
+  </div>
+
+  <!-- ASSIGNMENTS LIST -->
+  <div style="width:340px;flex-shrink:0;border-right:1px solid var(--tee-border);display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--tee-border);background:var(--tee-mid);">
+      <input type="text" id="assign-search" placeholder="Search assignments..." oninput="filterAssignments()"
+        style="width:100%;background:#f5f7fa;border:1px solid var(--tee-border);border-radius:8px;padding:0.5rem 0.875rem;font-family:'DM Sans',sans-serif;font-size:0.82rem;color:var(--tee-text);outline:none;"
+        onfocus="this.style.borderColor='var(--tee-accent)'" onblur="this.style.borderColor='var(--tee-border)'" />
+    </div>
+    <div id="assign-list" style="flex:1;overflow-y:auto;padding:1rem;align-self:flex-start;width:100%;">
+      <div style="color:var(--tee-muted);font-size:0.85rem;padding:2rem 0;text-align:center;">Loading assignments...</div>
+    </div>
+  </div>
+
+  <!-- ASSIGNMENT DETAIL PANEL -->
+  <div id="assign-detail" style="flex:1;overflow-y:auto;padding:2rem;background:var(--tee-dark);">
+    <div style="color:var(--tee-muted);font-size:0.85rem;padding:4rem 0;text-align:center;">Select an assignment to view details</div>
+  </div>
+
+</div>
+
+<!-- ASSIGNMENT EDIT MODAL -->
+<div class="modal-overlay" id="assign-edit-modal">
+  <div class="modal edit-modal" style="max-width:640px;">
+    <div class="modal-title" id="assign-modal-title">New assignment</div>
+    <div class="modal-sub" id="assign-modal-sub">Create a new assignment record.</div>
+    <div class="edit-row">
+      <div class="edit-field-group" style="flex:2;">
+        <label class="edit-label">Assignment name *</label>
+        <input type="text" id="ae-name" class="edit-input" placeholder="e.g. Interim HR Director" />
+      </div>
+      <div class="edit-field-group" style="flex:1;">
+        <label class="edit-label">Status</label>
+        <select id="ae-status" class="edit-input">
+          <option value="">Select...</option>
+          <option>Active</option><option>Shortlisting</option><option>Interviewing</option>
+          <option>Offer</option><option>Closed</option><option>Lost</option>
+        </select>
+      </div>
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group" style="flex:2;">
+        <label class="edit-label">Organisation</label>
+        <select id="ae-org" class="edit-input">
+          <option value="">Select organisation...</option>
+        </select>
+      </div>
+      <div class="edit-field-group" style="flex:1;">
+        <label class="edit-label">Job title</label>
+        <input type="text" id="ae-jobtitle" class="edit-input" placeholder="Job title" />
+      </div>
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">IR35 status</label>
+        <select id="ae-ir35" class="edit-input">
+          <option value="">Select...</option>
+          <option>Inside IR35</option><option>Outside IR35</option><option>Not Applicable</option>
+        </select>
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Remuneration type</label>
+        <select id="ae-remtype" class="edit-input">
+          <option value="">Select...</option>
+          <option>Salaried</option><option>FTC Salary</option><option>Day rate</option><option>Hourly rate</option>
+        </select>
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Remuneration value</label>
+        <input type="number" id="ae-remvalue" class="edit-input" placeholder="0" />
+      </div>
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">Fee amount (£)</label>
+        <input type="number" id="ae-feeamount" class="edit-input" placeholder="0" />
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Fee %</label>
+        <input type="number" id="ae-feepct" class="edit-input" placeholder="0" step="0.1" />
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Exclusivity</label>
+        <select id="ae-exclusivity" class="edit-input">
+          <option value="">Select...</option>
+          <option value="true">Yes</option><option value="false">No</option>
+        </select>
+      </div>
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">Date opened</label>
+        <input type="date" id="ae-dateopened" class="edit-input" />
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Start date</label>
+        <input type="date" id="ae-startdate" class="edit-input" />
+      </div>
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">Interview 1</label>
+        <input type="date" id="ae-int1" class="edit-input" />
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Interview 2</label>
+        <input type="date" id="ae-int2" class="edit-input" />
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Interview 3</label>
+        <input type="date" id="ae-int3" class="edit-input" />
+      </div>
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group" style="flex:1;">
+        <label class="edit-label">Notes</label>
+        <textarea id="ae-notes" class="edit-input" rows="3" style="resize:vertical;" placeholder="Assignment notes..."></textarea>
+      </div>
+    </div>
+    <div style="display:flex;gap:0.75rem;justify-content:flex-end;margin-top:1rem;">
+      <button class="modal-cancel" onclick="closeAssignEditModal()">Cancel</button>
+      <span id="assign-edit-saving" style="display:none;font-size:0.82rem;color:var(--tee-muted);align-self:center;">Saving...</span>
+      <button class="modal-save" onclick="saveAssignEdit()">Save assignment</button>
     </div>
   </div>
 </div>
@@ -2555,13 +2742,16 @@ function switchWorkspace(ws) {
   const bdBody = document.querySelector('.app-body');
   const orgsBody = document.getElementById('orgs-workspace');
   const candsBody = document.getElementById('candidates-workspace');
+  const assignBody = document.getElementById('assignments-workspace');
   const tabBd = document.getElementById('tab-bd');
   const tabOrgs = document.getElementById('tab-orgs');
   const tabCands = document.getElementById('tab-candidates');
+  const tabAssign = document.getElementById('tab-assignments');
   bdBody.style.display = 'none';
   orgsBody.style.display = 'none';
   candsBody.style.display = 'none';
-  [tabBd, tabOrgs, tabCands].forEach(t => t && t.classList.remove('active'));
+  if (assignBody) assignBody.style.display = 'none';
+  [tabBd, tabOrgs, tabCands, tabAssign].forEach(t => t && t.classList.remove('active'));
   const deskBar = document.querySelector('.desk-bar');
   if (ws === 'bd') {
     bdBody.style.display = 'flex';
@@ -2581,6 +2771,13 @@ function switchWorkspace(ws) {
     tabCands.classList.add('active');
     if (allCandidates.length === 0) loadCandidates();
     else { updateCandCounts(); filterCandidates(); }
+    if (allOrgs.length === 0) ensureOrgsLoaded();
+  } else if (ws === 'assignments') {
+    if (deskBar) deskBar.style.display = 'none';
+    if (assignBody) assignBody.style.display = 'flex';
+    if (tabAssign) tabAssign.classList.add('active');
+    if (allAssignments.length === 0) loadAssignments();
+    else { updateAssignCounts(); filterAssignments(); }
     if (allOrgs.length === 0) ensureOrgsLoaded();
   }
   // Force scroll to top
@@ -4421,6 +4618,327 @@ document.addEventListener('click', function(e) {
 });
 
 // ─── END CANDIDATES ──────────────────────────────────────────────────────────
+
+// ─── ASSIGNMENTS ─────────────────────────────────────────────────────────────
+
+let allAssignments = [];
+let selectedAssignment = null;
+let currentAssignFilter = 'all';
+let editingAssignId = null;
+
+async function loadAssignments() {
+  const listEl = document.getElementById('assign-list');
+  if (listEl) listEl.innerHTML = '<div style="color:var(--tee-muted);font-size:0.85rem;padding:2rem 0;text-align:center;">Loading...</div>';
+  try {
+    let records = [], offset = null;
+    do {
+      let url = `https://api.airtable.com/v0/${BASE_ID}/Assignments?pageSize=100`;
+      if (offset) url += `&offset=${offset}`;
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error?.message || 'Load failed');
+      records = records.concat(data.records || []);
+      offset = data.offset;
+    } while (offset);
+
+    allAssignments = records.map(r => ({
+      id: r.id,
+      name: r.fields['Assignment Name'] || '(Unnamed)',
+      status: r.fields['Status'] || '',
+      orgIds: r.fields['Organisation'] || [],
+      jobTitle: r.fields['Job Title'] || '',
+      ir35: r.fields['IR35 Status'] || '',
+      remType: r.fields['Remuneration Type'] || '',
+      remValue: r.fields['Remuneration Value'] || '',
+      feeAmount: r.fields['Fee Amount'] || '',
+      feePct: r.fields['Fee Percentage'] || '',
+      exclusivity: r.fields['Exclusivity'] || false,
+      dateOpened: r.fields['Date Opened'] || '',
+      startDate: r.fields['Start Date'] || '',
+      int1: r.fields['Interview 1'] || '',
+      int2: r.fields['Interview 2'] || '',
+      int3: r.fields['Interview 3'] || '',
+      notes: r.fields['Notes'] || '',
+      candidateIds: r.fields['Related Candidates'] || [],
+      contactRoles: r.fields['Contact Roles'] || [],
+    }));
+
+    updateAssignCounts();
+    filterAssignments();
+  } catch(e) {
+    if (listEl) listEl.innerHTML = `<div style="color:#dc2626;font-size:0.82rem;padding:1rem;">Error: ${e.message}</div>`;
+  }
+}
+
+function updateAssignCounts() {
+  const statuses = ['Active','Shortlisting','Interviewing','Offer','Closed','Lost'];
+  const el = id => document.getElementById(id);
+  if (el('assign-count-all')) el('assign-count-all').textContent = allAssignments.length;
+  statuses.forEach(s => {
+    const c = allAssignments.filter(a => a.status === s).length;
+    if (el(`assign-count-${s}`)) el(`assign-count-${s}`).textContent = c;
+  });
+}
+
+function setAssignFilter(filter, el) {
+  currentAssignFilter = filter;
+  document.querySelectorAll('#assignments-workspace .nav-item').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
+  filterAssignments();
+}
+
+function filterAssignments() {
+  const search = (document.getElementById('assign-search')?.value || '').toLowerCase();
+  let filtered = allAssignments;
+  if (currentAssignFilter !== 'all') filtered = filtered.filter(a => a.status === currentAssignFilter);
+  if (search) filtered = filtered.filter(a =>
+    a.name.toLowerCase().includes(search) ||
+    a.jobTitle.toLowerCase().includes(search) ||
+    a.notes.toLowerCase().includes(search)
+  );
+  renderAssignList(filtered);
+}
+
+function renderAssignList(assignments) {
+  const listEl = document.getElementById('assign-list');
+  if (!listEl) return;
+  if (!assignments.length) {
+    listEl.innerHTML = '<div style="color:var(--tee-muted);font-size:0.85rem;padding:2rem 0;text-align:center;">No assignments found</div>';
+    return;
+  }
+  listEl.innerHTML = assignments.map(a => {
+    const statusClass = `assign-status-${a.status}`;
+    const orgName = getOrgNameForAssignment(a);
+    return `<div class="assign-card${selectedAssignment?.id === a.id ? ' selected' : ''}" onclick="selectAssignment('${a.id}')">
+      <div class="assign-card-title">${a.name}</div>
+      ${orgName ? `<div class="assign-card-org">${orgName}</div>` : ''}
+      <div class="assign-card-meta">
+        ${a.status ? `<span class="assign-status ${statusClass}">${a.status}</span>` : ''}
+        ${a.jobTitle ? `<span style="font-size:0.72rem;color:var(--tee-muted);">${a.jobTitle}</span>` : ''}
+        ${a.ir35 ? `<span style="font-size:0.7rem;color:var(--tee-muted);background:var(--tee-card);border-radius:4px;padding:0.1rem 0.4rem;">${a.ir35}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function getOrgNameForAssignment(a) {
+  if (!a.orgIds || !a.orgIds.length) return '';
+  const org = allOrgs.find(o => o.id === a.orgIds[0]);
+  return org ? org.name : '';
+}
+
+function selectAssignment(id) {
+  selectedAssignment = allAssignments.find(a => a.id === id);
+  filterAssignments();
+  renderAssignDetail(selectedAssignment);
+}
+
+function renderAssignDetail(a) {
+  const panel = document.getElementById('assign-detail');
+  if (!panel || !a) return;
+  const orgName = getOrgNameForAssignment(a);
+  const fmt = v => v ? new Date(v).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '–';
+  const fmtMoney = v => v ? `£${Number(v).toLocaleString('en-GB')}` : '–';
+  const statusClass = `assign-status-${a.status}`;
+
+  panel.innerHTML = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:1.5rem;">
+      <div>
+        <div style="font-family:'DM Serif Display',serif;font-size:1.5rem;color:var(--tee-text);margin-bottom:0.25rem;">${a.name}</div>
+        ${orgName ? `<div style="font-size:0.85rem;color:var(--tee-muted);">${orgName}</div>` : ''}
+      </div>
+      <div style="display:flex;align-items:center;gap:0.5rem;">
+        ${a.status ? `<span class="assign-status ${statusClass}" style="font-size:0.8rem;">${a.status}</span>` : ''}
+        <button onclick="openAssignEditModal('${a.id}')" style="background:var(--tee-card);border:1px solid var(--tee-border);border-radius:8px;padding:0.35rem 0.875rem;font-size:0.78rem;color:var(--tee-muted);cursor:pointer;font-family:'DM Sans',sans-serif;">Edit</button>
+      </div>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.5rem;">
+      ${detailBlock('Job title', a.jobTitle || '–')}
+      ${detailBlock('IR35', a.ir35 || '–')}
+      ${detailBlock('Exclusivity', a.exclusivity ? 'Yes' : 'No')}
+      ${detailBlock('Remuneration type', a.remType || '–')}
+      ${detailBlock('Remuneration value', a.remValue ? fmtMoney(a.remValue) : '–')}
+      ${detailBlock('Fee amount', fmtMoney(a.feeAmount))}
+      ${detailBlock('Fee %', a.feePct ? `${a.feePct}%` : '–')}
+      ${detailBlock('Date opened', fmt(a.dateOpened))}
+      ${detailBlock('Start date', fmt(a.startDate))}
+    </div>
+
+    <div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1.25rem;margin-bottom:1rem;">
+      <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.875rem;">Process</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+        ${detailBlock('Interview 1', fmt(a.int1))}
+        ${detailBlock('Interview 2', fmt(a.int2))}
+        ${detailBlock('Interview 3', fmt(a.int3))}
+      </div>
+    </div>
+
+    ${a.notes ? `
+    <div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1.25rem;margin-bottom:1rem;">
+      <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem;">Notes</div>
+      <div style="font-size:0.85rem;color:var(--tee-text);line-height:1.6;white-space:pre-wrap;">${a.notes}</div>
+    </div>` : ''}
+  `;
+}
+
+function detailBlock(label, value) {
+  return `<div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:10px;padding:0.875rem;">
+    <div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.35rem;">${label}</div>
+    <div style="font-size:0.88rem;color:var(--tee-text);font-weight:400;">${value}</div>
+  </div>`;
+}
+
+function openAssignEditModal(id) {
+  editingAssignId = id;
+  const modal = document.getElementById('assign-edit-modal');
+  const title = document.getElementById('assign-modal-title');
+  const sub = document.getElementById('assign-modal-sub');
+
+  // Populate org dropdown from allOrgs
+  const orgSel = document.getElementById('ae-org');
+  orgSel.innerHTML = '<option value="">Select organisation...</option>' +
+    allOrgs.sort((a,b) => a.name.localeCompare(b.name)).map(o => `<option value="${o.id}">${o.name}</option>`).join('');
+
+  if (id) {
+    const a = allAssignments.find(x => x.id === id);
+    if (!a) return;
+    title.textContent = 'Edit assignment';
+    sub.textContent = 'Update this assignment record.';
+    document.getElementById('ae-name').value = a.name;
+    document.getElementById('ae-status').value = a.status || '';
+    orgSel.value = a.orgIds?.[0] || '';
+    document.getElementById('ae-jobtitle').value = a.jobTitle || '';
+    document.getElementById('ae-ir35').value = a.ir35 || '';
+    document.getElementById('ae-remtype').value = a.remType || '';
+    document.getElementById('ae-remvalue').value = a.remValue || '';
+    document.getElementById('ae-feeamount').value = a.feeAmount || '';
+    document.getElementById('ae-feepct').value = a.feePct || '';
+    document.getElementById('ae-exclusivity').value = a.exclusivity ? 'true' : (a.exclusivity === false ? 'false' : '');
+    document.getElementById('ae-dateopened').value = a.dateOpened || '';
+    document.getElementById('ae-startdate').value = a.startDate || '';
+    document.getElementById('ae-int1').value = a.int1 || '';
+    document.getElementById('ae-int2').value = a.int2 || '';
+    document.getElementById('ae-int3').value = a.int3 || '';
+    document.getElementById('ae-notes').value = a.notes || '';
+  } else {
+    title.textContent = 'New assignment';
+    sub.textContent = 'Create a new assignment record.';
+    ['ae-name','ae-jobtitle','ae-remvalue','ae-feeamount','ae-feepct','ae-notes',
+     'ae-dateopened','ae-startdate','ae-int1','ae-int2','ae-int3'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    ['ae-status','ae-ir35','ae-remtype','ae-exclusivity'].forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+    orgSel.value = '';
+  }
+
+  document.getElementById('assign-edit-saving').style.display = 'none';
+  modal.style.display = 'flex';
+}
+
+function closeAssignEditModal() {
+  document.getElementById('assign-edit-modal').style.display = 'none';
+  editingAssignId = null;
+}
+
+async function saveAssignEdit() {
+  const name = document.getElementById('ae-name').value.trim();
+  if (!name) { showToast('Assignment name is required', 'error'); return; }
+
+  document.getElementById('assign-edit-saving').style.display = 'inline';
+
+  const fields = { 'Assignment Name': name };
+  const status = document.getElementById('ae-status').value;
+  const orgId = document.getElementById('ae-org').value;
+  const jobTitle = document.getElementById('ae-jobtitle').value.trim();
+  const ir35 = document.getElementById('ae-ir35').value;
+  const remType = document.getElementById('ae-remtype').value;
+  const remValue = document.getElementById('ae-remvalue').value;
+  const feeAmount = document.getElementById('ae-feeamount').value;
+  const feePct = document.getElementById('ae-feepct').value;
+  const excl = document.getElementById('ae-exclusivity').value;
+  const dateOpened = document.getElementById('ae-dateopened').value;
+  const startDate = document.getElementById('ae-startdate').value;
+  const int1 = document.getElementById('ae-int1').value;
+  const int2 = document.getElementById('ae-int2').value;
+  const int3 = document.getElementById('ae-int3').value;
+  const notes = document.getElementById('ae-notes').value.trim();
+
+  if (status) fields['Status'] = status;
+  if (orgId) fields['Organisation'] = [orgId];
+  if (jobTitle) fields['Job Title'] = jobTitle;
+  if (ir35) fields['IR35 Status'] = ir35;
+  if (remType) fields['Remuneration Type'] = remType;
+  if (remValue) fields['Remuneration Value'] = parseFloat(remValue);
+  if (feeAmount) fields['Fee Amount'] = parseFloat(feeAmount);
+  if (feePct) fields['Fee Percentage'] = parseFloat(feePct);
+  if (excl !== '') fields['Exclusivity'] = excl === 'true';
+  if (dateOpened) fields['Date Opened'] = dateOpened;
+  if (startDate) fields['Start Date'] = startDate;
+  if (int1) fields['Interview 1'] = int1;
+  if (int2) fields['Interview 2'] = int2;
+  if (int3) fields['Interview 3'] = int3;
+  if (notes) fields['Notes'] = notes;
+
+  try {
+    const isNew = !editingAssignId;
+    const url = isNew
+      ? `https://api.airtable.com/v0/${BASE_ID}/Assignments`
+      : `https://api.airtable.com/v0/${BASE_ID}/Assignments/${editingAssignId}`;
+    const resp = await fetch(url, {
+      method: isNew ? 'POST' : 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message || JSON.stringify(data));
+
+    // Update local store
+    const updated = {
+      id: data.id,
+      name: data.fields['Assignment Name'] || name,
+      status: data.fields['Status'] || '',
+      orgIds: data.fields['Organisation'] || [],
+      jobTitle: data.fields['Job Title'] || '',
+      ir35: data.fields['IR35 Status'] || '',
+      remType: data.fields['Remuneration Type'] || '',
+      remValue: data.fields['Remuneration Value'] || '',
+      feeAmount: data.fields['Fee Amount'] || '',
+      feePct: data.fields['Fee Percentage'] || '',
+      exclusivity: data.fields['Exclusivity'] || false,
+      dateOpened: data.fields['Date Opened'] || '',
+      startDate: data.fields['Start Date'] || '',
+      int1: data.fields['Interview 1'] || '',
+      int2: data.fields['Interview 2'] || '',
+      int3: data.fields['Interview 3'] || '',
+      notes: data.fields['Notes'] || '',
+      candidateIds: data.fields['Related Candidates'] || [],
+      contactRoles: data.fields['Contact Roles'] || [],
+    };
+
+    if (isNew) {
+      allAssignments.unshift(updated);
+    } else {
+      const idx = allAssignments.findIndex(a => a.id === editingAssignId);
+      if (idx > -1) allAssignments[idx] = updated;
+    }
+
+    closeAssignEditModal();
+    updateAssignCounts();
+    filterAssignments();
+    selectedAssignment = updated;
+    renderAssignDetail(updated);
+    showToast(isNew ? 'Assignment created ✓' : 'Assignment updated ✓', 'success');
+  } catch(e) {
+    document.getElementById('assign-edit-saving').style.display = 'none';
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+// ─── END ASSIGNMENTS ──────────────────────────────────────────────────────────
+
 </script>
 </body>
 </html>
