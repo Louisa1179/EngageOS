@@ -1655,7 +1655,7 @@ function getContactsForView(view) {
       });
   }
   if (cfg.notStarted) {
-    return allContacts.filter(c => deskFilter(c) && (!c.step || c.step === 0) && c.status !== 'Do Not Contact' && c.status !== 'Responded');
+    return allContacts.filter(c => { const rel = c.relationshipStatus || ''; const isWarm = rel.startsWith('1') || rel.startsWith('2'); return deskFilter(c) && (!c.step || c.step === 0) && c.status !== 'Do Not Contact' && c.status !== 'Responded' && !isWarm; });
   }
   if (cfg.warmContacts) {
     return allContacts.filter(c => {
