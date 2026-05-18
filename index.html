@@ -2810,8 +2810,27 @@ async function loadAllContactsForCounting() {
   } catch(e) { console.log('Count load error:', e); }
 }
 
+let orgEditMode = 'edit'; // 'edit' or 'add'
+
+async function openNewOrgModal() {
+  orgEditMode = 'add';
+  document.querySelector('#org-edit-modal .modal-title').textContent = 'Add new organisation';
+  document.getElementById('org-edit-name').value = '';
+  document.getElementById('org-edit-notes').value = '';
+  document.getElementById('org-edit-saving').style.display = 'none';
+  document.getElementById('org-edit-modal').classList.add('show');
+  await loadOrgFieldOptions();
+  // Clear all dropdowns
+  ['org-edit-sector','org-edit-subsector','org-edit-country','org-edit-region','org-edit-size'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+}
+
 async function openOrgEditModal() {
+  orgEditMode = 'edit';
   if (!selectedOrg) return;
+  document.querySelector('#org-edit-modal .modal-title').textContent = 'Edit organisation';
   document.getElementById('org-edit-name').value = selectedOrg.name || '';
   document.getElementById('org-edit-notes').value = selectedOrg.notes || '';
   document.getElementById('org-edit-saving').style.display = 'none';
@@ -2839,7 +2858,6 @@ function closeOrgEditModal() {
 }
 
 async function saveOrgEdit() {
-  if (!selectedOrg) return;
   const name = document.getElementById('org-edit-name').value.trim();
   const sector = document.getElementById('org-edit-sector').value.trim();
   const subsector = document.getElementById('org-edit-subsector').value.trim();
@@ -2857,19 +2875,34 @@ async function saveOrgEdit() {
     if (region) fields['Region'] = region;
     if (size) fields['Employee Size Range'] = size;
     fields['Notes'] = notes;
-    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations/${selectedOrg.id}`, {
-      method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields })
-    });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error?.message || JSON.stringify(data));
-    Object.assign(selectedOrg, { name, sector, subsector, country, region, size, notes });
-    const idx = allOrgs.findIndex(o => o.id === selectedOrg.id);
-    if (idx > -1) Object.assign(allOrgs[idx], { name, sector, subsector, country, region, size, notes });
-    closeOrgEditModal();
-    renderOrgDetail(selectedOrg);
-    filterOrgs();
-    showToast('Organisation updated ✓', 'success');
+    if (orgEditMode === 'add') {
+      const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations`, {
+        method: 'POST', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error?.message || JSON.stringify(data));
+      const newOrg = { id: data.id, name, sector, subsector, country, region, size, notes, contactCount: 0 };
+      allOrgs.push(newOrg);
+      closeOrgEditModal();
+      filterOrgs();
+      showToast('Organisation added ✓', 'success');
+    } else {
+      if (!selectedOrg) return;
+      const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations/${selectedOrg.id}`, {
+        method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields })
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error?.message || JSON.stringify(data));
+      Object.assign(selectedOrg, { name, sector, subsector, country, region, size, notes });
+      const idx = allOrgs.findIndex(o => o.id === selectedOrg.id);
+      if (idx > -1) Object.assign(allOrgs[idx], { name, sector, subsector, country, region, size, notes });
+      closeOrgEditModal();
+      renderOrgDetail(selectedOrg);
+      filterOrgs();
+      showToast('Organisation updated ✓', 'success');
+    }
   } catch(e) {
     document.getElementById('org-edit-saving').style.display = 'none';
     showToast('Failed: ' + e.message, 'error');
