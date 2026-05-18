@@ -3901,18 +3901,43 @@ async function saveOngoing() {
   } catch(e) { document.getElementById('ongoing-saving').style.display = 'none'; showToast('Failed: ' + e.message, 'error'); }
 }
 
-function editNextActionNotes() {
+// Fallback options in case the Airtable metadata fetch hasn't run or failed
+const NEXT_ACTION_FALLBACK = [
+  'Send LI connection request',
+  'Send Email 1 - connected',
+  'Send Email 1 - not connected',
+  'Send Email 2 - connected',
+  'Send Email 2 - not connected',
+  'Send Email 3',
+  'LinkedIn Message - connected',
+  'InMail - not connected',
+  'Follow-up call',
+  'Re-send LI connection request'
+];
+
+function buildNextActionPicker() {
+  const display = document.getElementById('next-action-notes-display');
+  const picker = document.getElementById('next-action-notes-picker');
+  if (!display || !picker) return;
+  const current = selectedContact?.nextActionNotes || '';
+  const options = nextActionOptions.length > 0 ? nextActionOptions : NEXT_ACTION_FALLBACK;
+  picker.innerHTML = options.map(o => `<div onclick="selectNextActionNote('${o.replace(/'/g, "\\'")}')" style="padding:0.4rem 0.75rem;font-size:0.82rem;cursor:pointer;border-radius:6px;margin-bottom:2px;background:${o===current?'rgba(53,150,194,0.15)':'rgba(255,255,255,0.04)'};color:${o===current?'var(--tee-accent)':'var(--tee-text)'};border:1px solid ${o===current?'rgba(53,150,194,0.3)':'var(--tee-border)'};">${o}</div>`).join('');
+  display.style.display = 'none';
+  picker.style.display = 'block';
+}
+
+async function editNextActionNotes() {
   const display = document.getElementById('next-action-notes-display');
   const picker = document.getElementById('next-action-notes-picker');
   if (!display || !picker) return;
   if (picker.style.display !== 'none') { picker.style.display = 'none'; display.style.display = 'block'; return; }
-  // Build picker options
-  const current = selectedContact?.nextActionNotes || '';
-  const options = nextActionOptions;
-  if (options.length === 0) { picker.innerHTML = '<div style="font-size:0.8rem;color:var(--tee-muted);padding:0.4rem;">Loading options...</div>'; display.style.display = 'none'; picker.style.display = 'block'; return; }
-  picker.innerHTML = options.map(o => `<div onclick="selectNextActionNote('${o.replace(/'/g, "\\'")}')" style="padding:0.4rem 0.75rem;font-size:0.82rem;cursor:pointer;border-radius:6px;margin-bottom:2px;background:${o===current?'rgba(53,150,194,0.15)':'rgba(255,255,255,0.04)'};color:${o===current?'var(--tee-accent)':'var(--tee-text)'};border:1px solid ${o===current?'rgba(53,150,194,0.3)':'var(--tee-border)'};">${o}</div>`).join('');
-  display.style.display = 'none';
-  picker.style.display = 'block';
+  // If options not loaded yet, try fetching them — but show fallback immediately so it never freezes
+  if (nextActionOptions.length === 0) {
+    buildNextActionPicker(); // show fallback straight away
+    loadOrgFieldOptions().then(() => { if (nextActionOptions.length > 0) buildNextActionPicker(); });
+  } else {
+    buildNextActionPicker();
+  }
 }
 
 async function selectNextActionNote(value) {
