@@ -1687,7 +1687,7 @@ function getContactsForView(view) {
     if (cfg.nextAction) {
       return c.nextActionNotes && (Array.isArray(c.nextActionNotes) ? c.nextActionNotes.join(' ') : c.nextActionNotes).toLowerCase().includes(cfg.nextAction.toLowerCase().split(' ')[1]);
     }
-    if (cfg.step) return c.step === cfg.step && (c.status === 'Active' || c.status === 'On Hold');
+    if (cfg.step) { const rel = c.relationshipStatus || ''; const isWarm = rel.startsWith('1') || rel.startsWith('2'); return c.step === cfg.step && (c.status === 'Active' || c.status === 'On Hold') && !isWarm; }
     return false;
   });
 }
