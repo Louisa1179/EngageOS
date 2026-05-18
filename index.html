@@ -2063,7 +2063,7 @@ function switchView(view) {
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   document.querySelectorAll('.filter-chip')[0]?.classList.add('active');
   if (view === 'do-not-contact' && dncContacts.length === 0) { loadDncContacts(); }
-  if (view === 'do-not-sequence' && dnsContacts.length === 0) { loadDnsContacts(); }
+  if (view === 'do-not-sequence') { loadDnsContacts(); }
   if (view === 'unsubscribed' && unsubContacts.length === 0) { loadUnsubContacts(); }
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(`nav-${view}`)?.classList.add('active');
