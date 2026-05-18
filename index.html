@@ -2239,13 +2239,13 @@ function renderPanel(contact, interactions) {
           </div>
         </div>
       </div>
-      ${contact.followUpDate ? `
+      ${(contact.followUpDate || contact.nextActionDue) ? `
       <div class="panel-section">
-        <div class="panel-section-label">Reminder</div>
+        <div class="panel-section-label">Next action due</div>
         <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);border-radius:10px;padding:0.625rem 0.875rem;">
           <div>
-            <div style="font-size:0.78rem;color:#fb923c;font-weight:500;">⏰ ${contact.followUpDate}</div>
-            <div style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;">Check interaction history for details</div>
+            <div style="font-size:0.78rem;color:#fb923c;font-weight:500;">⏰ ${contact.nextActionDue || contact.followUpDate}</div>
+            ${contact.nextActionNotes ? `<div style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;">${Array.isArray(contact.nextActionNotes) ? contact.nextActionNotes.join(', ') : contact.nextActionNotes}</div>` : '<div style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;">Check interaction history for details</div>'}
           </div>
           <div onclick="clearReminder()" style="font-size:0.72rem;color:var(--tee-muted);cursor:pointer;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.06);">Clear</div>
         </div>
@@ -2579,8 +2579,8 @@ async function saveLogAction() {
 
     // If reminder date set — save Next Action Due directly
     if (setHold && followup) {
-      const saveFields = { 'Next Action Due': followup };
-      if (nextActionNotes) saveFields['Next Action Notes'] = [nextActionNotes];
+      const reminderLabel = nextActionNotes || subject || type;
+      const saveFields = { 'Next Action Due': followup, 'Next Action Notes': [reminderLabel] };
       const dateResp = await fetch(`${API_URL}/${selectedContact.id}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
