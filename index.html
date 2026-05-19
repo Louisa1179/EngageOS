@@ -1199,8 +1199,8 @@
         <input type="email" class="edit-input" id="cf-email" placeholder="email@..." />
       </div>
       <div class="edit-field-group">
-        <label class="edit-label">Phone</label>
-        <input type="text" class="edit-input" id="cf-phone" placeholder="Phone" />
+        <label class="edit-label">Landline</label>
+        <input type="text" class="edit-input" id="cf-phone" placeholder="Landline" />
       </div>
     </div>
     <div class="edit-row">
@@ -4059,7 +4059,8 @@ async function loadCandidates() {
       location: cf(r, 'Base Location'),
       willTravel: cf(r, 'Will Travel'),
       email: cf(r, 'Email') || cf(r, 'Email'),
-      phone: cf(r, 'Phone'),
+      phone: cf(r, 'Landline'),
+      mobile: cf(r, 'Mobile'),
       linkedin: cf(r, 'LinkedIn'),
       salary: Array.isArray(r.fields['Salary objective']) ? r.fields['Salary objective'] : (r.fields['Salary objective'] ? [r.fields['Salary objective']] : []),
       summary: cf(r, 'Notes'),
@@ -4543,7 +4544,7 @@ async function saveCandidateEdit() {
   const sectors = getTagPickerValues('cf-sector-picker');
   const fields = { 'Full Name': fullName };
   if (orgId) fields['Current Employer'] = [orgId];
-  const textFields = [['cf-role','Employment History'],['cf-email','Email'],['cf-phone','Phone'],['cf-mobile','Mobile'],['cf-linkedin','LinkedIn'],['cf-cvurl','CV URL'],['cf-location','Base Location'],['cf-summary','Notes']];
+  const textFields = [['cf-role','Employment History'],['cf-email','Email'],['cf-phone','Landline'],['cf-mobile','Mobile'],['cf-linkedin','LinkedIn'],['cf-cvurl','CV URL'],['cf-location','Base Location'],['cf-summary','Notes']];
   const salaryVals = getTagPickerValues('cf-salary-picker');
   if (salaryVals.length > 0) fields['Salary objective'] = salaryVals;
   textFields.forEach(([elId, fn]) => { const v = document.getElementById(elId)?.value?.trim(); if(v) fields[fn] = v; });
@@ -4569,7 +4570,7 @@ async function saveCandidateEdit() {
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || selectedCandidate.orgName) : selectedCandidate.orgName;
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
       if (idx > -1) {
-        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, email: fields['Email']||allCandidates[idx].email, phone: fields['Phone']||allCandidates[idx].phone, mobile: fields['Mobile']||allCandidates[idx].mobile, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary Objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary };
+        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, email: fields['Email']||allCandidates[idx].email, phone: fields['Landline']||allCandidates[idx].phone, mobile: fields['Mobile']||allCandidates[idx].mobile, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary Objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary };
         selectedCandidate = allCandidates[idx];
       }
       closeCandidateModal();
@@ -4583,7 +4584,7 @@ async function saveCandidateEdit() {
       data = await resp.json();
       if (!resp.ok) throw new Error(data.error?.message || 'Create failed');
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || '') : '';
-      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', email: fields['Email']||'', phone: fields['Phone']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [] };
+      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [] };
       allCandidates.push(newCand);
       closeCandidateModal();
       updateCandCounts();
