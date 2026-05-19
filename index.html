@@ -1203,6 +1203,13 @@
         <input type="text" class="edit-input" id="cf-phone" placeholder="Phone" />
       </div>
     </div>
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">Mobile</label>
+        <input type="text" class="edit-input" id="cf-mobile" placeholder="Mobile" />
+      </div>
+      <div class="edit-field-group"></div>
+    </div>
     <div class="edit-field-group">
       <label class="edit-label">LinkedIn URL</label>
       <input type="text" class="edit-input" id="cf-linkedin" placeholder="https://linkedin.com/in/..." />
@@ -4442,7 +4449,7 @@ function openAddCandidateModal() {
   candEditMode = 'add';
   document.getElementById('cand-modal-title').textContent = 'Add candidate';
   document.getElementById('cand-modal-sub').textContent = 'Create a new candidate record in Airtable.';
-  ['cf-firstname','cf-lastname','cf-role','cf-email','cf-phone','cf-linkedin','cf-cvurl','cf-salary','cf-location','cf-summary'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  ['cf-firstname','cf-lastname','cf-role','cf-email','cf-phone','cf-mobile','cf-linkedin','cf-cvurl','cf-salary','cf-location','cf-summary'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   ['cf-status','cf-relationship','cf-availability','cf-notice','cf-travel','cf-contract','cf-dayrate'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   ['cf-specialism-picker','cf-sector-picker','cf-contract-picker','cf-dayrate-picker','cf-travel-picker','cf-salary-picker'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
   document.getElementById('cf-org-id').value = '';
@@ -4475,6 +4482,7 @@ function openEditCandidateModal() {
   document.getElementById('cf-role').value = c.role || '';
   document.getElementById('cf-email').value = c.email || '';
   document.getElementById('cf-phone').value = c.phone || '';
+  document.getElementById('cf-mobile').value = c.mobile || '';
   document.getElementById('cf-linkedin').value = c.linkedin || '';
   document.getElementById('cf-cvurl').value = c.cvUrl || '';
   document.getElementById('cf-salary').value = c.salary || '';
@@ -4535,7 +4543,7 @@ async function saveCandidateEdit() {
   const sectors = getTagPickerValues('cf-sector-picker');
   const fields = { 'Full Name': fullName };
   if (orgId) fields['Current Employer'] = [orgId];
-  const textFields = [['cf-role','Employment History'],['cf-email','Email'],['cf-phone','Phone'],['cf-linkedin','LinkedIn'],['cf-cvurl','CV URL'],['cf-location','Base Location'],['cf-summary','Notes']];
+  const textFields = [['cf-role','Employment History'],['cf-email','Email'],['cf-phone','Phone'],['cf-mobile','Mobile'],['cf-linkedin','LinkedIn'],['cf-cvurl','CV URL'],['cf-location','Base Location'],['cf-summary','Notes']];
   const salaryVals = getTagPickerValues('cf-salary-picker');
   if (salaryVals.length > 0) fields['Salary objective'] = salaryVals;
   textFields.forEach(([elId, fn]) => { const v = document.getElementById(elId)?.value?.trim(); if(v) fields[fn] = v; });
@@ -4561,7 +4569,7 @@ async function saveCandidateEdit() {
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || selectedCandidate.orgName) : selectedCandidate.orgName;
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
       if (idx > -1) {
-        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, email: fields['Email']||allCandidates[idx].email, phone: fields['Phone']||allCandidates[idx].phone, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary Objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary };
+        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, email: fields['Email']||allCandidates[idx].email, phone: fields['Phone']||allCandidates[idx].phone, mobile: fields['Mobile']||allCandidates[idx].mobile, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary Objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary };
         selectedCandidate = allCandidates[idx];
       }
       closeCandidateModal();
@@ -4575,7 +4583,7 @@ async function saveCandidateEdit() {
       data = await resp.json();
       if (!resp.ok) throw new Error(data.error?.message || 'Create failed');
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || '') : '';
-      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', email: fields['Email']||'', phone: fields['Phone']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [] };
+      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', email: fields['Email']||'', phone: fields['Phone']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [] };
       allCandidates.push(newCand);
       closeCandidateModal();
       updateCandCounts();
