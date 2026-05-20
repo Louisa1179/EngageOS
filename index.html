@@ -617,13 +617,45 @@
       <select class="edit-input" id="org-edit-size" style="width:100%;"><option value="">Loading...</option></select>
     </div>
     <div style="margin-bottom:1rem;">
+      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Address line 1</label>
+      <input type="text" class="edit-input" id="org-edit-address1" style="width:100%;" placeholder="Address line 1" />
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
+      <div>
+        <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">City</label>
+        <input type="text" class="edit-input" id="org-edit-city" style="width:100%;" placeholder="City" />
+      </div>
+      <div>
+        <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">County</label>
+        <input type="text" class="edit-input" id="org-edit-county" style="width:100%;" placeholder="County" />
+      </div>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
+      <div>
+        <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Postcode</label>
+        <input type="text" class="edit-input" id="org-edit-postcode" style="width:100%;" placeholder="Postcode" />
+      </div>
+      <div>
+        <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Website</label>
+        <input type="url" class="edit-input" id="org-edit-website" style="width:100%;" placeholder="https://..." />
+      </div>
+    </div>
+    <div style="margin-bottom:1rem;">
       <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Notes</label>
       <textarea class="edit-input" id="org-edit-notes" rows="3" style="width:100%;resize:vertical;"></textarea>
     </div>
     <div id="org-edit-saving" style="display:none;font-size:0.82rem;color:var(--tee-muted);margin-bottom:0.75rem;">Saving...</div>
+    <div id="org-delete-confirm" style="display:none;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.3);border-radius:10px;padding:0.75rem;margin-bottom:0.75rem;">
+      <div style="font-size:0.82rem;color:#dc2626;margin-bottom:0.5rem;">Delete this organisation permanently? This cannot be undone.</div>
+      <div style="display:flex;gap:0.5rem;">
+        <button type="button" class="modal-btn modal-btn-yes" style="flex:1;padding:0.6rem;background:#dc2626;border-color:#dc2626;" onclick="confirmDeleteOrg()">Yes, delete</button>
+        <button type="button" class="modal-btn modal-btn-no" style="flex:1;padding:0.6rem;" onclick="document.getElementById('org-delete-confirm').style.display='none'">Cancel</button>
+      </div>
+    </div>
     <div class="modal-btns">
       <button type="button" class="modal-btn modal-btn-yes" onclick="saveOrgEdit()">Save to Airtable</button>
       <button type="button" class="modal-btn modal-btn-no" onclick="closeOrgEditModal()">Cancel</button>
+      <button type="button" class="modal-btn" id="org-delete-btn" style="background:transparent;border:1px solid rgba(220,38,38,0.4);color:#dc2626;display:none;" onclick="document.getElementById('org-delete-confirm').style.display='block'">Delete</button>
     </div>
   </div>
 </div>
@@ -2817,8 +2849,15 @@ async function openNewOrgModal() {
   orgEditMode = 'add';
   document.querySelector('#org-edit-modal .modal-title').textContent = 'Add new organisation';
   document.getElementById('org-edit-name').value = '';
+  document.getElementById('org-edit-address1').value = '';
+  document.getElementById('org-edit-city').value = '';
+  document.getElementById('org-edit-county').value = '';
+  document.getElementById('org-edit-postcode').value = '';
+  document.getElementById('org-edit-website').value = '';
   document.getElementById('org-edit-notes').value = '';
   document.getElementById('org-edit-saving').style.display = 'none';
+  document.getElementById('org-delete-confirm').style.display = 'none';
+  document.getElementById('org-delete-btn').style.display = 'none';
   document.getElementById('org-edit-modal').classList.add('show');
   await loadOrgFieldOptions();
   // Clear all dropdowns
@@ -2833,8 +2872,15 @@ async function openOrgEditModal() {
   if (!selectedOrg) return;
   document.querySelector('#org-edit-modal .modal-title').textContent = 'Edit organisation';
   document.getElementById('org-edit-name').value = selectedOrg.name || '';
+  document.getElementById('org-edit-address1').value = selectedOrg.address1 || '';
+  document.getElementById('org-edit-city').value = selectedOrg.city || '';
+  document.getElementById('org-edit-county').value = selectedOrg.county || '';
+  document.getElementById('org-edit-postcode').value = selectedOrg.postcode || '';
+  document.getElementById('org-edit-website').value = selectedOrg.website || '';
   document.getElementById('org-edit-notes').value = selectedOrg.notes || '';
   document.getElementById('org-edit-saving').style.display = 'none';
+  document.getElementById('org-delete-confirm').style.display = 'none';
+  document.getElementById('org-delete-btn').style.display = 'block';
   document.getElementById('org-edit-modal').classList.add('show');
   // Fetch fresh options from Airtable, then set dropdown values
   await loadOrgFieldOptions();
@@ -2858,6 +2904,24 @@ function closeOrgEditModal() {
   document.getElementById('org-edit-modal').classList.remove('show');
 }
 
+async function confirmDeleteOrg() {
+  if (!selectedOrg) return;
+  try {
+    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations/${selectedOrg.id}`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    if (!resp.ok) throw new Error('Failed to delete');
+    allOrgs = allOrgs.filter(o => o.id !== selectedOrg.id);
+    selectedOrg = null;
+    closeOrgEditModal();
+    filterOrgs();
+    document.getElementById('org-detail').innerHTML = '<div style="color:var(--tee-muted);font-size:0.85rem;padding:2rem;">Select an organisation to see details</div>';
+    showToast('Organisation deleted', 'success');
+  } catch(e) {
+    showToast('Failed to delete: ' + e.message, 'error');
+  }
+}
+
 async function saveOrgEdit() {
   const name = document.getElementById('org-edit-name').value.trim();
   const sector = document.getElementById('org-edit-sector').value.trim();
@@ -2865,6 +2929,11 @@ async function saveOrgEdit() {
   const country = document.getElementById('org-edit-country').value.trim();
   const region = document.getElementById('org-edit-region').value.trim();
   const size = document.getElementById('org-edit-size').value.trim();
+  const address1 = document.getElementById('org-edit-address1').value.trim();
+  const city = document.getElementById('org-edit-city').value.trim();
+  const county = document.getElementById('org-edit-county').value.trim();
+  const postcode = document.getElementById('org-edit-postcode').value.trim();
+  const website = document.getElementById('org-edit-website').value.trim();
   const notes = document.getElementById('org-edit-notes').value.trim();
   if (!name) { showToast('Organisation name is required', 'error'); return; }
   document.getElementById('org-edit-saving').style.display = 'block';
@@ -2875,6 +2944,11 @@ async function saveOrgEdit() {
     if (country) fields['Country'] = country;
     if (region) fields['Region'] = region;
     if (size) fields['Employee Size Range'] = size;
+    if (address1) fields['Address Line 1'] = address1;
+    if (city) fields['City'] = city;
+    if (county) fields['County'] = county;
+    if (postcode) fields['Postcode'] = postcode;
+    if (website) fields['Website (AI)'] = website;
     fields['Notes'] = notes;
     if (orgEditMode === 'add') {
       const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations`, {
@@ -2883,7 +2957,7 @@ async function saveOrgEdit() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error?.message || JSON.stringify(data));
-      const newOrg = { id: data.id, name, sector, subsector, country, region, size, notes, contactCount: 0 };
+      const newOrg = { id: data.id, name, sector, subsector, country, region, size, address1, city, county, postcode, website, notes, contactCount: 0 };
       allOrgs.push(newOrg);
       closeOrgEditModal();
       filterOrgs();
@@ -2896,9 +2970,9 @@ async function saveOrgEdit() {
       });
       const data = await resp.json();
       if (!resp.ok) throw new Error(data.error?.message || JSON.stringify(data));
-      Object.assign(selectedOrg, { name, sector, subsector, country, region, size, notes });
+      Object.assign(selectedOrg, { name, sector, subsector, country, region, size, address1, city, county, postcode, website, notes });
       const idx = allOrgs.findIndex(o => o.id === selectedOrg.id);
-      if (idx > -1) Object.assign(allOrgs[idx], { name, sector, subsector, country, region, size, notes });
+      if (idx > -1) Object.assign(allOrgs[idx], { name, sector, subsector, country, region, size, address1, city, county, postcode, website, notes });
       closeOrgEditModal();
       renderOrgDetail(selectedOrg);
       filterOrgs();
@@ -2934,6 +3008,10 @@ async function loadOrganisations() {
       sector: r.fields['Sector'] || '',
       subsector: String(r.fields['Subsector'] || ''),
       website: r.fields['Website (AI)'] || '',
+      address1: r.fields['Address Line 1'] || '',
+      city: r.fields['City'] || '',
+      county: r.fields['County'] || '',
+      postcode: r.fields['Postcode'] || '',
       country: r.fields['Country'] || '',
       region: String(r.fields['Region'] || ''),
       size: r.fields['Employee Size Range'] || '',
