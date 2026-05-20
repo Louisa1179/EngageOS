@@ -1322,8 +1322,8 @@ const VIEW_CONFIG = {
   'email-3':           { title: 'Email 3 — value add', step: 4 },
   'li-message':        { title: 'LI messages / InMail', step: 5 },
   'follow-up':         { title: 'Follow-up calls', step: 6 },
-  'candidate-profile': { title: 'Candidate profiles', nextAction: 'Send candidate profile' },
-  'market-insight':    { title: 'Market insight emails', nextAction: 'Send market insight' },
+  'warm-ongoing-overdue': { title: 'Warm ongoing — overdue', status: 'Warm Ongoing', overdue: true },
+  'cold-ongoing-overdue': { title: 'Cold ongoing — overdue', status: 'Cold Ongoing', overdue: true },
   'warm-ongoing':      { title: 'Warm ongoing', status: 'Warm Ongoing' },
   'cold-ongoing':      { title: 'Cold ongoing', status: 'Cold Ongoing' },
   'warm-contacts':     { title: 'Warm contacts', warmContacts: true },
@@ -1349,50 +1349,7 @@ function getViewUser() { return localStorage.getItem('tee_view_user') || getOwne
 function renderSidebar() {
   const sidebar = document.getElementById('main-sidebar');
   if (!sidebar) return;
-  const isJohn = getViewUser() === 'John Daly';
-  if (isJohn) {
-    sidebar.innerHTML = `
-      <div class="sidebar-section" style="margin-bottom:0.5rem;">New contacts</div>
-      <div class="nav-item active" onclick="switchJohnView('new')" id="john-nav-new">
-        <div class="nav-left"><div class="nav-dot" style="background:#10b981;"></div><span class="nav-label">Not yet contacted</span></div>
-        <span class="nav-count count-gray" id="john-count-new">–</span>
-      </div>
-      <div class="sidebar-section" style="margin-bottom:0.5rem;margin-top:1rem;">Actions due</div>
-      <div class="nav-item" onclick="switchJohnView('linkedin')" id="john-nav-linkedin">
-        <div class="nav-left"><div class="nav-dot" style="background:#0077b5;"></div><span class="nav-label">LinkedIn</span></div>
-        <span class="nav-count count-red" id="john-count-linkedin">–</span>
-      </div>
-      <div class="nav-item" onclick="switchJohnView('email')" id="john-nav-email">
-        <div class="nav-left"><div class="nav-dot" style="background:#3596c2;"></div><span class="nav-label">Email</span></div>
-        <span class="nav-count count-yellow" id="john-count-email">–</span>
-      </div>
-      <div class="nav-item" onclick="switchJohnView('call')" id="john-nav-call">
-        <div class="nav-left"><div class="nav-dot" style="background:#40cae9;"></div><span class="nav-label">Phone call</span></div>
-        <span class="nav-count count-gray" id="john-count-call">–</span>
-      </div>
-      <div class="nav-item" onclick="switchJohnView('meeting')" id="john-nav-meeting">
-        <div class="nav-left"><div class="nav-dot" style="background:#a78bfa;"></div><span class="nav-label">Meeting</span></div>
-        <span class="nav-count count-gray" id="john-count-meeting">–</span>
-      </div>
-      <div class="sidebar-section" style="margin-top:1rem;">Pipeline</div>
-      <div class="nav-item" onclick="switchJohnView('no-action')" id="john-nav-no-action">
-        <div class="nav-left"><div class="nav-dot" style="background:#f59e0b;"></div><span class="nav-label">No action set</span></div>
-        <span class="nav-count count-gray" id="john-count-no-action">–</span>
-      </div>
-      <div class="nav-item" onclick="switchJohnView('do-not-contact')" id="john-nav-do-not-contact">
-        <div class="nav-left"><div class="nav-dot" style="background:#dc2626;"></div><span class="nav-label">Do not contact</span></div>
-        <span class="nav-count count-red" id="john-count-do-not-contact">–</span>
-      </div>
-      <div class="sidebar-section" style="margin-top:1rem;">Ongoing programme</div>
-      <div class="nav-item" onclick="switchJohnView('warm-ongoing')" id="john-nav-warm-ongoing">
-        <div class="nav-left"><div class="nav-dot" style="background:#f59e0b;"></div><span class="nav-label">Warm ongoing</span></div>
-        <span class="nav-count count-yellow" id="john-count-warm-ongoing">–</span>
-      </div>
-      <div class="nav-item" onclick="switchJohnView('cold-ongoing')" id="john-nav-cold-ongoing">
-        <div class="nav-left"><div class="nav-dot" style="background:#94a3b8;"></div><span class="nav-label">Cold ongoing</span></div>
-        <span class="nav-count count-gray" id="john-count-cold-ongoing">–</span>
-      </div>`;
-  } else {
+  {
     sidebar.innerHTML = `
       <div class="sidebar-section" style="margin-bottom: 0.5rem;">Not yet started</div>
       <div class="nav-item" onclick="switchView('not-started')" id="nav-not-started">
@@ -1429,6 +1386,14 @@ function renderSidebar() {
         <span class="nav-count count-gray" id="count-reminders">–</span>
       </div>
       <div class="sidebar-section" style="margin-top: 1rem;">Ongoing programme</div>
+      <div class="nav-item" onclick="switchView('warm-ongoing-overdue')" id="nav-warm-ongoing-overdue">
+        <div class="nav-left"><div class="nav-dot" style="background:#f59e0b;"></div><span class="nav-label">Warm — overdue</span></div>
+        <span class="nav-count count-red" id="count-warm-ongoing-overdue">–</span>
+      </div>
+      <div class="nav-item" onclick="switchView('cold-ongoing-overdue')" id="nav-cold-ongoing-overdue">
+        <div class="nav-left"><div class="nav-dot" style="background:#94a3b8;"></div><span class="nav-label">Cold — overdue</span></div>
+        <span class="nav-count count-red" id="count-cold-ongoing-overdue">–</span>
+      </div>
       <div class="nav-item" onclick="switchView('warm-ongoing')" id="nav-warm-ongoing">
         <div class="nav-left"><div class="nav-dot" style="background:#f59e0b;"></div><span class="nav-label">Warm ongoing</span></div>
         <span class="nav-count count-yellow" id="count-warm-ongoing">–</span>
@@ -1436,14 +1401,6 @@ function renderSidebar() {
       <div class="nav-item" onclick="switchView('cold-ongoing')" id="nav-cold-ongoing">
         <div class="nav-left"><div class="nav-dot" style="background:#94a3b8;"></div><span class="nav-label">Cold ongoing</span></div>
         <span class="nav-count count-gray" id="count-cold-ongoing">–</span>
-      </div>
-      <div class="nav-item" onclick="switchView('candidate-profile')" id="nav-candidate-profile">
-        <div class="nav-left"><div class="nav-dot" style="background: #a78bfa;"></div><span class="nav-label">Candidate profiles</span></div>
-        <span class="nav-count count-purple" id="count-candidate-profile">–</span>
-      </div>
-      <div class="nav-item" onclick="switchView('market-insight')" id="nav-market-insight">
-        <div class="nav-left"><div class="nav-dot" style="background: #a78bfa;"></div><span class="nav-label">Market insights</span></div>
-        <span class="nav-count count-purple" id="count-market-insight">–</span>
       </div>
       <div class="sidebar-section" style="margin-top: 1rem;">Pipeline</div>
       <div class="nav-item" onclick="switchView('warm-contacts')" id="nav-warm-contacts">
@@ -1593,6 +1550,7 @@ async function loadContacts() {
       contactLevel: getField(r, 'Contact Level'),
       notes: getField(r, 'Notes'),
       followUpDate: getField(r, 'Follow-up Date'),
+      nextSendDate: getField(r, 'Next Send Date'),
       dncReason: getField(r, 'Status Reason'), owner: getField(r, 'Owner')
     }));
 
@@ -1604,9 +1562,7 @@ async function loadContacts() {
     await resolveOrgNames();
     updateCounts();
     updateOrgCounts();
-    if (getViewUser() === 'John Daly') {
-      switchJohnView(currentJohnView || 'new');
-    } else {
+    {
       renderView();
     }
   } catch(e) {
@@ -1653,13 +1609,21 @@ function getContactsForView(view) {
   const deskFilter = c => !c.orgSector || c.orgSector === currentDesk || c.orgSector === '';
 
   if (cfg.status === 'Warm Ongoing' || cfg.status === 'Cold Ongoing') {
-    return allContacts
-      .filter(c => deskFilter(c) && c.status === cfg.status)
-      .sort((a, b) => {
-        const da = a.nextActionDue || '9999-99-99';
-        const db = b.nextActionDue || '9999-99-99';
-        return da.localeCompare(db);
-      });
+    const today = new Date(); today.setHours(0,0,0,0);
+    const isOverdue = c => {
+      if (c.nextSendDate) {
+        return new Date(c.nextSendDate) <= today;
+      }
+      // No next send date — check last outbound interaction date
+      // We surface as overdue if no send date set (treat as overdue by default in overdue bucket)
+      return true;
+    };
+    const contacts = allContacts.filter(c => deskFilter(c) && c.status === cfg.status);
+    if (cfg.overdue) {
+      return contacts.filter(c => isOverdue(c)).sort((a,b) => (a.nextSendDate||'').localeCompare(b.nextSendDate||''));
+    } else {
+      return contacts.filter(c => !isOverdue(c)).sort((a,b) => (a.nextSendDate||'9999-99-99').localeCompare(b.nextSendDate||'9999-99-99'));
+    }
   }
   if (cfg.notStarted) {
     return allContacts.filter(c => { const rel = c.relationshipStatus || ''; const isWarm = rel.startsWith('1') || rel.startsWith('2'); return deskFilter(c) && (!c.step || c.step === 0) && c.status !== 'Do Not Contact' && c.status !== 'Responded' && !isWarm; });
@@ -1821,8 +1785,7 @@ function updateCounts() {
     reminderEl.style.background = '#fb923c33';
     reminderEl.style.color = '#fb923c';
   }
-  // If John's sidebar is active, update his counts too
-  if (getViewUser() === 'John Daly') updateJohnCounts();
+
 }
 
 let currentJohnView = 'new';
@@ -1935,6 +1898,7 @@ async function loadDncContacts() {
       contactLevel: getField(r, 'Contact Level'),
       notes: getField(r, 'Notes'),
       followUpDate: getField(r, 'Follow-up Date'),
+      nextSendDate: getField(r, 'Next Send Date'),
       dncReason: getField(r, 'Status Reason'), owner: getField(r, 'Owner')
     }));
     // Resolve org names
@@ -2230,15 +2194,7 @@ function renderPanel(contact, interactions) {
       <div class="panel-section">
         <div class="panel-section-label">Next action</div>
         <div class="action-box">
-          ${(() => {
-            const JOHN_CHANNELS = ['LinkedIn','Email','Phone call','Meeting'];
-            const nan = contact.nextActionNotes || '';
-            const isJohnNote = JOHN_CHANNELS.includes(nan);
-            if (getViewUser() === 'John Daly' && !isJohnNote) {
-              return `<div id="next-action-notes-display" class="action-box-label" onclick="editNextActionNotes()" title="Click to set your next action" style="cursor:pointer;color:var(--tee-accent);">Set next action</div>`;
-            }
-            return `<div id="next-action-notes-display" class="action-box-label" onclick="editNextActionNotes()" title="Click to edit" style="cursor:pointer;">${nan || 'Set next action'}</div>`;
-          })()}
+          <div id="next-action-notes-display" class="action-box-label" onclick="editNextActionNotes()" title="Click to edit" style="cursor:pointer;">${(contact.nextActionNotes ? (Array.isArray(contact.nextActionNotes) ? contact.nextActionNotes.join(', ') : contact.nextActionNotes) : 'Set next action')}</div>
           <div id="next-action-notes-picker" style="display:none;margin-top:0.35rem;"></div>
           <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.35rem;">
             <div class="action-box-due ${dueIsOverdue ? '' : 'ok'}">${contact.nextActionDue ? 'Due ' + contact.nextActionDue : 'No date set'}</div>
@@ -2246,6 +2202,17 @@ function renderPanel(contact, interactions) {
           </div>
         </div>
       </div>
+      ${(contact.status === 'Warm Ongoing' || contact.status === 'Cold Ongoing') ? `
+      <div class="panel-section">
+        <div class="panel-section-label" style="display:flex;justify-content:space-between;align-items:center;">
+          Next send date
+          <span style="font-size:0.72rem;color:var(--tee-muted);">Push forward to delay</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.75rem;background:rgba(53,150,194,0.08);border:1px solid rgba(53,150,194,0.2);border-radius:10px;padding:0.625rem 0.875rem;">
+          <input type="date" id="next-send-date-input" value="${contact.nextSendDate || ''}" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:0.82rem;color:var(--tee-text);cursor:pointer;outline:none;flex:1;" onchange="setNextSendDate(this.value)" />
+          ${contact.nextSendDate ? `<div onclick="setNextSendDate('')" style="font-size:0.72rem;color:var(--tee-muted);cursor:pointer;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.06);">Clear</div>` : ''}
+        </div>
+      </div>` : ''}
       ${(contact.followUpDate || contact.nextActionDue) ? `
       <div class="panel-section">
         <div class="panel-section-label">Next action due</div>
@@ -2258,14 +2225,12 @@ function renderPanel(contact, interactions) {
         </div>
       </div>` : ''}
       <div class="panel-section">
-        ${getViewUser() === 'John Daly'
-          ? `<div class="btn-primary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`
-          : contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">→ Send LI connection request</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">Mark done — advance sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
+        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">→ Send LI connection request</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">Mark done — advance sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
       </div>
-      ${getViewUser() !== 'John Daly' ? `<div class="panel-section">
+      <div class="panel-section">
         <div class="panel-section-label">Sequence progress</div>
         <div class="seq-steps">${stepsHtml}</div>
-      </div>` : ''}
+      </div>
       <div class="panel-section">
         <div class="panel-section-label">Contact details</div>
         <div class="field-row"><span class="field-key">Email</span><span class="field-val">${contact.email ? `<a href="mailto:${contact.email}">${contact.email}</a>` : '—'}</span></div>
@@ -2620,6 +2585,14 @@ async function saveLogAction() {
       closeLogModal();
       const interactions = await fetchInteractions(selectedContact.id);
       renderPanel(selectedContact, interactions);
+      // For ongoing contacts, stamp today as next send date on outbound actions
+      if (selectedContact && (selectedContact.status === 'Warm Ongoing' || selectedContact.status === 'Cold Ongoing')) {
+        const outboundTypes = ['Email', 'LinkedIn', 'Phone Call'];
+        if (outboundTypes.includes(type)) {
+          const todayStr = new Date().toISOString().split('T')[0];
+          await setNextSendDate(todayStr);
+        }
+      }
       showToast('Action logged successfully', 'success');
     }
     
@@ -2669,6 +2642,27 @@ async function resumeSequence() {
 
 
 // CLEAR REMINDER
+async function setNextSendDate(dateVal) {
+  if (!selectedContact) return;
+  const fields = {};
+  fields['Next Send Date'] = dateVal || null;
+  try {
+    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Clients/${selectedContact.id}`, {
+      method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields })
+    });
+    if (!resp.ok) throw new Error('Failed');
+    selectedContact.nextSendDate = dateVal || '';
+    const idx = allContacts.findIndex(c => c.id === selectedContact.id);
+    if (idx > -1) allContacts[idx].nextSendDate = dateVal || '';
+    updateCounts();
+    showToast(dateVal ? 'Next send date set ✓' : 'Next send date cleared', 'success');
+    renderContactDetail(selectedContact);
+  } catch(e) {
+    showToast('Failed to save next send date', 'error');
+  }
+}
+
 async function clearReminder() {
   if (!selectedContact) return;
   await updateContact(selectedContact.id, { 'Follow-up Date': null });
