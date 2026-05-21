@@ -4527,7 +4527,7 @@ function renderCandPanel(c, interactions) {
   }
 
   const specialismTags = (c.specialisms||[]).map(s => `<span style="font-size:0.72rem;padding:2px 8px;border-radius:10px;background:rgba(53,150,194,0.1);color:var(--tee-accent);margin:2px 2px 2px 0;display:inline-block;">${s}</span>`).join('');
-  const sectorTags = (c.sectors||[]).concat(c.workedSectors||[]).filter((v,i,a)=>a.indexOf(v)===i).map(s => `<span style="font-size:0.72rem;padding:2px 8px;border-radius:10px;background:rgba(167,139,250,0.1);color:#a78bfa;margin:2px 2px 2px 0;display:inline-block;">${s}</span>`).join('');
+  const sectorTags = (c.subsectorExpertise||[]).map(s => `<span style="font-size:0.72rem;padding:2px 8px;border-radius:10px;background:rgba(245,158,11,0.1);color:#f59e0b;margin:2px 2px 2px 0;display:inline-block;">${s}</span>`).join('');
 
   let interactionsHtml = '';
   if (interactions === null) {
@@ -4588,7 +4588,7 @@ function renderCandPanel(c, interactions) {
     </div>
 
     ${specialismTags ? `<div class="panel-section"><div class="panel-section-label">Specialisms</div><div style="margin-top:0.25rem;">${specialismTags}</div></div>` : ''}
-    ${sectorTags ? `<div class="panel-section"><div class="panel-section-label">Sectors</div><div style="margin-top:0.25rem;">${sectorTags}</div></div>` : ''}
+    ${sectorTags ? `<div class="panel-section"><div class="panel-section-label">Sector expertise</div><div style="margin-top:0.25rem;">${sectorTags}</div></div>` : ''}
 
     <div class="panel-section">
       <div class="panel-section-label">Contact details</div>
