@@ -618,14 +618,6 @@
         <select class="edit-input" id="org-edit-region" style="width:100%;" onchange="onGeoChange('region','org-edit-country','org-edit-region','org-edit-county','org-edit-city')"><option value="">— select —</option></select>
       </div>
     </div>
-    <div style="margin-bottom:1rem;">
-      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Employee size range</label>
-      <select class="edit-input" id="org-edit-size" style="width:100%;"><option value="">Loading...</option></select>
-    </div>
-    <div style="margin-bottom:1rem;">
-      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Address line 1</label>
-      <input type="text" class="edit-input" id="org-edit-address1" style="width:100%;" placeholder="Address line 1" />
-    </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
       <div>
         <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">County</label>
@@ -635,6 +627,14 @@
         <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">City / Town</label>
         <select class="edit-input" id="org-edit-city" style="width:100%;"><option value="">— select —</option></select>
       </div>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Employee size range</label>
+      <select class="edit-input" id="org-edit-size" style="width:100%;"><option value="">Loading...</option></select>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Address line 1</label>
+      <input type="text" class="edit-input" id="org-edit-address1" style="width:100%;" placeholder="Address line 1" />
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
       <div>
@@ -2893,8 +2893,6 @@ async function openOrgEditModal() {
   document.querySelector('#org-edit-modal .modal-title').textContent = 'Edit organisation';
   document.getElementById('org-edit-name').value = selectedOrg.name || '';
   document.getElementById('org-edit-address1').value = selectedOrg.address1 || '';
-  document.getElementById('org-edit-city').value = selectedOrg.city || '';
-  document.getElementById('org-edit-county').value = selectedOrg.county || '';
   document.getElementById('org-edit-postcode').value = selectedOrg.postcode || '';
   document.getElementById('org-edit-website').value = selectedOrg.website || '';
   document.getElementById('org-edit-notes').value = selectedOrg.notes || '';
@@ -3747,13 +3745,9 @@ function buildOrgSelects() {
   const fields = {
     'new-org-sector': 'Sector',
     'new-org-subsector': 'Subsector',
-    'new-org-region': 'Region',
-    'new-org-country': 'Country',
     'new-org-size': 'Employee Size Range',
     'org-edit-sector': 'Sector',
     'org-edit-subsector': 'Subsector',
-    'org-edit-country': 'Country',
-    'org-edit-region': 'Region',
     'org-edit-size': 'Employee Size Range'
   };
   Object.entries(fields).forEach(([elId, fieldName]) => {
