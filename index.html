@@ -595,7 +595,7 @@
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
       <div>
         <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Sector</label>
-        <select class="edit-input" id="org-edit-sector" style="width:100%;"><option value="">Loading...</option></select>
+        <select class="edit-input" id="org-edit-sector" style="width:100%;" onchange="filterSubsectors('org-edit-sector','org-edit-subsector','')"><option value="">Loading...</option></select>
       </div>
       <div>
         <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Subsector</label>
@@ -786,7 +786,7 @@
         <div class="edit-row">
           <div class="edit-field-group">
             <label class="edit-label">Sector</label>
-            <select class="edit-input" id="new-org-sector"><option value="">Loading...</option></select>
+            <select class="edit-input" id="new-org-sector" onchange="filterSubsectors('new-org-sector','new-org-subsector','')"><option value="">Loading...</option></select>
           </div>
           <div class="edit-field-group">
             <label class="edit-label">Subsector</label>
@@ -2861,10 +2861,12 @@ async function openNewOrgModal() {
   document.getElementById('org-edit-modal').classList.add('show');
   await loadOrgFieldOptions();
   // Clear all dropdowns
-  ['org-edit-sector','org-edit-subsector','org-edit-country','org-edit-region','org-edit-size'].forEach(id => {
+  ['org-edit-sector','org-edit-country','org-edit-region','org-edit-size'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  // Reset subsector to show all options until sector is picked
+  filterSubsectors('org-edit-sector', 'org-edit-subsector', '');
 }
 
 async function openOrgEditModal() {
@@ -2894,7 +2896,7 @@ async function openOrgEditModal() {
     }
   };
   setVal('org-edit-sector', selectedOrg.sector);
-  setVal('org-edit-subsector', selectedOrg.subsector);
+  filterSubsectors('org-edit-sector', 'org-edit-subsector', selectedOrg.subsector);
   setVal('org-edit-country', selectedOrg.country);
   setVal('org-edit-region', selectedOrg.region);
   setVal('org-edit-size', selectedOrg.size);
@@ -3499,9 +3501,33 @@ document.addEventListener('click', function(e) {
 let editMode = 'edit'; // 'edit' or 'add'
 // orgFieldOptions — stores live field options fetched from Airtable metadata
 let orgFieldOptions = {};
+let subsectorMap = {}; // { 'Housing': ['Housing Association', ...], ... }
 let nextActionOptions = [];
 
 // Fetch field options from Airtable metadata API
+async function fetchSubsectors() {
+  try {
+    let records = [], offset = null;
+    do {
+      const url = `https://api.airtable.com/v0/${BASE_ID}/Subsectors?pageSize=100${offset ? '&offset=' + offset : ''}`;
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const data = await resp.json();
+      if (data.records) records = records.concat(data.records);
+      offset = data.offset;
+    } while (offset);
+    subsectorMap = {};
+    records.forEach(r => {
+      const sector = r.fields['Sector'] || '';
+      const subsector = r.fields['Subsector Name'] || '';
+      if (sector && subsector) {
+        if (!subsectorMap[sector]) subsectorMap[sector] = [];
+        subsectorMap[sector].push(subsector);
+      }
+    });
+    console.log('Subsectors loaded:', Object.keys(subsectorMap).length, 'sectors');
+  } catch(e) { console.log('Subsector fetch error:', e); }
+}
+
 async function loadOrgFieldOptions() {
   try {
     const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`, {
@@ -3524,7 +3550,25 @@ async function loadOrgFieldOptions() {
     });
     // Rebuild selects with live options
     buildOrgSelects();
+    // Fetch subsectors for cascading dropdown
+    await fetchSubsectors();
   } catch(e) { console.log('Org field options error:', e); }
+}
+
+function filterSubsectors(sectorElId, subsectorElId, currentSubsector) {
+  const sector = document.getElementById(sectorElId)?.value || '';
+  const el = document.getElementById(subsectorElId);
+  if (!el) return;
+  const options = subsectorMap[sector] || [];
+  if (options.length === 0) {
+    // No subsectors found — show all from orgFieldOptions as fallback
+    const all = orgFieldOptions['Subsector'] || [];
+    el.innerHTML = '<option value="">— select —</option>' +
+      all.map(o => `<option value="${o}"${o===currentSubsector?' selected':''}>${o}</option>`).join('');
+  } else {
+    el.innerHTML = '<option value="">— select —</option>' +
+      options.map(o => `<option value="${o}"${o===currentSubsector?' selected':''}>${o}</option>`).join('');
+  }
 }
 
 function buildOrgSelects() {
