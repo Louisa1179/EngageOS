@@ -4272,8 +4272,8 @@ async function loadCandidates() {
       contractType: cf(r, 'Contract type'),
       dayRate: cf(r, 'Day Rate Range'),
       specialisms: Array.isArray(r.fields['Specialisms']) ? r.fields['Specialisms'] : (r.fields['Specialisms'] ? [r.fields['Specialisms']] : []),
-      sectors: Array.isArray(r.fields['Sector Expertise']) ? r.fields['Sector Expertise'] : (r.fields['Sector Expertise'] ? [r.fields['Sector Expertise']] : []),
-      subsectorExpertise: Array.isArray(r.fields['Subsector Expertise']) ? r.fields['Subsector Expertise'] : (r.fields['Subsector Expertise'] ? [r.fields['Subsector Expertise']] : []),
+      sectors: r.fields['Sector Expertise'] ? r.fields['Sector Expertise'].split(', ').map(s => s.trim()).filter(Boolean) : [],
+      subsectorExpertise: r.fields['Subsector Expertise'] ? r.fields['Subsector Expertise'].split(', ').map(s => s.trim()).filter(Boolean) : [],
       workedSectors: Array.isArray(r.fields['Worked Sectors']) ? r.fields['Worked Sectors'] : [],
       location: cf(r, 'Base Location'),
       willTravel: cf(r, 'Will Travel'),
@@ -4798,8 +4798,8 @@ async function saveCandidateEdit() {
   if (specialisms.length > 0) fields['Specialisms'] = specialisms;
   const sectorExpertiseList = [...new Set(candSectorExpertise.map(i => i.sector))];
   const subsectorExpertiseList = [...new Set(candSectorExpertise.map(i => i.subsector))];
-  if (sectorExpertiseList.length > 0) fields['Sector Expertise'] = sectorExpertiseList;
-  if (subsectorExpertiseList.length > 0) fields['Subsector Expertise'] = subsectorExpertiseList;
+  if (sectorExpertiseList.length > 0) fields['Sector Expertise'] = sectorExpertiseList.join(', ');
+  if (subsectorExpertiseList.length > 0) fields['Subsector Expertise'] = subsectorExpertiseList.join(', ');
 
   document.getElementById('cand-edit-saving').style.display = 'block';
   try {
