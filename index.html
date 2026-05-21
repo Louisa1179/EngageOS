@@ -611,11 +611,11 @@
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
       <div>
         <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Country</label>
-        <select class="edit-input" id="org-edit-country" style="width:100%;"><option value="">Loading...</option></select>
+        <select class="edit-input" id="org-edit-country" style="width:100%;" onchange="onGeoChange('country','org-edit-country','org-edit-region','org-edit-county','org-edit-city')"><option value="">— select —</option></select>
       </div>
       <div>
         <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Region</label>
-        <select class="edit-input" id="org-edit-region" style="width:100%;"><option value="">Loading...</option></select>
+        <select class="edit-input" id="org-edit-region" style="width:100%;" onchange="onGeoChange('region','org-edit-country','org-edit-region','org-edit-county','org-edit-city')"><option value="">— select —</option></select>
       </div>
     </div>
     <div style="margin-bottom:1rem;">
@@ -628,12 +628,12 @@
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
       <div>
-        <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">City</label>
-        <input type="text" class="edit-input" id="org-edit-city" style="width:100%;" placeholder="City" />
+        <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">City / Town</label>
+        <select class="edit-input" id="org-edit-city" style="width:100%;" onchange=""><option value="">— select —</option></select>
       </div>
       <div>
         <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">County</label>
-        <input type="text" class="edit-input" id="org-edit-county" style="width:100%;" placeholder="County" />
+        <select class="edit-input" id="org-edit-county" style="width:100%;" onchange="onGeoChange('county','org-edit-country','org-edit-region','org-edit-county','org-edit-city')"><option value="">— select —</option></select>
       </div>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
@@ -2877,10 +2877,15 @@ async function openNewOrgModal() {
   document.getElementById('org-edit-modal').classList.add('show');
   await loadOrgFieldOptions();
   // Clear all dropdowns
-  ['org-edit-sector','org-edit-country','org-edit-region','org-edit-size'].forEach(id => {
+  ['org-edit-sector','org-edit-size'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  if (Object.keys(geographyMap).length > 0) {
+    populateGeoDropdowns('org-edit-country','org-edit-region','org-edit-county','org-edit-city','','','','');
+  } else {
+    fetchGeographies().then(() => populateGeoDropdowns('org-edit-country','org-edit-region','org-edit-county','org-edit-city','','','',''));
+  }
   // Reset subsector to show all options until sector is picked
   filterSubsectors('org-edit-sector', 'org-edit-subsector', '');
 }
@@ -2913,8 +2918,11 @@ async function openOrgEditModal() {
   };
   setVal('org-edit-sector', selectedOrg.sector);
   filterSubsectors('org-edit-sector', 'org-edit-subsector', selectedOrg.subsector);
-  setVal('org-edit-country', selectedOrg.country);
-  setVal('org-edit-region', selectedOrg.region);
+  if (Object.keys(geographyMap).length > 0) {
+    populateGeoDropdowns('org-edit-country','org-edit-region','org-edit-county','org-edit-city', selectedOrg.country||'', selectedOrg.region||'', selectedOrg.county||'', selectedOrg.city||'');
+  } else {
+    fetchGeographies().then(() => populateGeoDropdowns('org-edit-country','org-edit-region','org-edit-county','org-edit-city', selectedOrg.country||'', selectedOrg.region||'', selectedOrg.county||'', selectedOrg.city||''));
+  }
   setVal('org-edit-size', selectedOrg.size);
 }
 
@@ -2948,7 +2956,7 @@ async function saveOrgEdit() {
   const region = document.getElementById('org-edit-region').value.trim();
   const size = document.getElementById('org-edit-size').value.trim();
   const address1 = document.getElementById('org-edit-address1').value.trim();
-  const city = document.getElementById('org-edit-city').value.trim();
+  const city = (document.getElementById('org-edit-city').value || '').trim();
   const county = document.getElementById('org-edit-county').value.trim();
   const postcode = document.getElementById('org-edit-postcode').value.trim();
   const website = document.getElementById('org-edit-website').value.trim();
@@ -3518,6 +3526,7 @@ let editMode = 'edit'; // 'edit' or 'add'
 // orgFieldOptions — stores live field options fetched from Airtable metadata
 let orgFieldOptions = {};
 let subsectorMap = {}; // { 'Housing': ['Housing Association', ...], ... }
+let geographyMap = {}; // { 'England': { 'South East': { 'Surrey': ['Guildford',...] } } }
 let nextActionOptions = [];
 
 // Fetch field options from Airtable metadata API
@@ -3630,6 +3639,72 @@ async function fetchSubsectors() {
   } catch(e) { console.log('Subsector fetch error:', e); }
 }
 
+async function fetchGeographies() {
+  try {
+    let records = [], offset = null;
+    do {
+      const url = `https://api.airtable.com/v0/${BASE_ID}/Geographies?pageSize=100${offset ? '&offset=' + offset : ''}`;
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const data = await resp.json();
+      if (data.records) records = records.concat(data.records);
+      offset = data.offset;
+    } while (offset);
+    geographyMap = {};
+    records.forEach(r => {
+      const country = r.fields['Country'] || '';
+      const region = r.fields['Region'] || '';
+      const county = r.fields['County'] || '';
+      const city = r.fields['City / Town'] || '';
+      if (!country) return;
+      if (!geographyMap[country]) geographyMap[country] = {};
+      if (!geographyMap[country][region]) geographyMap[country][region] = {};
+      if (!geographyMap[country][region][county]) geographyMap[country][region][county] = [];
+      if (city && !geographyMap[country][region][county].includes(city)) geographyMap[country][region][county].push(city);
+    });
+    console.log('Geographies loaded:', Object.keys(geographyMap).length, 'countries');
+  } catch(e) { console.log('Geography fetch error:', e); }
+}
+
+function buildGeoSelect(elId, options, current) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  el.innerHTML = '<option value="">— select —</option>' +
+    options.sort().map(o => `<option value="${o}"${o===current?' selected':''}>${o}</option>`).join('');
+}
+
+function onGeoChange(level, countryElId, regionElId, countyElId, cityElId) {
+  const country = document.getElementById(countryElId)?.value || '';
+  const region = document.getElementById(regionElId)?.value || '';
+  const county = document.getElementById(countyElId)?.value || '';
+  if (level === 'country') {
+    // Reset region, county, city
+    buildGeoSelect(regionElId, country ? Object.keys(geographyMap[country]||{}) : [], '');
+    buildGeoSelect(countyElId, [], '');
+    buildGeoSelect(cityElId, [], '');
+  } else if (level === 'region') {
+    const counties = region ? Object.keys((geographyMap[country]||{})[region]||{}) : [];
+    buildGeoSelect(countyElId, counties, '');
+    buildGeoSelect(cityElId, [], '');
+  } else if (level === 'county') {
+    const cities = county ? ((geographyMap[country]||{})[region]||{})[county]||[] : [];
+    buildGeoSelect(cityElId, cities, '');
+  }
+}
+
+function populateGeoDropdowns(countryElId, regionElId, countyElId, cityElId, country, region, county, city) {
+  // Country
+  buildGeoSelect(countryElId, Object.keys(geographyMap), country);
+  // Region
+  const regions = country ? Object.keys(geographyMap[country]||{}) : [];
+  buildGeoSelect(regionElId, regions, region);
+  // County
+  const counties = (country && region) ? Object.keys((geographyMap[country]||{})[region]||{}) : [];
+  buildGeoSelect(countyElId, counties, county);
+  // City
+  const cities = (country && region && county) ? ((geographyMap[country]||{})[region]||{})[county]||[] : [];
+  buildGeoSelect(cityElId, cities, city);
+}
+
 async function loadOrgFieldOptions() {
   try {
     const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`, {
@@ -3652,8 +3727,9 @@ async function loadOrgFieldOptions() {
     });
     // Rebuild selects with live options
     buildOrgSelects();
-    // Fetch subsectors for cascading dropdown
+    // Fetch subsectors and geographies for cascading dropdowns
     await fetchSubsectors();
+    await fetchGeographies();
   } catch(e) { console.log('Org field options error:', e); }
 }
 
