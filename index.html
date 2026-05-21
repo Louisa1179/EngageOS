@@ -2882,7 +2882,7 @@ async function openNewOrgModal() {
     if (el) el.value = '';
   });
   const _populateNewOrgGeo = () => populateGeoDropdowns('org-edit-country','org-edit-region','org-edit-county','org-edit-city','','','','');
-  if (Object.keys(geographyMap).length > 0) { _populateNewOrgGeo(); } else { fetchGeographies().then(_populateNewOrgGeo); }
+  fetchGeographies().then(_populateNewOrgGeo);
   // Reset subsector to show all options until sector is picked
   filterSubsectors('org-edit-sector', 'org-edit-subsector', '');
 }
@@ -2914,7 +2914,7 @@ async function openOrgEditModal() {
   setVal('org-edit-sector', selectedOrg.sector);
   filterSubsectors('org-edit-sector', 'org-edit-subsector', selectedOrg.subsector);
   const _populateOrgGeo = () => populateGeoDropdowns('org-edit-country','org-edit-region','org-edit-county','org-edit-city', selectedOrg.country||'', selectedOrg.region||'', selectedOrg.county||'', selectedOrg.city||'');
-  if (Object.keys(geographyMap).length > 0) { _populateOrgGeo(); } else { fetchGeographies().then(_populateOrgGeo); }
+  fetchGeographies().then(_populateOrgGeo);
   setVal('org-edit-size', selectedOrg.size);
 }
 
