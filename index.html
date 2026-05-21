@@ -322,6 +322,12 @@
   #cf-specialism-picker .tag-option:hover { border-color:var(--tee-accent) !important; color:var(--tee-accent) !important; background:rgba(53,150,194,0.06) !important; }
   #cf-sector-picker .tag-option.selected { background:rgba(245,158,11,0.12) !important; border-color:#f59e0b !important; color:#f59e0b !important; font-weight:500; }
   #cf-sector-picker .tag-option:hover { border-color:#f59e0b !important; color:#f59e0b !important; background:rgba(245,158,11,0.06) !important; }
+  .subsector-check { display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0.4rem;border-radius:6px;cursor:pointer;font-size:0.8rem;color:var(--tee-text); }
+  .subsector-check:hover { background:rgba(255,255,255,0.06); }
+  .subsector-check input[type=checkbox] { accent-color:#f59e0b;width:14px;height:14px; }
+  .sector-expertise-tag { display:inline-flex;align-items:center;gap:0.35rem;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.3);color:#f59e0b;border-radius:20px;padding:0.2rem 0.6rem;font-size:0.75rem; }
+  .sector-expertise-tag .remove-tag { cursor:pointer;opacity:0.7;font-size:0.85rem;line-height:1; }
+  .sector-expertise-tag .remove-tag:hover { opacity:1; }
   #cf-salary-picker .tag-option.selected { background:rgba(239,68,68,0.1) !important; border-color:#ef4444 !important; color:#ef4444 !important; font-weight:500; }
   #cf-salary-picker .tag-option:hover { border-color:#ef4444 !important; color:#ef4444 !important; background:rgba(239,68,68,0.06) !important; }
   #cf-travel-picker .tag-option.selected { background:rgba(99,102,241,0.12) !important; border-color:#6366f1 !important; color:#6366f1 !important; font-weight:500; }
@@ -1211,8 +1217,18 @@
     </div>
     <div class="edit-field-group">
       <label class="edit-label">Sector expertise</label>
-      <div class="tag-picker" id="cf-sector-picker"></div>
+      <div id="cf-sector-expertise-tags" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;min-height:0;"></div>
+      <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem;">
+        <select id="cf-sector-select" class="edit-input" style="flex:1;" onchange="onCandSectorChange()">
+          <option value="">— pick sector —</option>
+        </select>
+      </div>
+      <div id="cf-subsector-multi" style="display:none;background:rgba(255,255,255,0.04);border:1px solid var(--tee-border);border-radius:8px;padding:0.5rem;margin-bottom:0.4rem;max-height:160px;overflow-y:auto;"></div>
+      <div id="cf-subsector-add-btn" style="display:none;">
+        <div onclick="addCandSectorSubsectors()" style="font-size:0.78rem;color:var(--tee-accent);cursor:pointer;padding:0.3rem 0;display:inline-block;">+ Add selected subsectors</div>
+      </div>
       <input type="hidden" id="cf-sector" />
+      <input type="hidden" id="cf-subsector-expertise" />
     </div>
     <div class="edit-row">
       <div class="edit-field-group">
@@ -3505,6 +3521,83 @@ let subsectorMap = {}; // { 'Housing': ['Housing Association', ...], ... }
 let nextActionOptions = [];
 
 // Fetch field options from Airtable metadata API
+// ── Candidate sector expertise UI ────────────────────────────────────────
+let candSectorExpertise = []; // [{ sector, subsector }]
+
+function renderCandSectorTags() {
+  const container = document.getElementById('cf-sector-expertise-tags');
+  if (!container) return;
+  if (candSectorExpertise.length === 0) { container.innerHTML = ''; return; }
+  container.innerHTML = candSectorExpertise.map((item, i) =>
+    `<span class="sector-expertise-tag">${item.sector} — ${item.subsector}<span class="remove-tag" onclick="removeCandSectorTag(${i})">×</span></span>`
+  ).join('');
+  // Update hidden fields
+  const sectors = [...new Set(candSectorExpertise.map(i => i.sector))];
+  const subsectors = [...new Set(candSectorExpertise.map(i => i.subsector))];
+  const sf = document.getElementById('cf-sector'); if (sf) sf.value = sectors.join(',');
+  const ssf = document.getElementById('cf-subsector-expertise'); if (ssf) ssf.value = subsectors.join(',');
+}
+
+function removeCandSectorTag(idx) {
+  candSectorExpertise.splice(idx, 1);
+  renderCandSectorTags();
+}
+
+function onCandSectorChange() {
+  const sector = document.getElementById('cf-sector-select').value;
+  const multiDiv = document.getElementById('cf-subsector-multi');
+  const addBtn = document.getElementById('cf-subsector-add-btn');
+  if (!sector || !subsectorMap[sector]) { multiDiv.style.display = 'none'; addBtn.style.display = 'none'; return; }
+  const subsectors = subsectorMap[sector] || [];
+  multiDiv.innerHTML = subsectors.map(s =>
+    `<label class="subsector-check"><input type="checkbox" value="${s}" />${s}</label>`
+  ).join('');
+  multiDiv.style.display = 'block';
+  addBtn.style.display = 'block';
+}
+
+function addCandSectorSubsectors() {
+  const sector = document.getElementById('cf-sector-select').value;
+  if (!sector) return;
+  const checks = document.querySelectorAll('#cf-subsector-multi input[type=checkbox]:checked');
+  checks.forEach(cb => {
+    const subsector = cb.value;
+    // Avoid duplicates
+    if (!candSectorExpertise.find(i => i.sector === sector && i.subsector === subsector)) {
+      candSectorExpertise.push({ sector, subsector });
+    }
+  });
+  renderCandSectorTags();
+  // Reset
+  document.getElementById('cf-sector-select').value = '';
+  document.getElementById('cf-subsector-multi').style.display = 'none';
+  document.getElementById('cf-subsector-add-btn').style.display = 'none';
+}
+
+function populateCandSectorSelect() {
+  const el = document.getElementById('cf-sector-select');
+  if (!el) return;
+  const sectors = Object.keys(subsectorMap).sort();
+  el.innerHTML = '<option value="">— pick sector —</option>' +
+    sectors.map(s => `<option value="${s}">${s}</option>`).join('');
+}
+
+function loadCandSectorExpertise(sectorArr, subsectorArr) {
+  // Build pairs from existing data — match by index where possible
+  candSectorExpertise = [];
+  const sArr = Array.isArray(sectorArr) ? sectorArr : [];
+  const ssArr = Array.isArray(subsectorArr) ? subsectorArr : [];
+  // If we have subsectors, pair them with sectors by index; extras go without sector
+  const maxLen = Math.max(sArr.length, ssArr.length);
+  for (let i = 0; i < maxLen; i++) {
+    const sector = sArr[i] || '';
+    const subsector = ssArr[i] || '';
+    if (subsector) candSectorExpertise.push({ sector, subsector });
+  }
+  renderCandSectorTags();
+}
+// ── End candidate sector expertise UI ───────────────────────────────────
+
 async function fetchSubsectors() {
   try {
     let records = [], offset = null;
@@ -4180,6 +4273,7 @@ async function loadCandidates() {
       dayRate: cf(r, 'Day Rate Range'),
       specialisms: Array.isArray(r.fields['Specialisms']) ? r.fields['Specialisms'] : (r.fields['Specialisms'] ? [r.fields['Specialisms']] : []),
       sectors: Array.isArray(r.fields['Sector Expertise']) ? r.fields['Sector Expertise'] : (r.fields['Sector Expertise'] ? [r.fields['Sector Expertise']] : []),
+      subsectorExpertise: Array.isArray(r.fields['Subsector Expertise']) ? r.fields['Subsector Expertise'] : (r.fields['Subsector Expertise'] ? [r.fields['Subsector Expertise']] : []),
       workedSectors: Array.isArray(r.fields['Worked Sectors']) ? r.fields['Worked Sectors'] : [],
       location: cf(r, 'Base Location'),
       willTravel: cf(r, 'Will Travel'),
@@ -4297,7 +4391,8 @@ function buildCandSelects() {
   const curDayrateVals = getTagPickerValues('cf-dayrate-picker');
   if (candFieldOptions['Day Rate Range']) buildTagPicker('cf-dayrate-picker', 'cf-dayrate', candFieldOptions['Day Rate Range'], curDayrateVals, false);
   if (candFieldOptions['Specialisms']) buildTagPicker('cf-specialism-picker', 'cf-specialism', candFieldOptions['Specialisms'], curSpecs, false);
-  if (candFieldOptions['Sector Expertise']) buildTagPicker('cf-sector-picker', 'cf-sector', candFieldOptions['Sector Expertise'], curSectors, false);
+  // Sector expertise now uses cascading UI
+  populateCandSectorSelect();
   const curTravel = getTagPickerValues('cf-travel-picker');
   if (candFieldOptions['Will Travel']) buildTagPicker('cf-travel-picker', 'cf-travel', candFieldOptions['Will Travel'], curTravel, false);
 }
@@ -4577,7 +4672,11 @@ function openAddCandidateModal() {
   document.getElementById('cand-modal-sub').textContent = 'Create a new candidate record in Airtable.';
   ['cf-firstname','cf-lastname','cf-role','cf-email','cf-phone','cf-mobile','cf-linkedin','cf-cvurl','cf-salary','cf-location','cf-summary'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   ['cf-status','cf-relationship','cf-availability','cf-notice','cf-travel','cf-contract','cf-dayrate'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-  ['cf-specialism-picker','cf-sector-picker','cf-contract-picker','cf-dayrate-picker','cf-travel-picker','cf-salary-picker'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
+  ['cf-specialism-picker','cf-contract-picker','cf-dayrate-picker','cf-travel-picker','cf-salary-picker'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
+  candSectorExpertise = [];
+  renderCandSectorTags();
+  const ssm = document.getElementById('cf-subsector-multi'); if(ssm) ssm.style.display='none';
+  const sab = document.getElementById('cf-subsector-add-btn'); if(sab) sab.style.display='none';
   document.getElementById('cf-org-id').value = '';
   document.getElementById('cf-org-search').value = '';
   document.getElementById('cf-org-search').style.display = '';
@@ -4629,7 +4728,8 @@ function openEditCandidateModal() {
     const curDayrateEdit = Array.isArray(c.dayRate) ? c.dayRate : (c.dayRate ? [c.dayRate] : []);
     if (candFieldOptions['Day Rate Range']) buildTagPicker('cf-dayrate-picker', 'cf-dayrate', candFieldOptions['Day Rate Range'], curDayrateEdit, false);
     if (candFieldOptions['Specialisms']) buildTagPicker('cf-specialism-picker', 'cf-specialism', candFieldOptions['Specialisms'], c.specialisms||[], false);
-    if (candFieldOptions['Sector Expertise']) buildTagPicker('cf-sector-picker', 'cf-sector', candFieldOptions['Sector Expertise'], c.sectors||[], false);
+    populateCandSectorSelect();
+  loadCandSectorExpertise(c.sectors||[], c.subsectorExpertise||[]);
     if (candFieldOptions['Will Travel']) buildTagPicker('cf-travel-picker', 'cf-travel', candFieldOptions['Will Travel'], Array.isArray(c.willTravel) ? c.willTravel : (c.willTravel ? [c.willTravel] : []), false);
   }, 150);
   // Org
@@ -4683,7 +4783,10 @@ async function saveCandidateEdit() {
   selectFields.forEach(([elId, fn]) => { const v = document.getElementById(elId)?.value; if(v) fields[fn] = candFieldTypes[fn] === 'multipleSelects' ? [v] : v; });
   const relVal = document.getElementById('cf-relationship')?.value; if(relVal) fields['Relationship Context'] = candFieldTypes['Relationship Context'] === 'multipleSelects' ? [relVal] : relVal;
   if (specialisms.length > 0) fields['Specialisms'] = specialisms;
-  if (sectors.length > 0) fields['Sector Expertise'] = sectors;
+  const sectorExpertiseList = [...new Set(candSectorExpertise.map(i => i.sector))];
+  const subsectorExpertiseList = [...new Set(candSectorExpertise.map(i => i.subsector))];
+  if (sectorExpertiseList.length > 0) fields['Sector Expertise'] = sectorExpertiseList;
+  if (subsectorExpertiseList.length > 0) fields['Subsector Expertise'] = subsectorExpertiseList;
 
   document.getElementById('cand-edit-saving').style.display = 'block';
   try {
