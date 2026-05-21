@@ -3009,7 +3009,7 @@ async function loadOrganisations() {
       name: r.fields['Organisation Name'] || '',
       sector: r.fields['Sector'] || '',
       subsector: String(r.fields['Subsector'] || ''),
-      website: r.fields['Website (AI)'] || '',
+      website: (typeof r.fields['Website (AI)'] === 'object' && r.fields['Website (AI)'] !== null) ? (r.fields['Website (AI)'].url || '') : (r.fields['Website (AI)'] || ''),
       address1: r.fields['Address Line 1'] || '',
       city: r.fields['City'] || '',
       county: r.fields['County'] || '',
@@ -3524,7 +3524,16 @@ async function fetchSubsectors() {
         subsectorMap[sector].push(subsector);
       }
     });
-    console.log('Subsectors loaded:', Object.keys(subsectorMap).length, 'sectors');
+    // Build sorted sector list from subsector map and populate sector dropdowns
+    const sectorList = Object.keys(subsectorMap).sort();
+    ['org-edit-sector', 'new-org-sector'].forEach(elId => {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      const current = el.value;
+      el.innerHTML = '<option value="">— select —</option>' +
+        sectorList.map(s => `<option value="${s}"${s===current?' selected':''}>${s}</option>`).join('');
+    });
+    console.log('Subsectors loaded:', sectorList.length, 'sectors');
   } catch(e) { console.log('Subsector fetch error:', e); }
 }
 
