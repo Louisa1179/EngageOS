@@ -4692,6 +4692,12 @@ function openAddCandidateModal() {
   } else {
     loadCandFieldOptions().then(() => buildCandSelects());
   }
+  // Ensure subsectors are loaded for cascading dropdown
+  if (Object.keys(subsectorMap).length === 0) {
+    fetchSubsectors().then(() => populateCandSectorSelect());
+  } else {
+    populateCandSectorSelect();
+  }
 }
 
 // OPEN EDIT MODAL
@@ -4728,8 +4734,15 @@ function openEditCandidateModal() {
     const curDayrateEdit = Array.isArray(c.dayRate) ? c.dayRate : (c.dayRate ? [c.dayRate] : []);
     if (candFieldOptions['Day Rate Range']) buildTagPicker('cf-dayrate-picker', 'cf-dayrate', candFieldOptions['Day Rate Range'], curDayrateEdit, false);
     if (candFieldOptions['Specialisms']) buildTagPicker('cf-specialism-picker', 'cf-specialism', candFieldOptions['Specialisms'], c.specialisms||[], false);
-    populateCandSectorSelect();
-  loadCandSectorExpertise(c.sectors||[], c.subsectorExpertise||[]);
+    if (Object.keys(subsectorMap).length === 0) {
+      fetchSubsectors().then(() => {
+        populateCandSectorSelect();
+        loadCandSectorExpertise(c.sectors||[], c.subsectorExpertise||[]);
+      });
+    } else {
+      populateCandSectorSelect();
+      loadCandSectorExpertise(c.sectors||[], c.subsectorExpertise||[]);
+    }
     if (candFieldOptions['Will Travel']) buildTagPicker('cf-travel-picker', 'cf-travel', candFieldOptions['Will Travel'], Array.isArray(c.willTravel) ? c.willTravel : (c.willTravel ? [c.willTravel] : []), false);
   }, 150);
   // Org
