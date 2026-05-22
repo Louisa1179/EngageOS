@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head><title>Remap Employee Sizes</title>
+<style>
+  body { font-family: sans-serif; padding: 2rem; max-width: 600px; margin: 0 auto; }
+  button { padding: 0.75rem 1.5rem; background: #3596c2; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 1rem; }
+  #log { margin-top: 1rem; background: #f5f5f5; padding: 1rem; border-radius: 8px; font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+</style>
+</head>
+<body>
+<h2>Remap Employee Size Range</h2>
+<p>This will remap all old size values to the new LinkedIn standard bands. Click Run to start.</p>
+<button onclick="run()">Run Remap</button>
+<div id="log">Ready...</div>
+<script>
+const BASE_ID = 'appLMoyK3uI7xk8fG';
+const TABLE = 'Organisations';
+const MAPPING = {
+  'under 50': '11-50',
+  '50-248': '51-200',
+  '51-246': '51-200',
+  '51-248': '51-200',
+  '20-50': '11-50',
+  '250-499': '201-500',
+  '201-499': '201-500',
+  '251-500': '201-500',
+  '500-999': '501-1,000',
+  '1000-4999': '1,001-5,000',
+  '5000-9999': '5,001-10,000',
+  '10000-24,999': '10,001+',
+  '10000+': '10,001+',
+  '25,000+': '10,001+',
+  'Employee Size Range': ''
+};
+
+function log(msg) {
+  document.getElementById('log').textContent += '\n' + msg;
+}
+
+async function run() {
+  const token = localStorage.getItem('airtableToken');
+  if (!token) { log('No token found in localStorage — open your app first to set it.'); return; }
+  log('Fetching records...');
+  
+  let records = [], offset = null;
+  do {
+    const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE}?pageSize=100&fields[]=Employee+Size+Range${offset ? '&offset=' + offset : ''}`;
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const data = await resp.json();
+    records = records.concat(data.records || []);
+    offset = data.offset;
+  } while (offset);
+  
+  log(`Fetched ${records.length} records`);
+  
+  const toUpdate = records
+    .filter(r => r.fields['Employee Size Range'] && MAPPING.hasOwnProperty(r.fields['Employee Size Range']))
+    .map(r => ({ id: r.id, old: r.fields['Employee Size Range'], new: MAPPING[r.fields['Employee Size Range']] }));
+  
+  log(`Records to update: ${toUpdate.length}`);
+  
+  let updated = 0;
+  for (let i = 0; i < toUpdate.length; i += 10) {
+    const batch = toUpdate.slice(i, i + 10);
+    const payload = { records: batch.map(r => ({ id: r.id, fields: { 'Employee Size Range': r.new } })) };
+    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${TABLE}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    const result = await resp.json();
+    updated += (result.records || []).length;
+    log(`Updated ${updated}/${toUpdate.length}...`);
+  }
+  log('✓ All done!');
+}
+</script>
+</body>
+</html>
