@@ -38,7 +38,7 @@ function log(msg) {
 }
 
 async function run() {
-  const token = localStorage.getItem('airtableToken');
+  const token = localStorage.getItem('tee_token');
   if (!token) { log('No token found in localStorage — open your app first to set it.'); return; }
   log('Fetching records...');
   
