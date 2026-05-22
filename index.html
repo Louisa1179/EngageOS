@@ -2984,7 +2984,7 @@ async function saveOrgEdit() {
     if (city) fields['City'] = city;
     if (county) fields['County'] = county;
     if (postcode) fields['Postcode'] = postcode;
-    if (website) fields['Website'] = website;
+    if (website) fields['Website plain text'] = website;
     fields['Notes'] = notes;
     if (orgEditMode === 'add') {
       const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations`, {
@@ -3043,7 +3043,21 @@ async function loadOrganisations() {
       name: r.fields['Organisation Name'] || '',
       sector: r.fields['Sector'] || '',
       subsector: String(r.fields['Subsector'] || ''),
-      website: r.fields['Website'] || ((typeof r.fields['Website (AI)'] === 'object' && r.fields['Website (AI)'] !== null) ? (r.fields['Website (AI)'].url || '') : (r.fields['Website (AI)'] || '')),
+      website: (() => {
+        const plain = r.fields['Website plain text'];
+        if (plain) return plain;
+        const ai = r.fields['Website (AI)'];
+        if (!ai) return '';
+        if (typeof ai === 'string') return ai;
+        if (typeof ai === 'object' && ai !== null) {
+          if (ai.url) return ai.url;
+          if (ai.value) return ai.value;
+          if (ai.text) return ai.text;
+          // Long text AI fields sometimes return as array of objects
+          if (Array.isArray(ai)) return ai.map(a => a.text || a.url || '').join('');
+        }
+        return String(ai);
+      })(),
       address1: r.fields['Address Line 1'] || '',
       city: r.fields['City'] || '',
       county: r.fields['County'] || '',
@@ -3876,7 +3890,7 @@ async function createNewOrg() {
     if (region) fields['Region'] = region;
     if (country) fields['Country'] = country;
     if (size) fields['Employee Size Range'] = size;
-    if (website) fields['Website'] = website;
+    if (website) fields['Website plain text'] = website;
     if (notes) fields['Notes'] = notes;
     const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations`, {
       method: 'POST',
