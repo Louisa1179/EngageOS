@@ -1540,6 +1540,15 @@ window.onload = function() {
     renderSidebar();
     loadContacts();
     setTimeout(() => loadAllContactsForCounting(), 500);
+    // Restore last workspace
+    const savedWs = localStorage.getItem('tee_workspace');
+    if (savedWs && savedWs !== 'bd') {
+      setTimeout(() => switchWorkspace(savedWs), 100);
+    } else {
+      // Restore last BD view
+      const savedView = localStorage.getItem('tee_view');
+      if (savedView) setTimeout(() => switchView(savedView), 100);
+    }
   }
 };
 
@@ -2075,6 +2084,7 @@ async function loadUnsubContacts() {
 
 // SWITCH VIEW
 function switchView(view) {
+  localStorage.setItem('tee_view', view);
   currentView = view;
   currentFilter = 'all';
   selectedContact = null;
@@ -2790,6 +2800,7 @@ let orgSectorMap = {};
 
 // WORKSPACE SWITCHING
 function switchWorkspace(ws) {
+  localStorage.setItem('tee_workspace', ws);
   const bdBody = document.querySelector('.app-body');
   const orgsBody = document.getElementById('orgs-workspace');
   const candsBody = document.getElementById('candidates-workspace');
