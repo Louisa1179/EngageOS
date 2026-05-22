@@ -3123,7 +3123,7 @@ function updateOrgCounts() {
   }
   document.getElementById('org-count-all').textContent = allOrgs.length;
   const louisa = allOrgs.filter(o => orgHasContact(o.id, c => !c.owner || c.owner === 'Louisa Daly'));
-  const john = allOrgs.filter(o => orgHasContact(o.id, c => c.owner === 'John Daly'));
+  const john = allOrgs.filter(o => o.owner === 'John Daly' || orgHasContact(o.id, c => c.owner === 'John Daly'));
   const lEl = document.getElementById('org-count-louisa'); if (lEl) lEl.textContent = louisa.length;
   const jEl = document.getElementById('org-count-john'); if (jEl) jEl.textContent = john.length;
   const eEl = document.getElementById('org-count-england'); if (eEl) eEl.textContent = allOrgs.filter(o => o.country === 'England').length;
@@ -3180,7 +3180,7 @@ function filterOrgs() {
       return louisaCount >= johnCount;
     });
   } else if (currentOrgFilter === 'john') {
-    orgs = orgs.filter(o => cts.some(c => c.org === o.id && c.owner === 'John Daly'));
+    orgs = orgs.filter(o => o.owner === 'John Daly' || cts.some(c => c.org === o.id && c.owner === 'John Daly'));
   } else if (currentOrgFilter === 'england') orgs = orgs.filter(o => o.country === 'England');
   else if (currentOrgFilter === 'scotland') orgs = orgs.filter(o => o.country === 'Scotland');
   else if (currentOrgFilter === 'wales') orgs = orgs.filter(o => o.country === 'Wales');
