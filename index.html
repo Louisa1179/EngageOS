@@ -716,6 +716,11 @@
         <option value="In person Meeting">In person Meeting</option>
         <option value="Note">Note</option>
       </select>
+      <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Logged by</label>
+      <select id="log-logged-by" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; margin-bottom: 0.75rem; appearance: none;">
+        <option value="Louisa Daly">Louisa Daly</option>
+        <option value="John Daly">John Daly</option>
+      </select>
       <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Subject / description</label>
       <input type="text" id="log-subject" placeholder="e.g. Sent LI connection request" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; margin-bottom: 0.75rem;" />
       <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Notes (optional)</label>
@@ -2544,6 +2549,8 @@ function openLogModal() {
     if (nanInput) nanInput.style.display = 'block';
     if (existingPicker) existingPicker.style.display = 'none';
   }
+  const loggedByEl = document.getElementById('log-logged-by');
+  if (loggedByEl) loggedByEl.value = getViewUser() === 'John Daly' ? 'John Daly' : 'Louisa Daly';
   document.getElementById('log-modal').classList.add('show');
 }
 
@@ -2585,7 +2592,7 @@ async function saveLogAction() {
       'Type': typeSelect.value,
       'Date': new Date().toISOString().split('T')[0],
       'Related Contact': [selectedContact.id],
-      'Logged by': getOwner()
+      'Logged by': (document.getElementById('log-logged-by')?.value || getOwner())
     };
     if (notes) fields['Notes'] = notes;
     
