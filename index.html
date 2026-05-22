@@ -1212,7 +1212,7 @@
     </div>
     <div class="edit-field-group">
       <label class="edit-label">Specialisms</label>
-      <div class="tag-picker" id="cf-specialism-picker"></div>
+      <div id="cf-specialism-picker" style="background:rgba(255,255,255,0.03);border:1px solid var(--tee-border);border-radius:10px;padding:0.75rem;"></div>
       <input type="hidden" id="cf-specialism" />
     </div>
     <div class="edit-field-group">
@@ -4400,6 +4400,45 @@ async function loadCandFieldOptions() {
 }
 
 // TAG PICKER HELPERS
+const SPECIALISM_GROUPS = {
+  'Leadership': ['CEO', 'Finance'],
+  'HR': ['HR Generalist', 'HRBP', 'HR Operations', 'HR projects', 'Employee Engagement', 'Culture', 'Learning and Development', 'Organisational Development', 'Organisational Design', 'Transformation & Change', 'Talent Acquisition', 'Talent', 'Reward', 'Payroll', 'HRIS', 'ED&I', 'CPO/HRD'],
+  'Governance': ['Governance', 'Legal', 'Mergers and Acquisitions', 'Compliance', 'Due Diligence'],
+  'Housing': ['Housing', 'Director of Resources']
+};
+
+function buildGroupedSpecialismPicker(pickerId, hiddenId, selectedValues) {
+  const picker = document.getElementById(pickerId);
+  const hidden = document.getElementById(hiddenId);
+  if (!picker) return;
+  let selected = Array.isArray(selectedValues) ? [...selectedValues] : (selectedValues ? [selectedValues] : []);
+
+  function render() {
+    picker.innerHTML = Object.entries(SPECIALISM_GROUPS).map(([group, items]) => `
+      <div style="margin-bottom:0.75rem;">
+        <div style="font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--tee-muted);margin-bottom:0.4rem;padding-left:2px;">${group}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:0.35rem;">
+          ${items.map(o => `<span class="tag-option${selected.includes(o)?' selected':''}" data-val="${o}" style="font-size:0.75rem;padding:3px 10px;">${o}</span>`).join('')}
+        </div>
+      </div>
+    `).join('');
+    picker.querySelectorAll('.tag-option').forEach(el => {
+      el.onclick = () => {
+        const v = el.getAttribute('data-val');
+        if (selected.includes(v)) {
+          selected = selected.filter(s => s !== v);
+        } else {
+          selected.push(v);
+        }
+        if (hidden) hidden.value = JSON.stringify(selected);
+        render();
+      };
+    });
+    if (hidden) hidden.value = JSON.stringify(selected);
+  }
+  render();
+}
+
 function buildTagPicker(pickerId, hiddenId, options, selectedValues, singleSelect) {
   const picker = document.getElementById(pickerId);
   const hidden = document.getElementById(hiddenId);
@@ -4454,7 +4493,7 @@ function buildCandSelects() {
   if (candFieldOptions['Contract type']) buildTagPicker('cf-contract-picker', 'cf-contract', candFieldOptions['Contract type'], curContract ? [curContract] : [], false);
   const curDayrateVals = getTagPickerValues('cf-dayrate-picker');
   if (candFieldOptions['Day Rate Range']) buildTagPicker('cf-dayrate-picker', 'cf-dayrate', candFieldOptions['Day Rate Range'], curDayrateVals, false);
-  if (candFieldOptions['Specialisms']) buildTagPicker('cf-specialism-picker', 'cf-specialism', candFieldOptions['Specialisms'], curSpecs, false);
+  buildGroupedSpecialismPicker('cf-specialism-picker', 'cf-specialism', curSpecs);
   // Sector expertise now uses cascading UI
   populateCandSectorSelect();
   const curTravel = getTagPickerValues('cf-travel-picker');
@@ -4797,7 +4836,7 @@ function openEditCandidateModal() {
     if (candFieldOptions['Contract type']) buildTagPicker('cf-contract-picker', 'cf-contract', candFieldOptions['Contract type'], c.contractType ? (Array.isArray(c.contractType) ? c.contractType : [c.contractType]) : [], false);
     const curDayrateEdit = Array.isArray(c.dayRate) ? c.dayRate : (c.dayRate ? [c.dayRate] : []);
     if (candFieldOptions['Day Rate Range']) buildTagPicker('cf-dayrate-picker', 'cf-dayrate', candFieldOptions['Day Rate Range'], curDayrateEdit, false);
-    if (candFieldOptions['Specialisms']) buildTagPicker('cf-specialism-picker', 'cf-specialism', candFieldOptions['Specialisms'], c.specialisms||[], false);
+    buildGroupedSpecialismPicker('cf-specialism-picker', 'cf-specialism', c.specialisms||[]);
     if (Object.keys(subsectorMap).length === 0) {
       fetchSubsectors().then(() => {
         populateCandSectorSelect();
