@@ -1187,6 +1187,16 @@
       <input type="hidden" id="cf-org-id" />
     </div>
     <div class="edit-field-group">
+      <label class="edit-label">Previous employers</label>
+      <div class="org-typeahead-wrap">
+        <input type="text" class="edit-input" id="cf-prev-emp-search" placeholder="Search organisations..." autocomplete="off"
+          oninput="searchPrevEmpOrgs(this.value)" onfocus="searchPrevEmpOrgs(this.value)" />
+        <div class="org-dropdown" id="prev-emp-dropdown"></div>
+      </div>
+      <div id="cf-prev-emp-tags" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.4rem;"></div>
+      <input type="hidden" id="cf-prev-emp-ids" />
+    </div>
+    <div class="edit-field-group">
       <label class="edit-label">Current role / title</label>
       <input type="text" class="edit-input" id="cf-role" placeholder="e.g. Interim HR Director" />
     </div>
@@ -4389,20 +4399,29 @@ async function loadCandidates() {
       interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
       owner: cf(r, 'Owner'),
       lastThreeCompanies: cf(r, 'Last Three Companies'),
+      previousEmployerIds: Array.isArray(r.fields['Previous Employers']) ? r.fields['Previous Employers'] : [],
+      previousEmployerNames: [],
     }));
 
-    // Resolve org names
-    const orgIds = [...new Set(allCandidates.map(c => c.orgId).filter(id => id && id.startsWith('rec')))];
-    if (orgIds.length > 0) {
-      for (let i = 0; i < orgIds.length; i += 10) {
-        const batch = orgIds.slice(i, i+10);
+    // Resolve org names (current employer + previous employers)
+    const allOrgIdsNeeded = [...new Set([
+      ...allCandidates.map(c => c.orgId).filter(id => id && id.startsWith('rec')),
+      ...allCandidates.flatMap(c => c.previousEmployerIds).filter(id => id && id.startsWith('rec'))
+    ])];
+    const orgNameMap = {};
+    if (allOrgIdsNeeded.length > 0) {
+      for (let i = 0; i < allOrgIdsNeeded.length; i += 10) {
+        const batch = allOrgIdsNeeded.slice(i, i+10);
         const formula = 'OR(' + batch.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
         const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations?filterByFormula=${encodeURIComponent(formula)}&fields[]=Organisation Name`, { headers: { Authorization: `Bearer ${getToken()}` } });
         const data = await resp.json();
-        const map = {};
-        data.records.forEach(r => { map[r.id] = r.fields['Organisation Name'] || ''; });
-        allCandidates = allCandidates.map(c => ({ ...c, orgName: c.orgId && map[c.orgId] ? map[c.orgId] : c.orgName }));
+        data.records.forEach(r => { orgNameMap[r.id] = r.fields['Organisation Name'] || ''; });
       }
+      allCandidates = allCandidates.map(c => ({
+        ...c,
+        orgName: c.orgId && orgNameMap[c.orgId] ? orgNameMap[c.orgId] : c.orgName,
+        previousEmployerNames: c.previousEmployerIds.map(id => orgNameMap[id] || '').filter(Boolean)
+      }));
     }
 
     updateCandCounts();
@@ -4737,6 +4756,7 @@ function renderCandPanel(c, interactions) {
 
     ${c.summary ? `<div class="panel-section"><div class="panel-section-label">Summary / Notes</div><div style="font-size:0.78rem;color:var(--tee-muted);line-height:1.7;">${c.summary}</div></div>` : ''}
     ${c.lastThreeCompanies ? `<div class="panel-section"><div class="panel-section-label">Last three companies</div><div style="font-size:0.78rem;color:var(--tee-muted);line-height:1.7;">${c.lastThreeCompanies}</div></div>` : ''}
+    ${c.previousEmployerNames && c.previousEmployerNames.length > 0 ? `<div class="panel-section"><div class="panel-section-label">Previous employers</div><div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.25rem;">${c.previousEmployerNames.map(n => `<span style="font-size:0.75rem;padding:2px 10px;border-radius:10px;background:rgba(53,150,194,0.08);color:var(--tee-accent);border:1px solid rgba(53,150,194,0.2);">${n}</span>`).join('')}</div></div>` : ''}
 
     <div class="panel-section">
       <div class="panel-section-label">Interaction history</div>
@@ -4800,6 +4820,58 @@ function clearCandOrgSelection() {
   document.getElementById('cf-org-search').focus();
 }
 
+// PREVIOUS EMPLOYERS MULTI-PICKER
+let prevEmpSelected = []; // [{id, name}]
+
+function renderPrevEmpTags() {
+  const container = document.getElementById('cf-prev-emp-tags');
+  if (!container) return;
+  container.innerHTML = prevEmpSelected.map(e =>
+    `<div class="org-selected-badge" style="display:inline-flex;align-items:center;gap:0.3rem;">
+      <span>${e.name}</span>
+      <span onclick="removePrevEmp('${e.id}')" title="Remove" style="cursor:pointer;">✕</span>
+    </div>`
+  ).join('');
+  const input = document.getElementById('cf-prev-emp-ids');
+  if (input) input.value = JSON.stringify(prevEmpSelected.map(e => e.id));
+}
+
+function searchPrevEmpOrgs(val) {
+  const dd = document.getElementById('prev-emp-dropdown');
+  if (!dd) return;
+  const q = val.toLowerCase().trim();
+  const already = prevEmpSelected.map(e => e.id);
+  const matches = allOrgs.filter(o => o.name && o.name.toLowerCase().includes(q) && !already.includes(o.id)).slice(0, 8);
+  if (!q && matches.length === 0) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(o =>
+    `<div class="org-option" data-id="${o.id}" data-name="${o.name}">${o.name}${o.sector ? '<span style="font-size:0.72rem;color:var(--tee-muted);margin-left:6px;">· '+o.sector+'</span>' : ''}</div>`
+  ).join('');
+  dd.querySelectorAll('.org-option').forEach(el => {
+    el.onclick = () => {
+      prevEmpSelected.push({ id: el.getAttribute('data-id'), name: el.getAttribute('data-name') });
+      renderPrevEmpTags();
+      dd.style.display = 'none';
+      const si = document.getElementById('cf-prev-emp-search');
+      if (si) { si.value = ''; si.focus(); }
+    };
+  });
+  dd.style.display = matches.length > 0 ? 'block' : 'none';
+}
+
+function removePrevEmp(id) {
+  prevEmpSelected = prevEmpSelected.filter(e => e.id !== id);
+  renderPrevEmpTags();
+}
+
+function initPrevEmpPicker(existingIds, existingNames) {
+  prevEmpSelected = (existingIds || []).map((id, i) => ({ id, name: existingNames[i] || id }));
+  renderPrevEmpTags();
+  const si = document.getElementById('cf-prev-emp-search');
+  if (si) si.value = '';
+  const dd = document.getElementById('prev-emp-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
 // OPEN ADD MODAL
 function openAddCandidateModal() {
   candEditMode = 'add';
@@ -4820,6 +4892,7 @@ function openAddCandidateModal() {
   document.getElementById('cand-delete-btn').style.display = 'none';
   document.getElementById('cand-delete-confirm').style.display = 'none';
   document.getElementById('cand-edit-saving').style.display = 'none';
+  initPrevEmpPicker([], []);
   document.getElementById('cand-edit-modal').classList.add('show');
   if (allOrgs.length === 0) ensureOrgsLoaded();
   if (Object.keys(candFieldOptions).length > 0) {
@@ -4893,6 +4966,7 @@ function openEditCandidateModal() {
   document.getElementById('cand-delete-btn').style.display = 'inline-flex';
   document.getElementById('cand-delete-confirm').style.display = 'none';
   document.getElementById('cand-edit-saving').style.display = 'none';
+  initPrevEmpPicker(c.previousEmployerIds || [], c.previousEmployerNames || []);
   document.getElementById('cand-edit-modal').classList.add('show');
   if (Object.keys(candFieldOptions).length > 0) {
     buildCandSelects();
@@ -4917,6 +4991,9 @@ async function saveCandidateEdit() {
   const sectors = getTagPickerValues('cf-sector-picker');
   const fields = { 'Full Name': fullName };
   if (orgId) fields['Current Employer'] = [orgId];
+  const prevEmpIds = prevEmpSelected.map(e => e.id);
+  if (prevEmpIds.length > 0) fields['Previous Employers'] = prevEmpIds;
+  else fields['Previous Employers'] = [];
   const textFields = [['cf-role','Employment History'],['cf-email','Email'],['cf-phone','Landline'],['cf-mobile','Mobile'],['cf-linkedin','LinkedIn'],['cf-cvurl','CV URL'],['cf-location','Base Location'],['cf-summary','Notes']];
   const salaryVals = getTagPickerValues('cf-salary-picker');
   if (salaryVals.length > 0) fields['Salary objective'] = salaryVals;
@@ -4946,7 +5023,7 @@ async function saveCandidateEdit() {
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || selectedCandidate.orgName) : selectedCandidate.orgName;
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
       if (idx > -1) {
-        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, email: fields['Email']||allCandidates[idx].email, phone: fields['Landline']||allCandidates[idx].phone, mobile: fields['Mobile']||allCandidates[idx].mobile, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary Objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary };
+        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, email: fields['Email']||allCandidates[idx].email, phone: fields['Landline']||allCandidates[idx].phone, mobile: fields['Mobile']||allCandidates[idx].mobile, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary Objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary, previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name) };
         selectedCandidate = allCandidates[idx];
       }
       closeCandidateModal();
@@ -4960,7 +5037,7 @@ async function saveCandidateEdit() {
       data = await resp.json();
       if (!resp.ok) throw new Error(data.error?.message || 'Create failed');
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || '') : '';
-      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [] };
+      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [], previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name) };
       allCandidates.push(newCand);
       closeCandidateModal();
       updateCandCounts();
