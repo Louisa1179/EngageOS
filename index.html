@@ -4874,20 +4874,31 @@ function searchPrevEmpOrgs(val) {
   if (!dd) return;
   const q = val.toLowerCase().trim();
   const already = prevEmpSelected.map(e => e.id);
-  const matches = allOrgs.filter(o => o.name && o.name.toLowerCase().includes(q) && !already.includes(o.id)).slice(0, 8);
-  if (!q && matches.length === 0) { dd.style.display = 'none'; return; }
+  const matches = q
+    ? allOrgs.filter(o => o.name && o.name.toLowerCase().includes(q) && !already.includes(o.id)).slice(0, 8)
+    : allOrgs.filter(o => o.name && !already.includes(o.id)).slice(0, 8);
+  if (matches.length === 0) { dd.style.display = 'none'; return; }
+  // Store matches in a map keyed by id to avoid attribute encoding issues
+  const matchMap = {};
+  matches.forEach(o => { matchMap[o.id] = o; });
   dd.innerHTML = matches.map(o =>
-    `<div class="org-option" data-id="${o.id}" data-name="${o.name}">${o.name}${o.sector ? '<span style="font-size:0.72rem;color:var(--tee-muted);margin-left:6px;">· '+o.sector+'</span>' : ''}</div>`
+    `<div class="org-option" data-id="${o.id}">${o.name}${o.sector ? '<span style="font-size:0.72rem;color:var(--tee-muted);margin-left:6px;">· '+o.sector+'</span>' : ''}</div>`
   ).join('');
   dd.querySelectorAll('.org-option').forEach(el => {
-    el.onclick = () => {
-      prevEmpSelected.push({ id: el.getAttribute('data-id'), name: el.getAttribute('data-name') });
+    el.onmousedown = (e) => {
+      e.preventDefault(); // prevent input blur before click registers
+      const id = el.getAttribute('data-id');
+      const org = matchMap[id];
+      if (!org) return;
+      prevEmpSelected.push({ id: org.id, name: org.name });
       renderPrevEmpTags();
       dd.style.display = 'none';
       const si = document.getElementById('cf-prev-emp-search');
       if (si) { si.value = ''; si.focus(); }
     };
   });
+  // Stop scroll inside dropdown from bubbling to modal
+  dd.onwheel = (e) => e.stopPropagation();
   dd.style.display = matches.length > 0 ? 'block' : 'none';
 }
 
