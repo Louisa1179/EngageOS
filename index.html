@@ -349,7 +349,7 @@
 
   /* ORG TYPEAHEAD */
   .org-typeahead-wrap { position: relative; }
-  .org-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: var(--tee-mid); border: 1px solid var(--tee-border); border-radius: 8px; z-index: 500; max-height: 180px; overflow-y: auto; box-shadow: 0 4px 16px rgba(15,13,46,0.12); margin-top: 2px; display: none; }
+  .org-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: var(--tee-mid); border: 1px solid var(--tee-border); border-radius: 8px; z-index: 500; max-height: 180px; overflow-y: scroll; overscroll-behavior: contain; box-shadow: 0 4px 16px rgba(15,13,46,0.12); margin-top: 2px; display: none; }
   .org-option { padding: 0.6rem 0.875rem; font-size: 0.85rem; color: var(--tee-text); cursor: pointer; border-bottom: 1px solid var(--tee-border); }
   .org-option:last-child { border-bottom: none; }
   .org-option:hover { background: var(--tee-hover); }
@@ -4781,7 +4781,7 @@ function renderCandPanel(c, interactions) {
     <div class="panel-section">
       <div class="panel-section-label">Contact details</div>
       <div class="field-row"><span class="field-key">Email</span><span class="field-val">${c.email ? `<a href="mailto:${c.email}">${c.email}</a>` : '—'}</span></div>
-      <div class="field-row"><span class="field-key">Phone</span><span class="field-val">${c.phone || '—'}</span></div>
+      ${(c.phone || c.mobile) ? `<div class="field-row"><span class="field-key">Phone</span><span class="field-val">${[c.phone, c.mobile].filter(Boolean).join(' / ')}</span></div>` : ''}
       <div class="field-row"><span class="field-key">LinkedIn</span><span class="field-val">${c.linkedin ? `<a href="${c.linkedin}" target="_blank">View profile</a>` : '—'}</span></div>
       ${c.cvUrl ? `<div class="field-row"><span class="field-key">CV</span><span class="field-val"><a href="${c.cvUrl}" target="_blank">View CV</a></span></div>` : ''}
       ${c.salary ? `<div class="field-row"><span class="field-key">Salary / rate</span><span class="field-val">${c.salary}</span></div>` : ''}
@@ -4898,7 +4898,7 @@ function searchPrevEmpOrgs(val) {
     };
   });
   // Stop scroll inside dropdown from bubbling to modal
-  dd.onwheel = (e) => e.stopPropagation();
+  dd.onwheel = (e) => { e.stopPropagation(); };
   dd.style.display = matches.length > 0 ? 'block' : 'none';
 }
 
@@ -5019,6 +5019,21 @@ function openEditCandidateModal() {
     loadCandFieldOptions().then(() => buildCandSelects());
   }
 }
+
+// Prevent edit modal from scrolling when wheel is over an open dropdown
+document.addEventListener('DOMContentLoaded', () => {
+  const editModal = document.querySelector('.edit-modal');
+  if (editModal) {
+    editModal.addEventListener('wheel', (e) => {
+      const dd = document.getElementById('prev-emp-dropdown');
+      const candDd = document.getElementById('cand-org-dropdown');
+      if ((dd && dd.style.display !== 'none' && dd.contains(e.target)) ||
+          (candDd && candDd.style.display !== 'none' && candDd.contains(e.target))) {
+        e.stopPropagation();
+      }
+    }, { passive: true });
+  }
+});
 
 function closeCandidateModal() {
   document.getElementById('cand-edit-modal').classList.remove('show');
