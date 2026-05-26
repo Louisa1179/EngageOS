@@ -1231,6 +1231,11 @@
       <input type="hidden" id="cf-specialism" />
     </div>
     <div class="edit-field-group">
+      <label class="edit-label">Qualifications</label>
+      <div id="cf-qualifications-picker" style="background:rgba(255,255,255,0.03);border:1px solid var(--tee-border);border-radius:10px;padding:0.75rem;"></div>
+      <input type="hidden" id="cf-qualifications" />
+    </div>
+    <div class="edit-field-group">
       <label class="edit-label">Sector expertise</label>
       <div id="cf-sector-expertise-tags" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.5rem;min-height:0;"></div>
       <div style="display:flex;gap:0.5rem;margin-bottom:0.4rem;">
@@ -4379,6 +4384,7 @@ async function loadCandidates() {
       contractType: cf(r, 'Contract type'),
       dayRate: cf(r, 'Day Rate Range'),
       specialisms: Array.isArray(r.fields['Specialisms']) ? r.fields['Specialisms'] : (r.fields['Specialisms'] ? [r.fields['Specialisms']] : []),
+      qualifications: Array.isArray(r.fields['Qualifications']) ? r.fields['Qualifications'] : (r.fields['Qualifications'] ? [r.fields['Qualifications']] : []),
       sectors: r.fields['Sector Expertise'] ? r.fields['Sector Expertise'].split(', ').map(s => s.trim()).filter(Boolean) : [],
       subsectorExpertise: r.fields['Subsector Expertise'] ? r.fields['Subsector Expertise'].split(', ').map(s => s.trim()).filter(Boolean) : [],
       workedSectors: Array.isArray(r.fields['Worked Sectors']) ? r.fields['Worked Sectors'] : [],
@@ -4454,10 +4460,36 @@ async function loadCandFieldOptions() {
 // TAG PICKER HELPERS
 const SPECIALISM_GROUPS = {
   'Leadership': ['Board/NED', 'CEO', 'C-Suite', 'Director Level', 'Head of', 'Senior Management', 'Management', 'Junior'],
-  'HR': ['HR Generalist', 'HRBP', 'HR Operations', 'HR projects', 'Employee Engagement', 'Culture', 'Learning and Development', 'Organisational Development', 'Organisational Design', 'Transformation & Change', 'Talent Acquisition', 'Talent', 'Reward', 'Payroll', 'HRIS', 'ED&I', 'CPO/HRD'],
+  'HR': ['HR Generalist', 'HRBP', 'HR Operations', 'HR projects', 'Employee Engagement', 'Culture', 'Learning and Development', 'Organisational Development', 'Organisational Design', 'Transformation & Change', 'Talent Acquisition', 'Talent', 'Reward', 'Payroll', 'HRIS', 'ED&I', 'CPO/HRD', 'Troubleshooting', 'System Implementation', 'Project Management'],
   'Governance': ['Governance', 'Legal', 'Mergers and Acquisitions', 'Compliance', 'Due Diligence'],
   'Housing': ['Housing']
 };
+
+const QUALIFICATIONS_OPTIONS = ['CIPD Level 3', 'CIPD Level 5', 'CIPD Level 7', 'CiH Level 4', 'CiH Level 5', 'CiH Level 7', 'Prince2', 'Other Project Management Quals'];
+
+function buildQualificationsPicker(pickerId, hiddenId, selectedValues) {
+  const picker = document.getElementById(pickerId);
+  const hidden = document.getElementById(hiddenId);
+  if (!picker) return;
+  picker.innerHTML = QUALIFICATIONS_OPTIONS.map(q =>
+    `<span class="tag-option${selectedValues.includes(q) ? ' selected' : ''}" data-val="${q}" onclick="toggleQualTag(this,'${hiddenId}')">${q}</span>`
+  ).join('');
+  if (hidden) hidden.value = JSON.stringify(selectedValues);
+}
+
+function toggleQualTag(el, hiddenId) {
+  el.classList.toggle('selected');
+  const hidden = document.getElementById(hiddenId);
+  if (!hidden) return;
+  const vals = [...el.closest('[id]').querySelectorAll('.tag-option.selected')].map(e => e.getAttribute('data-val'));
+  hidden.value = JSON.stringify(vals);
+}
+
+function getQualPickerValues(pickerId) {
+  const picker = document.getElementById(pickerId);
+  if (!picker) return [];
+  return [...picker.querySelectorAll('.tag-option.selected')].map(e => e.getAttribute('data-val'));
+}
 
 function buildGroupedSpecialismPicker(pickerId, hiddenId, selectedValues) {
   const picker = document.getElementById(pickerId);
@@ -4743,6 +4775,7 @@ function renderCandPanel(c, interactions) {
     </div>
 
     ${specialismTags ? `<div class="panel-section"><div class="panel-section-label">Specialisms</div><div style="margin-top:0.25rem;">${specialismTags}</div></div>` : ''}
+    ${c.qualifications && c.qualifications.length > 0 ? `<div class="panel-section"><div class="panel-section-label">Qualifications</div><div style="display:flex;flex-wrap:wrap;gap:0.3rem;margin-top:0.25rem;">${c.qualifications.map(q => `<span style="font-size:0.72rem;padding:2px 8px;border-radius:10px;background:rgba(53,150,194,0.1);color:var(--tee-accent);display:inline-block;">${q}</span>`).join('')}</div></div>` : ''}
     ${sectorTags ? `<div class="panel-section"><div class="panel-section-label">Sector expertise</div><div style="margin-top:0.25rem;">${sectorTags}</div></div>` : ''}
 
     <div class="panel-section">
@@ -4879,7 +4912,7 @@ function openAddCandidateModal() {
   document.getElementById('cand-modal-sub').textContent = 'Create a new candidate record in Airtable.';
   ['cf-firstname','cf-lastname','cf-role','cf-email','cf-phone','cf-mobile','cf-linkedin','cf-cvurl','cf-salary','cf-location','cf-summary'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   ['cf-status','cf-relationship','cf-availability','cf-notice','cf-travel','cf-contract','cf-dayrate'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
-  ['cf-specialism-picker','cf-contract-picker','cf-dayrate-picker','cf-travel-picker','cf-salary-picker'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
+  ['cf-specialism-picker','cf-qualifications-picker','cf-contract-picker','cf-dayrate-picker','cf-travel-picker','cf-salary-picker'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
   candSectorExpertise = [];
   renderCandSectorTags();
   const ssm = document.getElementById('cf-subsector-multi'); if(ssm) ssm.style.display='none';
@@ -4942,6 +4975,7 @@ function openEditCandidateModal() {
     const curDayrateEdit = Array.isArray(c.dayRate) ? c.dayRate : (c.dayRate ? [c.dayRate] : []);
     if (candFieldOptions['Day Rate Range']) buildTagPicker('cf-dayrate-picker', 'cf-dayrate', candFieldOptions['Day Rate Range'], curDayrateEdit, false);
     buildGroupedSpecialismPicker('cf-specialism-picker', 'cf-specialism', c.specialisms||[]);
+    buildQualificationsPicker('cf-qualifications-picker', 'cf-qualifications', c.qualifications||[]);
     if (Object.keys(subsectorMap).length === 0) {
       fetchSubsectors().then(() => {
         populateCandSectorSelect();
@@ -4988,6 +5022,7 @@ async function saveCandidateEdit() {
   const fullName = [firstName, lastName].filter(Boolean).join(' ');
   const orgId = document.getElementById('cf-org-id').value;
   const specialisms = getTagPickerValues('cf-specialism-picker');
+  const qualifications = getQualPickerValues('cf-qualifications-picker');
   const sectors = getTagPickerValues('cf-sector-picker');
   const fields = { 'Full Name': fullName };
   if (orgId) fields['Current Employer'] = [orgId];
@@ -5008,6 +5043,7 @@ async function saveCandidateEdit() {
   selectFields.forEach(([elId, fn]) => { const v = document.getElementById(elId)?.value; if(v) fields[fn] = candFieldTypes[fn] === 'multipleSelects' ? [v] : v; });
   const relVal = document.getElementById('cf-relationship')?.value; if(relVal) fields['Relationship Context'] = candFieldTypes['Relationship Context'] === 'multipleSelects' ? [relVal] : relVal;
   if (specialisms.length > 0) fields['Specialisms'] = specialisms;
+  fields['Qualifications'] = qualifications;
   const sectorExpertiseList = [...new Set(candSectorExpertise.map(i => i.sector))];
   const subsectorExpertiseList = [...new Set(candSectorExpertise.map(i => i.subsector))];
   if (sectorExpertiseList.length > 0) fields['Sector Expertise'] = sectorExpertiseList.join(', ');
@@ -5023,7 +5059,7 @@ async function saveCandidateEdit() {
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || selectedCandidate.orgName) : selectedCandidate.orgName;
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
       if (idx > -1) {
-        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, email: fields['Email']||allCandidates[idx].email, phone: fields['Landline']||allCandidates[idx].phone, mobile: fields['Mobile']||allCandidates[idx].mobile, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary Objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary, previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name) };
+        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, email: fields['Email']||allCandidates[idx].email, phone: fields['Landline']||allCandidates[idx].phone, mobile: fields['Mobile']||allCandidates[idx].mobile, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary Objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary, previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
         selectedCandidate = allCandidates[idx];
       }
       closeCandidateModal();
@@ -5037,7 +5073,7 @@ async function saveCandidateEdit() {
       data = await resp.json();
       if (!resp.ok) throw new Error(data.error?.message || 'Create failed');
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || '') : '';
-      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [], previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name) };
+      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [], previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
       allCandidates.push(newCand);
       closeCandidateModal();
       updateCandCounts();
