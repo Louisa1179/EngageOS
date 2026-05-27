@@ -1628,7 +1628,8 @@ async function loadContacts() {
       notes: getField(r, 'Notes'),
       followUpDate: getField(r, 'Follow-up Date'),
       nextSendDate: getField(r, 'Next Send Date'),
-      dncReason: getField(r, 'Status Reason'), owner: getField(r, 'Owner')
+      dncReason: getField(r, 'Status Reason'), owner: getField(r, 'Owner'),
+      candidateRecordId: Array.isArray(r.fields['Candidate Record']) ? r.fields['Candidate Record'][0] : (r.fields['Candidate Record'] || '')
     }));
 
     // Populate unfiltered copy for org counts - only if not already loaded by loadAllContactsForCounting
@@ -2267,6 +2268,11 @@ function renderPanel(contact, interactions) {
         </div>
       </div>
       <div onclick="openEditModal()" style="margin-top:0.75rem;font-size:0.75rem;color:var(--tee-muted);cursor:pointer;display:inline-flex;align-items:center;gap:0.3rem;" onmouseover="this.style.color='var(--tee-accent)'" onmouseout="this.style.color='var(--tee-muted)'">✎ Edit contact details</div>
+      <div id="also-candidate-btn" style="margin-top:0.5rem;">
+        ${contact.candidateRecordId
+          ? `<div onclick="jumpToCandidate('${contact.candidateRecordId}')" style="font-size:0.75rem;padding:4px 12px;border-radius:8px;background:rgba(16,185,129,0.12);color:#10b981;cursor:pointer;display:inline-flex;align-items:center;gap:0.3rem;border:1px solid rgba(16,185,129,0.25);" onmouseover="this.style.background='rgba(16,185,129,0.2)'" onmouseout="this.style.background='rgba(16,185,129,0.12)'">⇄ Also a candidate — view record</div>`
+          : `<div onclick="createCandidateFromContact()" style="font-size:0.75rem;padding:4px 12px;border-radius:8px;background:rgba(53,150,194,0.08);color:var(--tee-accent);cursor:pointer;display:inline-flex;align-items:center;gap:0.3rem;border:1px solid rgba(53,150,194,0.2);" onmouseover="this.style.background='rgba(53,150,194,0.15)'" onmouseout="this.style.background='rgba(53,150,194,0.08)'">+ Add as candidate</div>`}
+      </div>
     </div>
     <div class="panel-body">
       <div class="panel-section">
@@ -4153,6 +4159,25 @@ async function saveEditContact() {
         interactionIds: [], followUpDate: '', dncReason: ''
       };
       allContacts.push(newContact);
+      // If created from a candidate, write the link back to both records
+      if (window._pendingCandidateLinkId) {
+        const candId = window._pendingCandidateLinkId;
+        window._pendingCandidateLinkId = null;
+        // Write Client Record on the candidate
+        fetch(`${CAND_API_URL}/${candId}`, {
+          method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'Client Record': [data.id] } })
+        });
+        // Write Candidate Record on the new contact
+        fetch(`https://api.airtable.com/v0/${BASE_ID}/Clients/${data.id}`, {
+          method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'Candidate Record': [candId] } })
+        });
+        // Update local objects
+        newContact.candidateRecordId = candId;
+        const ci = allCandidates.findIndex(c => c.id === candId);
+        if (ci > -1) allCandidates[ci].clientRecordId = data.id;
+      }
       closeEditModal();
       updateCounts();
       renderView();
@@ -4407,6 +4432,7 @@ async function loadCandidates() {
       lastThreeCompanies: cf(r, 'Last Three Companies'),
       previousEmployerIds: Array.isArray(r.fields['Previous Employers']) ? r.fields['Previous Employers'] : [],
       previousEmployerNames: [],
+      clientRecordId: Array.isArray(r.fields['Client Record']) ? r.fields['Client Record'][0] : (r.fields['Client Record'] || '')
     }));
 
     // Resolve org names (current employer + previous employers)
@@ -4746,7 +4772,12 @@ function renderCandPanel(c, interactions) {
             ${c.firstCallCompleted ? `<span style="font-size:0.72rem;padding:2px 8px;border-radius:10px;background:rgba(53,150,194,0.1);color:var(--tee-accent);">✓ First call done</span>` : ''}
           </div>
         </div>
-        <button onclick="openEditCandidateModal()" style="flex-shrink:0;background:transparent;border:1px solid var(--tee-border);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.75rem;color:var(--tee-muted);cursor:pointer;">✎ Edit</button>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.4rem;flex-shrink:0;">
+          <button onclick="openEditCandidateModal()" style="background:transparent;border:1px solid var(--tee-border);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.75rem;color:var(--tee-muted);cursor:pointer;">✎ Edit</button>
+          ${c.clientRecordId
+            ? `<div onclick="jumpToContact('${c.clientRecordId}')" style="font-size:0.72rem;padding:3px 10px;border-radius:8px;background:rgba(16,185,129,0.12);color:#10b981;cursor:pointer;display:inline-flex;align-items:center;gap:0.3rem;border:1px solid rgba(16,185,129,0.25);white-space:nowrap;" onmouseover="this.style.background='rgba(16,185,129,0.2)'" onmouseout="this.style.background='rgba(16,185,129,0.12)'">⇄ Also a client</div>`
+            : `<div onclick="createContactFromCandidate()" style="font-size:0.72rem;padding:3px 10px;border-radius:8px;background:rgba(53,150,194,0.08);color:var(--tee-accent);cursor:pointer;display:inline-flex;align-items:center;gap:0.3rem;border:1px solid rgba(53,150,194,0.2);white-space:nowrap;" onmouseover="this.style.background='rgba(53,150,194,0.15)'" onmouseout="this.style.background='rgba(53,150,194,0.08)'">+ Add as client</div>`}
+        </div>
       </div>
     </div>
 
@@ -4917,6 +4948,88 @@ function initPrevEmpPicker(existingIds, existingNames) {
 }
 
 // OPEN ADD MODAL
+// ---- CROSS-RECORD LINKING ----
+
+function jumpToCandidate(candidateId) {
+  switchWorkspace('candidates');
+  setTimeout(() => {
+    const cand = allCandidates.find(c => c.id === candidateId);
+    if (cand) {
+      selectedCandidate = cand;
+      renderCandidateList();
+      renderCandidateDetail(cand);
+    }
+  }, 150);
+}
+
+function jumpToContact(contactId) {
+  switchWorkspace('bd');
+  setTimeout(() => {
+    const contact = allContacts.find(c => c.id === contactId);
+    if (contact) {
+      selectedContact = contact;
+      renderView();
+      renderContactDetail(contact);
+    }
+  }, 150);
+}
+
+async function createCandidateFromContact() {
+  const contact = selectedContact;
+  if (!contact) return;
+  // Pre-fill add candidate modal with contact details
+  openAddCandidateModal();
+  await new Promise(r => setTimeout(r, 100)); // wait for modal to render
+  const fn = document.getElementById('cf-firstname');
+  const ln = document.getElementById('cf-lastname');
+  if (fn && contact.name) {
+    const parts = contact.name.split(' ');
+    fn.value = parts[0] || '';
+    if (ln) ln.value = parts.slice(1).join(' ') || '';
+  }
+  const emailEl = document.getElementById('cf-email');
+  if (emailEl) emailEl.value = contact.email || '';
+  const phoneEl = document.getElementById('cf-phone');
+  if (phoneEl) phoneEl.value = contact.phone || '';
+  const linkedinEl = document.getElementById('cf-linkedin');
+  if (linkedinEl) linkedinEl.value = contact.linkedin || '';
+  // Pre-fill org
+  if (contact.org && contact.orgName) {
+    selectedCandOrg = { id: contact.org, name: contact.orgName };
+    const display = document.getElementById('cand-org-selected-display');
+    const searchEl = document.getElementById('cf-org-search');
+    if (display) { display.textContent = contact.orgName; display.style.display = 'inline-flex'; }
+    if (searchEl) searchEl.style.display = 'none';
+  }
+  // Store contact id so we can link after save
+  window._pendingClientLinkId = contact.id;
+}
+
+async function createContactFromCandidate() {
+  const cand = selectedCandidate;
+  if (!cand) return;
+  // Switch to BD and open add contact modal pre-filled
+  switchWorkspace('bd');
+  await new Promise(r => setTimeout(r, 150));
+  openAddContactModal();
+  await new Promise(r => setTimeout(r, 100));
+  const fn = document.getElementById('ef-firstname');
+  const ln = document.getElementById('ef-lastname');
+  if (fn && cand.name) {
+    const parts = cand.name.split(' ');
+    fn.value = parts[0] || '';
+    if (ln) ln.value = parts.slice(1).join(' ') || '';
+  }
+  const emailEl = document.getElementById('ef-email');
+  if (emailEl) emailEl.value = cand.email || '';
+  const phoneEl = document.getElementById('ef-phone');
+  if (phoneEl) phoneEl.value = cand.phone || cand.mobile || '';
+  const linkedinEl = document.getElementById('ef-linkedin');
+  if (linkedinEl) linkedinEl.value = cand.linkedin || '';
+  // Store candidate id so we can link after save
+  window._pendingCandidateLinkId = cand.id;
+}
+
 function openAddCandidateModal() {
   candEditMode = 'add';
   document.getElementById('cand-modal-title').textContent = 'Add candidate';
@@ -5101,6 +5214,25 @@ async function saveCandidateEdit() {
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || '') : '';
       const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [], previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
       allCandidates.push(newCand);
+      // If created from a contact, write the link back to both records
+      if (window._pendingClientLinkId) {
+        const clientId = window._pendingClientLinkId;
+        window._pendingClientLinkId = null;
+        // Write Candidate Record on the contact
+        fetch(`https://api.airtable.com/v0/${BASE_ID}/Clients/${clientId}`, {
+          method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'Candidate Record': [data.id] } })
+        });
+        // Write Client Record on the new candidate
+        fetch(`${CAND_API_URL}/${data.id}`, {
+          method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'Client Record': [clientId] } })
+        });
+        // Update local objects
+        newCand.clientRecordId = clientId;
+        const ci = allContacts.findIndex(c => c.id === clientId);
+        if (ci > -1) allContacts[ci].candidateRecordId = data.id;
+      }
       closeCandidateModal();
       updateCandCounts();
       filterCandidates();
