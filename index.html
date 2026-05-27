@@ -422,8 +422,10 @@
   <div class="desk-bar">
     <span style="font-size:0.72rem;color:var(--tee-muted);font-weight:500;letter-spacing:0.05em;text-transform:uppercase;margin-right:0.25rem;">Desk</span>
     <button class="desk-btn active" id="desk-housing" onclick="switchDesk('Housing')">🏠 Housing</button>
-    <button class="desk-btn placeholder" id="desk-healthcare" title="Coming soon">🏥 Healthcare</button>
-    <button class="desk-btn placeholder" id="desk-xtech" title="Coming soon">💡 X-Tech</button>
+    <button class="desk-btn" id="desk-healthcare" onclick="switchDesk('Healthcare')">🏥 Healthcare</button>
+    <button class="desk-btn" id="desk-education" onclick="switchDesk('Education')">🎓 Education</button>
+    <button class="desk-btn" id="desk-xtech" onclick="switchDesk('X-Tech')">💡 X-Tech</button>
+    <button class="desk-btn" id="desk-allothers" onclick="switchDesk('All Others')">📋 All Others</button>
     <span style="font-size:0.72rem;color:var(--tee-muted);margin-left:0.5rem;" id="desk-subtitle"></span>
   </div>
 
@@ -833,6 +835,17 @@
           <button class="modal-btn modal-btn-no" style="flex:0 0 auto;padding:0.6rem 1rem;" onclick="closeAddOrgBox()">Cancel</button>
         </div>
       </div>
+    </div>
+
+    <div class="edit-field-group">
+      <label class="edit-label">Previous employers</label>
+      <div class="org-typeahead-wrap">
+        <input type="text" class="edit-input" id="ef-prev-emp-search" placeholder="Search organisations..." autocomplete="off"
+          oninput="searchContactPrevEmpOrgs(this.value)" onfocus="searchContactPrevEmpOrgs(this.value)" />
+        <div class="org-dropdown" id="ef-prev-emp-dropdown"></div>
+      </div>
+      <div id="ef-prev-emp-tags" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.4rem;"></div>
+      <input type="hidden" id="ef-prev-emp-ids" />
     </div>
 
     <div class="edit-field-group">
@@ -1629,7 +1642,9 @@ async function loadContacts() {
       followUpDate: getField(r, 'Follow-up Date'),
       nextSendDate: getField(r, 'Next Send Date'),
       dncReason: getField(r, 'Status Reason'), owner: getField(r, 'Owner'),
-      candidateRecordId: Array.isArray(r.fields['Candidate Record']) ? r.fields['Candidate Record'][0] : (r.fields['Candidate Record'] || '')
+      candidateRecordId: Array.isArray(r.fields['Candidate Record']) ? r.fields['Candidate Record'][0] : (r.fields['Candidate Record'] || ''),
+      previousEmployerIds: Array.isArray(r.fields['Previous Employers']) ? r.fields['Previous Employers'] : [],
+      previousEmployerNames: []
     }));
 
     // Populate unfiltered copy for org counts - only if not already loaded by loadAllContactsForCounting
@@ -1684,7 +1699,13 @@ function getContactsForView(view) {
   if (!cfg) return [];
   
   // Filter by current desk if we have sector data
-  const deskFilter = c => !c.orgSector || c.orgSector === currentDesk || c.orgSector === '';
+  const currentSector = DESK_CONFIG[currentDesk]?.sector || currentDesk;
+  const deskFilter = c => {
+    if (currentDesk === 'All Others') {
+      return !c.orgSector || c.orgSector === '' || !PRIMARY_DESK_SECTORS.includes(c.orgSector);
+    }
+    return c.orgSector === currentSector;
+  };
 
   if (cfg.status === 'Warm Ongoing' || cfg.status === 'Cold Ongoing') {
     const today = new Date(); today.setHours(0,0,0,0);
@@ -1802,8 +1823,12 @@ function typeColor(type) {
 
 // RESOLVE ORG NAMES FROM LINKED RECORDS
 async function resolveOrgNames() {
-  const orgIds = [...new Set(allContacts.map(c => c.org).filter(id => id && id.startsWith('rec')))];
-  if (orgIds.length === 0) return;
+  const allOrgIdsNeeded = [...new Set([
+    ...allContacts.map(c => c.org).filter(id => id && id.startsWith('rec')),
+    ...allContacts.flatMap(c => c.previousEmployerIds || []).filter(id => id && id.startsWith('rec'))
+  ])];
+  if (allOrgIdsNeeded.length === 0) return;
+  const orgIds = allOrgIdsNeeded;
   
   try {
     const batches = [];
@@ -1828,11 +1853,16 @@ async function resolveOrgNames() {
     allContacts = allContacts.map(c => ({
       ...c,
       orgName: c.org && orgMap[c.org] ? orgMap[c.org] : '',
-      orgSector: c.org && orgSectorMap[c.org] ? orgSectorMap[c.org] : ''
+      orgSector: c.org && orgSectorMap[c.org] ? orgSectorMap[c.org] : '',
+      previousEmployerNames: (c.previousEmployerIds || []).map(id => orgMap[id] || '').filter(Boolean)
     }));
 
     // Update desk subtitle with contact count for current desk
-    const deskContacts = allContacts.filter(c => c.orgSector === currentDesk && c.status !== 'Do Not Contact').length;
+    const currentSectorForCount = DESK_CONFIG[currentDesk]?.sector || currentDesk;
+    const deskContacts = allContacts.filter(c => {
+      if (currentDesk === 'All Others') return (!c.orgSector || c.orgSector === '' || !PRIMARY_DESK_SECTORS.includes(c.orgSector)) && c.status !== 'Do Not Contact';
+      return c.orgSector === currentSectorForCount && c.status !== 'Do Not Contact';
+    }).length;
     const deskEl = document.getElementById('desk-subtitle');
     if (deskEl) deskEl.textContent = `${deskContacts} contacts`;
 
@@ -2324,6 +2354,7 @@ function renderPanel(contact, interactions) {
         <div class="field-row"><span class="field-key">Level</span><span class="field-val">${contact.contactLevel || '—'}</span></div>
         <div class="field-row"><span class="field-key">Relationship</span><span class="field-val">${formatRelationship(contact.relationshipStatus)}</span></div>
       </div>
+      ${contact.previousEmployerNames && contact.previousEmployerNames.length > 0 ? `<div class="panel-section"><div class="panel-section-label">Previous employers</div><div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.25rem;">${contact.previousEmployerNames.map(n => `<span style="font-size:0.75rem;padding:2px 10px;border-radius:10px;background:rgba(53,150,194,0.08);color:var(--tee-accent);border:1px solid rgba(53,150,194,0.2);">${n}</span>`).join('')}</div></div>` : ''}
       ${contact.notes ? `<div class="panel-section"><div class="panel-section-label">Notes</div><div style="font-size: 0.78rem; color: var(--tee-muted); line-height: 1.7;">${contact.notes}</div></div>` : ''}
       <div class="panel-section">
         <div class="panel-section-label">Interaction history</div>
@@ -2797,26 +2828,41 @@ const DESK_CONFIG = {
     emoji: '🏠'
   },
   'Healthcare': {
-    sector: 'Healthcare',
+    sector: 'Health and Social Care',
     subsectors: ['NHS', 'Private Healthcare', 'Care Homes', 'Mental Health', 'Hospice'],
     emoji: '🏥'
+  },
+  'Education': {
+    sector: 'Education',
+    subsectors: ['University', 'College', 'School', 'Academy', 'Other Education'],
+    emoji: '🎓'
   },
   'X-Tech': {
     sector: 'X-Tech',
     subsectors: ['Fintech', 'Medtech', 'Biotech', 'Martech', 'Edtech', 'Other Tech'],
     emoji: '💡'
+  },
+  'All Others': {
+    sector: 'All Others',
+    subsectors: [],
+    emoji: '📋'
   }
 };
 
+const PRIMARY_DESK_SECTORS = ['Housing', 'Health and Social Care', 'Education', 'X-Tech'];
+
 function switchDesk(desk) {
-  if (DESK_CONFIG[desk].placeholder) return;
   currentDesk = desk;
-  // Update button states
   document.querySelectorAll('.desk-btn').forEach(b => b.classList.remove('active'));
-  const deskMap = { 'Housing': 'desk-housing', 'Healthcare': 'desk-healthcare', 'X-Tech': 'desk-xtech' };
+  const deskMap = { 'Housing': 'desk-housing', 'Healthcare': 'desk-healthcare', 'Education': 'desk-education', 'X-Tech': 'desk-xtech', 'All Others': 'desk-allothers' };
   document.getElementById(deskMap[desk])?.classList.add('active');
-  // Reload contacts filtered to this desk
-  loadContacts();
+  // Refresh whichever workspace is currently active
+  const activeWs = document.querySelector('.workspace-tab.active')?.id;
+  if (activeWs === 'tab-orgs') {
+    filterOrgs();
+  } else {
+    loadContacts();
+  }
 }
 
 function getOrgSector(orgId) {
@@ -2850,7 +2896,7 @@ function switchWorkspace(ws) {
     setTimeout(updateAddBtn, 0);
   } else if (ws === 'orgs') {
     setTimeout(updateAddBtn, 0);
-    if (deskBar) deskBar.style.display = 'none';
+    if (deskBar) deskBar.style.display = 'flex';
     orgsBody.style.display = 'flex';
     tabOrgs.classList.add('active');
     if (allOrgs.length === 0) loadOrganisations();
@@ -3156,7 +3202,12 @@ function updateOrgCounts() {
   function orgHasContact(orgId, ownerFilter) {
     return contacts.some(c => c.org === orgId && (ownerFilter ? ownerFilter(c) : true));
   }
-  document.getElementById('org-count-all').textContent = allOrgs.length;
+  const currentSectorForOrgCount = DESK_CONFIG[currentDesk]?.sector || currentDesk;
+  const deskOrgs = allOrgs.filter(o => {
+    if (currentDesk === 'All Others') return !o.sector || o.sector === '' || !PRIMARY_DESK_SECTORS.includes(o.sector);
+    return o.sector === currentSectorForOrgCount;
+  });
+  document.getElementById('org-count-all').textContent = deskOrgs.length;
   const louisa = allOrgs.filter(o => orgHasContact(o.id, c => !c.owner || c.owner === 'Louisa Daly'));
   const john = allOrgs.filter(o => o.owner === 'John Daly' || orgHasContact(o.id, c => c.owner === 'John Daly'));
   const lEl = document.getElementById('org-count-louisa'); if (lEl) lEl.textContent = louisa.length;
@@ -3204,7 +3255,14 @@ function setOrgFilter(filter, el) {
 function filterOrgs() {
   const query = (document.getElementById('global-search')?.value || '').toLowerCase();
   const cts = allContactsUnfiltered.length > 0 ? allContactsUnfiltered : allContacts;
-  let orgs = allOrgs;
+  // Filter by current desk
+  const currentSectorForOrgs = DESK_CONFIG[currentDesk]?.sector || currentDesk;
+  let orgs = allOrgs.filter(o => {
+    if (currentDesk === 'All Others') {
+      return !o.sector || o.sector === '' || !PRIMARY_DESK_SECTORS.includes(o.sector);
+    }
+    return o.sector === currentSectorForOrgs;
+  });
   if (currentOrgFilter === 'louisa') {
     orgs = orgs.filter(o => {
       const orgContacts = cts.filter(c => c.org === o.id);
@@ -3972,6 +4030,7 @@ function openEditModal() {
   document.getElementById('edit-delete-btn').style.display = 'inline-flex';
   document.getElementById('ef-routing-wrap').style.display = 'none';
   document.getElementById('ef-relationship').value = c.relationshipStatus || '';
+  initContactPrevEmpPicker(c.previousEmployerIds || [], c.previousEmployerNames || []);
   document.getElementById('edit-modal').classList.add('show');
   ensureOrgsLoaded();
 }
@@ -3986,6 +4045,67 @@ function updateAddBtn() {
   const orgsVisible = document.getElementById('orgs-workspace') && document.getElementById('orgs-workspace').style.display !== 'none';
   btn.textContent = orgsVisible ? '+ Add organisation' : '+ Add contact';
 }
+// ---- CONTACT PREVIOUS EMPLOYERS PICKER ----
+let contactPrevEmpSelected = [];
+
+function renderContactPrevEmpTags() {
+  const container = document.getElementById('ef-prev-emp-tags');
+  if (!container) return;
+  container.innerHTML = contactPrevEmpSelected.map(e =>
+    `<div class="org-selected-badge" style="display:inline-flex;align-items:center;gap:0.3rem;">
+      <span>${e.name}</span>
+      <span onclick="removeContactPrevEmp('${e.id}')" title="Remove" style="cursor:pointer;">✕</span>
+    </div>`
+  ).join('');
+  const input = document.getElementById('ef-prev-emp-ids');
+  if (input) input.value = JSON.stringify(contactPrevEmpSelected.map(e => e.id));
+}
+
+function searchContactPrevEmpOrgs(val) {
+  const dd = document.getElementById('ef-prev-emp-dropdown');
+  if (!dd) return;
+  const q = val.toLowerCase().trim();
+  const already = contactPrevEmpSelected.map(e => e.id);
+  const matches = q
+    ? allOrgs.filter(o => o.name && o.name.toLowerCase().includes(q) && !already.includes(o.id)).slice(0, 8)
+    : allOrgs.filter(o => o.name && !already.includes(o.id)).slice(0, 8);
+  if (matches.length === 0) { dd.style.display = 'none'; return; }
+  const matchMap = {};
+  matches.forEach(o => { matchMap[o.id] = o; });
+  dd.innerHTML = matches.map(o =>
+    `<div class="org-option" data-id="${o.id}">${o.name}${o.sector ? '<span style="font-size:0.72rem;color:var(--tee-muted);margin-left:6px;">· '+o.sector+'</span>' : ''}</div>`
+  ).join('');
+  dd.querySelectorAll('.org-option').forEach(el => {
+    el.onmousedown = (e) => {
+      e.preventDefault();
+      const id = el.getAttribute('data-id');
+      const org = matchMap[id];
+      if (!org) return;
+      contactPrevEmpSelected.push({ id: org.id, name: org.name });
+      renderContactPrevEmpTags();
+      dd.style.display = 'none';
+      const si = document.getElementById('ef-prev-emp-search');
+      if (si) { si.value = ''; si.focus(); }
+    };
+  });
+  dd.onwheel = (e) => e.stopPropagation();
+  dd.style.display = 'block';
+}
+
+function removeContactPrevEmp(id) {
+  contactPrevEmpSelected = contactPrevEmpSelected.filter(e => e.id !== id);
+  renderContactPrevEmpTags();
+}
+
+function initContactPrevEmpPicker(existingIds, existingNames) {
+  contactPrevEmpSelected = (existingIds || []).map((id, i) => ({ id, name: existingNames[i] || id }));
+  renderContactPrevEmpTags();
+  const si = document.getElementById('ef-prev-emp-search');
+  if (si) si.value = '';
+  const dd = document.getElementById('ef-prev-emp-dropdown');
+  if (dd) dd.style.display = 'none';
+}
+
 function openAddContactModal() {
   editMode = 'add';
   document.getElementById('edit-modal-title').textContent = 'Add new contact';
@@ -4011,6 +4131,7 @@ function openAddContactModal() {
   document.getElementById('ef-routing-wrap').style.display = 'block';
   document.getElementById('ef-routing-sequence').checked = true;
   document.getElementById('ef-relationship').value = '';
+  initContactPrevEmpPicker([], []);
   document.getElementById('edit-modal').classList.add('show');
   ensureOrgsLoaded();
 }
@@ -4081,6 +4202,8 @@ async function saveEditContact() {
   if (linkedin) fields['LinkedIn'] = linkedin;
   // Contact Level not sent — Airtable field has AI generation enabled which blocks API writes
   if (orgId) fields['Organisation'] = [orgId];
+  const contactPrevEmpIds = contactPrevEmpSelected.map(e => e.id);
+  fields['Previous Employers'] = contactPrevEmpIds;
 
   if (relationshipStatus) fields['Relationship Status'] = relationshipStatus;
 
@@ -4126,7 +4249,7 @@ async function saveEditContact() {
       const idx = allContacts.findIndex(c => c.id === selectedContact.id);
       if (idx > -1) {
         const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || allContacts[idx].orgName) : allContacts[idx].orgName;
-        allContacts[idx] = { ...allContacts[idx], name: fullName, firstName, role, email, phone, linkedin, contactLevel, tier, org: orgId || allContacts[idx].org, orgName };
+        allContacts[idx] = { ...allContacts[idx], name: fullName, firstName, role, email, phone, linkedin, contactLevel, tier, org: orgId || allContacts[idx].org, orgName, previousEmployerIds: contactPrevEmpIds, previousEmployerNames: contactPrevEmpSelected.map(e => e.name) };
         selectedContact = allContacts[idx];
       }
       closeEditModal();
@@ -4156,7 +4279,8 @@ async function saveEditContact() {
         liConnected: false,
         nextActionDue: routing === 'sequence' ? new Date().toISOString().split('T')[0] : '',
         nextActionNotes: routing === 'sequence' ? 'Send LI connection request' : '',
-        interactionIds: [], followUpDate: '', dncReason: ''
+        interactionIds: [], followUpDate: '', dncReason: '',
+        previousEmployerIds: contactPrevEmpIds, previousEmployerNames: contactPrevEmpSelected.map(e => e.name)
       };
       allContacts.push(newContact);
       // If created from a candidate, write the link back to both records
@@ -5000,6 +5124,10 @@ async function createCandidateFromContact() {
     const searchEl = document.getElementById('cf-org-search');
     if (display) { display.textContent = contact.orgName; display.style.display = 'inline-flex'; }
     if (searchEl) searchEl.style.display = 'none';
+  }
+  // Pre-fill previous employers from contact
+  if (contact.previousEmployerIds && contact.previousEmployerIds.length > 0) {
+    initPrevEmpPicker(contact.previousEmployerIds, contact.previousEmployerNames || []);
   }
   // Store contact id so we can link after save
   window._pendingClientLinkId = contact.id;
