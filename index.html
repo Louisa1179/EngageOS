@@ -2431,11 +2431,29 @@ async function advanceSequence(liConnected) {
     'Sequence Step': newStep,
     'Next Action Due': newDue
   };
-  if (newNotes) fields['Next Action Notes'] = [newNotes];
   if (newStatus !== 'Active') fields['Sequence Status'] = newStatus;
   // LinkedIn Connected is set via toggleLiConnected() or when they respond — not automatically
 
   await updateContact(contact.id, fields);
+
+  // Save Next Action Notes in a separate call to avoid silent failures on multiple select fields
+  if (newNotes) {
+    try {
+      const notesResp = await fetch(`${API_URL}/${contact.id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { 'Next Action Notes': [newNotes] } })
+      });
+      const notesData = await notesResp.json();
+      if (!notesResp.ok) {
+        console.error('Notes save error:', JSON.stringify(notesData));
+      } else {
+        const idx = allContacts.findIndex(c => c.id === contact.id);
+        if (idx > -1) allContacts[idx].nextActionNotes = [newNotes];
+        if (selectedContact?.id === contact.id) selectedContact.nextActionNotes = [newNotes];
+      }
+    } catch(e) { console.log('Notes save error:', e); }
+  }
 
   // Log the completed action to interaction history
   try {
