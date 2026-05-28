@@ -2339,7 +2339,7 @@ function renderPanel(contact, interactions) {
         </div>
       </div>` : ''}
       <div class="panel-section">
-        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">→ Send LI connection request</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">Mark done — advance sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
+        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">→ Send LI connection request</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `${contact.step === 2 && !contact.liConnected ? '<div class="btn-secondary" style="border-color:rgba(0,119,181,0.4);color:#4da6d6;" onclick="markLiConnectedAndAdvance()">✓ They connected on LinkedIn</div>' : ''}<div class="btn-primary" onclick="handleMarkDone()">Mark done — advance sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
       </div>
       <div class="panel-section">
         <div class="panel-section-label">Sequence progress</div>
@@ -2380,12 +2380,9 @@ function renderPanel(contact, interactions) {
 // HANDLE MARK DONE
 function handleMarkDone() {
   if (!selectedContact) return;
-  if (selectedContact.step === 1) {
-    document.getElementById('li-modal-name').textContent = `You sent a connection request to ${selectedContact.firstName || selectedContact.name}. Have they accepted?`;
-    document.getElementById('li-modal').classList.add('show');
-  } else {
-    advanceSequence(selectedContact.liConnected);
-  }
+  // Step 1 (LI request) just records it was sent — no need to ask if connected yet
+  // Connected status is updated later via "They connected" or auto-advances after 14 days
+  advanceSequence(selectedContact.liConnected);
 }
 
 // ADVANCE SEQUENCE
@@ -2398,17 +2395,17 @@ async function advanceSequence(liConnected) {
   const newStep = currentStep + 1;
   const timingKeys = ['afterStep1','afterStep2','afterStep3','afterStep4','afterStep5'];
   let days = SEQUENCE_TIMING[timingKeys[currentStep - 1]] || 14;
-  if (currentStep === 1 && liConnected) days = 3;
-  if (currentStep === 1 && !liConnected) days = 14;
+  if (currentStep === 1) days = 14; // Always wait 14 days after LI request
   const newDue = addDays(days);
 
   let newNotes = '';
   let newStatus = 'Active';
 
   if (currentStep === 1) {
-    newNotes = liConnected ? 'Send Email 1 - connected' : 'Send Email 1 - not connected';
+    // After sending LI request, wait 14 days and check if connected
+    newNotes = 'Send Email 1 - not connected'; // Default after 14 days — overridden if they connect
   } else if (currentStep === 2) {
-    newNotes = liConnected ? 'Send Email 2 - connected' : 'Send Email 2 - not connected';
+    newNotes = contact.liConnected ? 'Send Email 2 - connected' : 'Send Email 2 - not connected';
   } else if (currentStep === 3) {
     newNotes = 'Send Email 3';
   } else if (currentStep === 4) {
@@ -2435,7 +2432,7 @@ async function advanceSequence(liConnected) {
     'Next Action Due': newDue
   };
   if (newStatus !== 'Active') fields['Sequence Status'] = newStatus;
-  if (currentStep === 1) fields['LinkedIn Connected'] = liConnected;
+  // LinkedIn Connected is set via toggleLiConnected() or when they respond — not automatically
 
   await updateContact(contact.id, fields);
 
@@ -2453,6 +2450,33 @@ async function advanceSequence(liConnected) {
       }})
     });
   } catch(e) { console.log('Interaction log error:', e); }
+}
+
+// MARK LI CONNECTED AND ADVANCE TO EMAIL 1 CONNECTED
+async function markLiConnectedAndAdvance() {
+  if (!selectedContact) return;
+  const contact = selectedContact;
+  const newDue = addDays(3);
+  const fields = {
+    'LinkedIn Connected': true,
+    'Next Action Notes': ['Send Email 1 - connected'],
+    'Next Action Due': newDue
+  };
+  await updateContact(contact.id, fields);
+  try {
+    await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: {
+        'Interaction Subject': 'Connected on LinkedIn',
+        'Type': 'LinkedIn',
+        'Date': new Date().toISOString().split('T')[0],
+        'Related Contact': [contact.id],
+        'Logged by': getOwner()
+      }})
+    });
+  } catch(e) { console.log('Interaction log error:', e); }
+  showToast('Marked as connected — Email 1 due in 3 days ✓', 'success');
 }
 
 // MARK RESPONDED
