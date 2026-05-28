@@ -4894,7 +4894,8 @@ async function fetchCandInteractions(candId) {
       subject: r.fields['Interaction Subject'] || r.fields['Subject'] || '',
       type: r.fields['Type'] || '',
       date: r.fields['Date'] || '',
-      notes: r.fields['Notes'] || ''
+      notes: r.fields['Notes'] || '',
+      loggedBy: r.fields['Logged by'] || ''
     }));
   } catch(e) { return []; }
 }
@@ -5474,7 +5475,8 @@ async function saveCandidateLog() {
   document.getElementById('cand-log-saving').style.display = 'block';
   try {
     // Log interaction — link to candidate via Related Contact if possible, else just save
-    const intFields = { 'Interaction Subject': subject, 'Type': type, 'Date': new Date().toISOString().split('T')[0], 'Logged by': getOwner() };
+    const loggedBy = getViewUser() && getViewUser() !== 'All' ? getViewUser() : getOwner();
+    const intFields = { 'Interaction Subject': subject, 'Type': type, 'Date': new Date().toISOString().split('T')[0], 'Logged by': loggedBy };
     if (notes) intFields['Notes'] = notes;
     const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: intFields }) });
     const intData = await intResp.json();
