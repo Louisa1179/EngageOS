@@ -4598,7 +4598,7 @@ async function loadCandidates() {
       notes: cf(r, 'Notes'),
       cvUrl: cf(r, 'CV URL'),
       nextActionDate: cf(r, 'Next action date'),
-      nextActionNotes: cf(r, 'Next Action Notes'),
+      nextActionNotes: cf(r, 'Next action notes'),
       firstCallCompleted: r.fields['First call completed'] || r.fields['First Call Completed'] || false,
       linkedContacts: Array.isArray(r.fields['Linked Contacts']) ? r.fields['Linked Contacts'] : [],
       interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
@@ -5498,7 +5498,7 @@ async function saveCandidateLog() {
       await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': reminderDate } }) });
       // Save next action notes separately (multiple select field)
       if (nextActionNotes) {
-        await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next Action Notes': [nextActionNotes] } }) });
+        await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action notes': nextActionNotes } }) });
       }
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
       if (idx > -1) { allCandidates[idx].nextActionDate = reminderDate; if(nextActionNotes) allCandidates[idx].nextActionNotes = [nextActionNotes]; selectedCandidate = allCandidates[idx]; }
