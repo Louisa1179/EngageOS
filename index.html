@@ -2339,7 +2339,7 @@ function renderPanel(contact, interactions) {
         </div>
       </div>` : ''}
       <div class="panel-section">
-        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">→ Send LI connection request</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `${contact.step === 2 && !contact.liConnected ? '<div class="btn-secondary" style="border-color:rgba(0,119,181,0.4);color:#4da6d6;" onclick="markLiConnectedAndAdvance()">✓ They connected on LinkedIn</div>' : ''}<div class="btn-primary" onclick="handleMarkDone()">Mark done — advance sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
+        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">→ Send LI connection request</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">Mark done — advance sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
       </div>
       <div class="panel-section">
         <div class="panel-section-label">Sequence progress</div>
@@ -2431,6 +2431,7 @@ async function advanceSequence(liConnected) {
     'Sequence Step': newStep,
     'Next Action Due': newDue
   };
+  if (newNotes) fields['Next Action Notes'] = [newNotes];
   if (newStatus !== 'Active') fields['Sequence Status'] = newStatus;
   // LinkedIn Connected is set via toggleLiConnected() or when they respond — not automatically
 
@@ -2813,7 +2814,14 @@ async function clearReminder() {
 async function toggleLiConnected() {
   if (!selectedContact) return;
   const newValue = !selectedContact.liConnected;
-  await updateContact(selectedContact.id, { 'LinkedIn Connected': newValue });
+  const fields = { 'LinkedIn Connected': newValue };
+  // If marking as connected while at step 2 (waiting after LI request), advance to Email 1 connected
+  if (newValue && selectedContact.step === 2) {
+    fields['Next Action Notes'] = ['Send Email 1 - connected'];
+    fields['Next Action Due'] = addDays(3);
+    showToast('Marked connected — Email 1 due in 3 days ✓', 'success');
+  }
+  await updateContact(selectedContact.id, fields);
 }
 
 // TOGGLE INTERACTION NOTES EXPAND/COLLAPSE
