@@ -4597,7 +4597,7 @@ async function loadCandidates() {
       summary: cf(r, 'Notes'),
       notes: cf(r, 'Notes'),
       cvUrl: cf(r, 'CV URL'),
-      nextActionDate: cf(r, 'Next Action Date'),
+      nextActionDate: cf(r, 'Next Action Due'),
       nextActionNotes: cf(r, 'Next Action Notes'),
       firstCallCompleted: r.fields['First call completed'] || r.fields['First Call Completed'] || false,
       linkedContacts: Array.isArray(r.fields['Linked Contacts']) ? r.fields['Linked Contacts'] : [],
@@ -5010,7 +5010,7 @@ async function saveCandNextActionDate(date) {
     const resp = await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: { 'Next Action Date': date || null } })
+      body: JSON.stringify({ fields: { 'Next Action Due': date || null } })
     });
     if (resp.ok) {
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
@@ -5486,11 +5486,14 @@ async function saveCandidateLog() {
     }
     // Save reminder date and next action notes
     if (setReminder && reminderDate) {
-      const dateFields = { 'Next Action Date': reminderDate };
-      if (nextActionNotes) dateFields['Next Action Notes'] = nextActionNotes;
-      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: dateFields }) });
+      // Save date first
+      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next Action Due': reminderDate } }) });
+      // Save next action notes separately (multiple select field)
+      if (nextActionNotes) {
+        await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next Action Notes': [nextActionNotes] } }) });
+      }
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
-      if (idx > -1) { allCandidates[idx].nextActionDate = reminderDate; if(nextActionNotes) allCandidates[idx].nextActionNotes = nextActionNotes; selectedCandidate = allCandidates[idx]; }
+      if (idx > -1) { allCandidates[idx].nextActionDate = reminderDate; if(nextActionNotes) allCandidates[idx].nextActionNotes = [nextActionNotes]; selectedCandidate = allCandidates[idx]; }
     }
     closeCandidateLogModal();
     updateCandCounts();
