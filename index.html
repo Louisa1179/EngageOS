@@ -4597,7 +4597,7 @@ async function loadCandidates() {
       summary: cf(r, 'Notes'),
       notes: cf(r, 'Notes'),
       cvUrl: cf(r, 'CV URL'),
-      nextActionDate: cf(r, 'Next Action Due'),
+      nextActionDate: cf(r, 'Next action date'),
       nextActionNotes: cf(r, 'Next Action Notes'),
       firstCallCompleted: r.fields['First call completed'] || r.fields['First Call Completed'] || false,
       linkedContacts: Array.isArray(r.fields['Linked Contacts']) ? r.fields['Linked Contacts'] : [],
@@ -5010,7 +5010,7 @@ async function saveCandNextActionDate(date) {
     const resp = await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: { 'Next Action Due': date || null } })
+      body: JSON.stringify({ fields: { 'Next action date': date || null } })
     });
     if (resp.ok) {
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
@@ -5479,15 +5479,23 @@ async function saveCandidateLog() {
     const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: intFields }) });
     const intData = await intResp.json();
     if (!intResp.ok) throw new Error(intData.error?.message || 'Log failed');
-    // Update candidate interaction IDs
+    // Update candidate interaction IDs — save back to Airtable linked field AND update locally
     if (intData.id) {
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
-      if (idx > -1) { allCandidates[idx].interactionIds = [intData.id, ...(allCandidates[idx].interactionIds||[])]; selectedCandidate = allCandidates[idx]; }
+      const existingIds = idx > -1 ? (allCandidates[idx].interactionIds || []) : [];
+      const updatedIds = [intData.id, ...existingIds];
+      // Save linked interaction IDs back to Candidates table
+      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, {
+        method: 'PATCH',
+        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: { 'Interactions': updatedIds } })
+      });
+      if (idx > -1) { allCandidates[idx].interactionIds = updatedIds; selectedCandidate = allCandidates[idx]; }
     }
     // Save reminder date and next action notes
     if (setReminder && reminderDate) {
       // Save date first
-      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next Action Due': reminderDate } }) });
+      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': reminderDate } }) });
       // Save next action notes separately (multiple select field)
       if (nextActionNotes) {
         await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next Action Notes': [nextActionNotes] } }) });
