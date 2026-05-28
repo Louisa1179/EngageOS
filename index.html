@@ -4929,7 +4929,7 @@ function renderCandPanel(c, interactions) {
           ${i.type ? `<span style="font-size:0.68rem;color:var(--tee-muted);background:var(--tee-card);padding:1px 6px;border-radius:8px;">${i.type}</span>` : ''}
           ${i.loggedBy ? `<span style="font-size:0.68rem;color:var(--tee-accent);font-weight:500;">${i.loggedBy.split(' ')[0]}</span>` : ''}
         </div>
-        <div style="font-size:0.72rem;color:var(--tee-muted);">${i.date || ''}</div>
+        <div style="font-size:0.72rem;color:var(--tee-muted);">${i.date ? new Date(i.date).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) + ' · ' + timeAgo(i.date) : ''}</div>
         ${i.notes ? `<div style="font-size:0.75rem;color:var(--tee-text);margin-top:0.25rem;line-height:1.5;">${i.notes}</div>` : ''}
       </div>`).join('');
   }
