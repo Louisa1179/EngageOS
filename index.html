@@ -5716,13 +5716,15 @@ function renderACPipeline(nameMap) {
   }).join('');
 }
 
-function openACModal(acId, assignmentId) {
+async function openACModal(acId, assignmentId) {
   currentACAssignmentId = assignmentId;
   editingACId = acId;
   const modal = document.getElementById('ac-modal');
   const title = document.getElementById('ac-modal-title');
   const sub = document.getElementById('ac-modal-sub');
   document.getElementById('ac-saving').style.display = 'none';
+  // Ensure candidates are loaded before opening
+  if (allCandidates.length === 0) await loadCandidates();
   // Reset fields
   document.getElementById('ac-cand-search').value = '';
   document.getElementById('ac-cand-search').style.display = 'block';
