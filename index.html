@@ -1063,6 +1063,73 @@
 
 </div>
 
+<!-- ASSIGNMENT CANDIDATE MODAL -->
+<div class="modal-overlay" id="ac-modal">
+  <div class="modal edit-modal" style="max-width:560px;">
+    <div class="modal-title" id="ac-modal-title">Add candidate to assignment</div>
+    <div class="modal-sub" id="ac-modal-sub">Link an existing candidate and set their pipeline stage.</div>
+
+    <div class="edit-field-group">
+      <label class="edit-label">Candidate</label>
+      <div class="org-typeahead-wrap">
+        <input type="text" class="edit-input" id="ac-cand-search" placeholder="Search candidates..." autocomplete="off"
+          oninput="searchACCandidates(this.value)" onfocus="searchACCandidates(this.value)" />
+        <div class="org-dropdown" id="ac-cand-dropdown"></div>
+      </div>
+      <div id="ac-cand-selected" style="display:none;margin-top:0.4rem;padding:0.4rem 0.75rem;background:rgba(53,150,194,0.08);border-radius:8px;font-size:0.82rem;color:var(--tee-accent);display:none;align-items:center;justify-content:space-between;">
+        <span id="ac-cand-selected-name"></span>
+        <span onclick="clearACCand()" style="cursor:pointer;color:var(--tee-muted);">✕</span>
+      </div>
+      <input type="hidden" id="ac-cand-id" />
+    </div>
+
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">Stage</label>
+        <select id="ac-stage" class="edit-input">
+          <option value="">Select stage...</option>
+          <option>Considering</option><option>Contacted</option><option>Responded</option>
+          <option>Interested</option><option>Not Interested</option><option>Submitted</option>
+          <option>Interviewing</option><option>Offered</option><option>Accepted</option>
+          <option>Rejected</option><option>Withdrawn</option><option>Placed</option>
+        </select>
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Submitted by</label>
+        <select id="ac-submitted-by" class="edit-input">
+          <option value="">Select...</option>
+          <option>Louisa Daly</option><option>John Daly</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">CV submitted date</label>
+        <input type="date" id="ac-cv-date" class="edit-input" />
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">CV / covering sheet link</label>
+        <input type="url" id="ac-cv-link" class="edit-input" placeholder="https://..." />
+      </div>
+    </div>
+
+    <div class="edit-field-group">
+      <label class="edit-label">Notes</label>
+      <textarea id="ac-notes" class="edit-input" rows="3" placeholder="Any notes on this candidate for this role..." style="resize:vertical;"></textarea>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;margin-top:1.25rem;align-items:center;">
+      <button onclick="saveACRecord()" style="background:var(--tee-accent);color:white;border:none;border-radius:10px;padding:0.65rem 1.5rem;font-family:'DM Sans',sans-serif;font-size:0.9rem;font-weight:500;cursor:pointer;">Save</button>
+      <button onclick="closeACModal()" style="background:transparent;color:var(--tee-muted);border:1px solid var(--tee-border);border-radius:10px;padding:0.65rem 1.25rem;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Cancel</button>
+      <div id="ac-saving" style="display:none;color:var(--tee-muted);font-size:0.82rem;">Saving...</div>
+      <div id="ac-delete-btn" style="display:none;margin-left:auto;">
+        <button onclick="deleteACRecord()" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:0.65rem 1.25rem;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Remove</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- ASSIGNMENT EDIT MODAL -->
 <div class="modal-overlay" id="assign-edit-modal">
   <div class="modal edit-modal" style="max-width:640px;">
@@ -4539,6 +4606,8 @@ function showToast(msg, type) {
 
 const CAND_TABLE_ID = 'tblZNTD7Yh83N19O9';
 const CAND_API_URL = `https://api.airtable.com/v0/${BASE_ID}/${CAND_TABLE_ID}`;
+const AC_TABLE_ID = 'tblGslTI7bZzoVCKH';
+const AC_API_URL = `https://api.airtable.com/v0/${BASE_ID}/${AC_TABLE_ID}`;
 
 let allCandidates = [];
 let filteredCandidates = [];
@@ -5393,6 +5462,26 @@ async function saveCandidateEdit() {
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || '') : '';
       const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [], previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
       allCandidates.push(newCand);
+      // If created from an assignment, create AC record linking them
+      if (window._pendingACAssignmentId) {
+        const acAssignId = window._pendingACAssignmentId;
+        window._pendingACAssignmentId = null;
+        try {
+          await fetch(AC_API_URL, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: {
+              'Candidate': [data.id],
+              'Assignment': [acAssignId],
+              'Stage': 'Considering',
+              'Date Added': new Date().toISOString().split('T')[0]
+            }})
+          });
+          // Refresh pipeline if still on same assignment
+          if (selectedAssignment?.id === acAssignId) loadACPipeline(acAssignId);
+        } catch(e) { console.log('AC link error:', e); }
+      }
+
       // If created from a contact, write the link back to both records
       if (window._pendingClientLinkId) {
         const clientId = window._pendingClientLinkId;
@@ -5525,6 +5614,249 @@ document.addEventListener('click', function(e) {
 });
 
 // ─── END CANDIDATES ──────────────────────────────────────────────────────────
+
+// ─── ASSIGNMENT CANDIDATES ────────────────────────────────────────────────────
+
+let acRecords = []; // assignment candidate records for current assignment
+let editingACId = null;
+let currentACAssignmentId = null;
+
+const AC_STAGE_COLORS = {
+  'Considering': 'rgba(53,150,194,0.15)',
+  'Contacted': 'rgba(53,150,194,0.25)',
+  'Responded': 'rgba(16,185,129,0.15)',
+  'Interested': 'rgba(16,185,129,0.25)',
+  'Not Interested': 'rgba(239,68,68,0.1)',
+  'Submitted': 'rgba(124,58,237,0.2)',
+  'Interviewing': 'rgba(124,58,237,0.3)',
+  'Offered': 'rgba(5,150,105,0.25)',
+  'Accepted': 'rgba(5,150,105,0.4)',
+  'Rejected': 'rgba(239,68,68,0.15)',
+  'Withdrawn': 'rgba(156,163,175,0.2)',
+  'Placed': 'rgba(5,150,105,0.5)'
+};
+
+const AC_STAGE_TEXT = {
+  'Considering': '#3596c2', 'Contacted': '#3596c2', 'Responded': '#10b981',
+  'Interested': '#10b981', 'Not Interested': '#ef4444', 'Submitted': '#7c3aed',
+  'Interviewing': '#7c3aed', 'Offered': '#059669', 'Accepted': '#059669',
+  'Rejected': '#ef4444', 'Withdrawn': '#9ca3af', 'Placed': '#059669'
+};
+
+async function loadACPipeline(assignmentId) {
+  const list = document.getElementById('ac-pipeline-list');
+  if (!list) return;
+  try {
+    const formula = encodeURIComponent(`{Assignment} = "${assignmentId}"`);
+    const resp = await fetch(`${AC_API_URL}?filterByFormula=${formula}&pageSize=100`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    const data = await resp.json();
+    acRecords = (data.records || []).map(r => ({
+      id: r.id,
+      candidateId: Array.isArray(r.fields['Candidate']) ? r.fields['Candidate'][0] : '',
+      assignmentId: Array.isArray(r.fields['Assignment']) ? r.fields['Assignment'][0] : '',
+      stage: r.fields['Stage'] || '',
+      notes: r.fields['Notes'] || '',
+      cvDate: r.fields['CV Submitted Date'] || '',
+      cvLink: r.fields['Submitted CV Link'] || '',
+      submittedBy: r.fields['Submitted By'] || '',
+      dateAdded: r.fields['Date Added'] || ''
+    }));
+    // Resolve candidate names
+    const candIds = [...new Set(acRecords.map(r => r.candidateId).filter(Boolean))];
+    const nameMap = {};
+    if (candIds.length > 0) {
+      // Try from allCandidates first
+      allCandidates.forEach(c => { nameMap[c.id] = c.name; });
+      // Fetch any missing
+      const missing = candIds.filter(id => !nameMap[id]);
+      if (missing.length > 0) {
+        for (let i = 0; i < missing.length; i += 10) {
+          const batch = missing.slice(i, i+10);
+          const f = 'OR(' + batch.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
+          const r2 = await fetch(`${CAND_API_URL}?filterByFormula=${encodeURIComponent(f)}&fields[]=Full Name`, {
+            headers: { Authorization: `Bearer ${getToken()}` }
+          });
+          const d2 = await r2.json();
+          d2.records.forEach(r => { nameMap[r.id] = r.fields['Full Name'] || ''; });
+        }
+      }
+    }
+    renderACPipeline(nameMap);
+  } catch(e) {
+    if (list) list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.82rem;">Error loading candidates: ${e.message}</div>`;
+  }
+}
+
+function renderACPipeline(nameMap) {
+  const list = document.getElementById('ac-pipeline-list');
+  if (!list) return;
+  if (acRecords.length === 0) {
+    list.innerHTML = '<div style="color:var(--tee-muted);font-size:0.82rem;text-align:center;padding:1.5rem 0;">No candidates added yet</div>';
+    return;
+  }
+  const fmt = v => v ? new Date(v).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '';
+  list.innerHTML = acRecords.map(r => {
+    const name = nameMap[r.candidateId] || 'Unknown candidate';
+    const stageBg = AC_STAGE_COLORS[r.stage] || 'rgba(53,150,194,0.1)';
+    const stageCol = AC_STAGE_TEXT[r.stage] || 'var(--tee-accent)';
+    return `<div style="background:var(--tee-card);border:1px solid var(--tee-border);border-radius:10px;padding:0.875rem 1rem;margin-bottom:0.5rem;cursor:pointer;" onclick="openACModal('${r.id}','${r.assignmentId}')">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.35rem;">
+        <div style="font-size:0.88rem;font-weight:500;color:var(--tee-text);">${name}</div>
+        ${r.stage ? `<span style="font-size:0.72rem;padding:2px 10px;border-radius:10px;background:${stageBg};color:${stageCol};font-weight:500;">${r.stage}</span>` : ''}
+      </div>
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+        ${r.cvDate ? `<span style="font-size:0.75rem;color:var(--tee-muted);">CV: ${fmt(r.cvDate)}</span>` : ''}
+        ${r.cvLink ? `<a href="${r.cvLink}" target="_blank" onclick="event.stopPropagation()" style="font-size:0.75rem;color:var(--tee-accent);">View CV ↗</a>` : ''}
+        ${r.submittedBy ? `<span style="font-size:0.75rem;color:var(--tee-muted);">${r.submittedBy.split(' ')[0]}</span>` : ''}
+      </div>
+      ${r.notes ? `<div style="font-size:0.78rem;color:var(--tee-muted);margin-top:0.35rem;line-height:1.5;">${r.notes}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function openACModal(acId, assignmentId) {
+  currentACAssignmentId = assignmentId;
+  editingACId = acId;
+  const modal = document.getElementById('ac-modal');
+  const title = document.getElementById('ac-modal-title');
+  const sub = document.getElementById('ac-modal-sub');
+  document.getElementById('ac-saving').style.display = 'none';
+  // Reset fields
+  document.getElementById('ac-cand-search').value = '';
+  document.getElementById('ac-cand-search').style.display = 'block';
+  document.getElementById('ac-cand-selected').style.display = 'none';
+  document.getElementById('ac-cand-id').value = '';
+  document.getElementById('ac-stage').value = '';
+  document.getElementById('ac-cv-date').value = '';
+  document.getElementById('ac-cv-link').value = '';
+  document.getElementById('ac-submitted-by').value = '';
+  document.getElementById('ac-notes').value = '';
+  document.getElementById('ac-cand-dropdown').style.display = 'none';
+
+  if (acId) {
+    const rec = acRecords.find(r => r.id === acId);
+    if (rec) {
+      title.textContent = 'Edit candidate';
+      sub.textContent = "Update this candidate's pipeline record.";
+      document.getElementById('ac-cand-id').value = rec.candidateId;
+      const cand = allCandidates.find(c => c.id === rec.candidateId);
+      if (cand) {
+        document.getElementById('ac-cand-selected-name').textContent = cand.name;
+        document.getElementById('ac-cand-selected').style.display = 'flex';
+        document.getElementById('ac-cand-search').style.display = 'none';
+      }
+      document.getElementById('ac-stage').value = rec.stage || '';
+      document.getElementById('ac-cv-date').value = rec.cvDate || '';
+      document.getElementById('ac-cv-link').value = rec.cvLink || '';
+      document.getElementById('ac-submitted-by').value = rec.submittedBy || '';
+      document.getElementById('ac-notes').value = rec.notes || '';
+      document.getElementById('ac-delete-btn').style.display = 'block';
+    }
+  } else {
+    title.textContent = 'Add candidate to assignment';
+    sub.textContent = 'Link an existing candidate and set their pipeline stage.';
+    document.getElementById('ac-delete-btn').style.display = 'none';
+  }
+  modal.classList.add('show');
+}
+
+function closeACModal() {
+  document.getElementById('ac-modal').classList.remove('show');
+  document.getElementById('ac-cand-dropdown').style.display = 'none';
+}
+
+function searchACCandidates(val) {
+  const dd = document.getElementById('ac-cand-dropdown');
+  if (!dd) return;
+  const q = val.toLowerCase().trim();
+  const already = acRecords.map(r => r.candidateId);
+  const matches = q
+    ? allCandidates.filter(c => c.name && c.name.toLowerCase().includes(q) && !already.includes(c.id)).slice(0, 8)
+    : allCandidates.filter(c => c.name && !already.includes(c.id)).slice(0, 8);
+  if (matches.length === 0) { dd.style.display = 'none'; return; }
+  dd.innerHTML = matches.map(c =>
+    `<div class="org-option" data-id="${c.id}" data-name="${c.name.replace(/"/g,'&quot;')}">${c.name}${c.orgName ? `<span style="font-size:0.72rem;color:var(--tee-muted);margin-left:6px;">· ${c.orgName}</span>` : ''}</div>`
+  ).join('');
+  dd.querySelectorAll('.org-option').forEach(el => {
+    el.onmousedown = (e) => {
+      e.preventDefault();
+      const id = el.getAttribute('data-id');
+      const name = el.getAttribute('data-name');
+      document.getElementById('ac-cand-id').value = id;
+      document.getElementById('ac-cand-selected-name').textContent = name;
+      document.getElementById('ac-cand-selected').style.display = 'flex';
+      document.getElementById('ac-cand-search').style.display = 'none';
+      dd.style.display = 'none';
+    };
+  });
+  dd.style.display = 'block';
+}
+
+function clearACCand() {
+  document.getElementById('ac-cand-id').value = '';
+  document.getElementById('ac-cand-selected').style.display = 'none';
+  document.getElementById('ac-cand-search').style.display = 'block';
+  document.getElementById('ac-cand-search').value = '';
+  document.getElementById('ac-cand-search').focus();
+}
+
+async function saveACRecord() {
+  const candId = document.getElementById('ac-cand-id').value;
+  const assignmentId = currentACAssignmentId;
+  if (!candId && !editingACId) { showToast('Please select a candidate', 'error'); return; }
+  document.getElementById('ac-saving').style.display = 'block';
+  const fields = {
+    'Stage': document.getElementById('ac-stage').value || null,
+    'Notes': document.getElementById('ac-notes').value || null,
+    'Submitted CV Link': document.getElementById('ac-cv-link').value || null,
+    'Submitted By': document.getElementById('ac-submitted-by').value || null,
+  };
+  const cvDate = document.getElementById('ac-cv-date').value;
+  if (cvDate) fields['CV Submitted Date'] = cvDate;
+  if (!editingACId) {
+    fields['Candidate'] = [candId];
+    fields['Assignment'] = [assignmentId];
+    fields['Date Added'] = new Date().toISOString().split('T')[0];
+  }
+  // Remove null fields
+  Object.keys(fields).forEach(k => { if (fields[k] === null || fields[k] === '') delete fields[k]; });
+  try {
+    const resp = await fetch(editingACId ? `${AC_API_URL}/${editingACId}` : AC_API_URL, {
+      method: editingACId ? 'PATCH' : 'POST',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message || 'Save failed');
+    closeACModal();
+    await loadACPipeline(assignmentId);
+    showToast(editingACId ? 'Updated ✓' : 'Candidate added ✓', 'success');
+  } catch(e) {
+    document.getElementById('ac-saving').style.display = 'none';
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+async function deleteACRecord() {
+  if (!editingACId) return;
+  const assignmentId = currentACAssignmentId;
+  try {
+    await fetch(`${AC_API_URL}/${editingACId}`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    closeACModal();
+    await loadACPipeline(assignmentId);
+    showToast('Candidate removed ✓', 'success');
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+function openAddCandidateToAssignment(assignmentId) {
+  // Open the standard add candidate modal, then link to this assignment after save
+  window._pendingACAssignmentId = assignmentId;
+  openAddCandidateModal();
+}
 
 // ─── ASSIGNMENTS ─────────────────────────────────────────────────────────────
 
@@ -5686,7 +6018,21 @@ function renderAssignDetail(a) {
       <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.5rem;">Notes</div>
       <div style="font-size:0.85rem;color:var(--tee-text);line-height:1.6;white-space:pre-wrap;">${a.notes}</div>
     </div>` : ''}
+
+    <div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1.25rem;margin-bottom:1rem;" id="ac-pipeline-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+        <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;">Candidate Pipeline</div>
+        <div style="display:flex;gap:0.5rem;">
+          <button onclick="openACModal(null,'${a.id}')" style="background:var(--tee-accent);color:white;border:none;border-radius:8px;padding:0.3rem 0.75rem;font-size:0.75rem;cursor:pointer;font-family:'DM Sans',sans-serif;">+ Add candidate</button>
+          <button onclick="openAddCandidateToAssignment('${a.id}')" style="background:transparent;color:var(--tee-accent);border:1px solid rgba(53,150,194,0.3);border-radius:8px;padding:0.3rem 0.75rem;font-size:0.75rem;cursor:pointer;font-family:'DM Sans',sans-serif;">+ New candidate</button>
+        </div>
+      </div>
+      <div id="ac-pipeline-list">
+        <div style="color:var(--tee-muted);font-size:0.82rem;text-align:center;padding:1.5rem 0;">Loading candidates...</div>
+      </div>
+    </div>
   `;
+  loadACPipeline(a.id);
 }
 
 function detailBlock(label, value) {
