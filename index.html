@@ -5770,6 +5770,11 @@ function closeACModal() {
 function searchACCandidates(val) {
   const dd = document.getElementById('ac-cand-dropdown');
   if (!dd) return;
+  // Ensure candidates are loaded
+  if (allCandidates.length === 0) {
+    loadCandidates().then(() => searchACCandidates(val));
+    return;
+  }
   const q = val.toLowerCase().trim();
   const already = acRecords.map(r => r.candidateId);
   const matches = q
