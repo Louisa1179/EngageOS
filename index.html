@@ -5664,13 +5664,19 @@ const AC_STAGE_TEXT = {
 async function loadACPipeline(assignmentId) {
   const list = document.getElementById('ac-pipeline-list');
   if (!list) return;
+  if (list) list.innerHTML = '<div style="color:var(--tee-muted);font-size:0.82rem;text-align:center;padding:1rem;">Loading...</div>';
   try {
-    const formula = encodeURIComponent(`FIND("${assignmentId}", ARRAYJOIN({Assignment}))`);
-    const resp = await fetch(`${AC_API_URL}?filterByFormula=${formula}&pageSize=100`, {
+    // Ensure candidates loaded for name resolution
+    if (allCandidates.length === 0) await loadCandidates();
+
+    // Fetch all AC records and filter client-side
+    const resp = await fetch(`${AC_API_URL}?pageSize=100`, {
       headers: { Authorization: `Bearer ${getToken()}` }
     });
     const data = await resp.json();
-    acRecords = (data.records || []).map(r => ({
+    if (!resp.ok) throw new Error(data.error?.message || 'Failed to load pipeline');
+
+    const allRecs = (data.records || []).map(r => ({
       id: r.id,
       candidateId: Array.isArray(r.fields['Candidate']) ? r.fields['Candidate'][0] : '',
       assignmentId: Array.isArray(r.fields['Assignment']) ? r.fields['Assignment'][0] : '',
@@ -5681,29 +5687,27 @@ async function loadACPipeline(assignmentId) {
       submittedBy: r.fields['Submitted By'] || '',
       dateAdded: r.fields['Date Added'] || ''
     }));
-    // Resolve candidate names
-    const candIds = [...new Set(acRecords.map(r => r.candidateId).filter(Boolean))];
+
+    acRecords = allRecs.filter(r => r.assignmentId === assignmentId);
+
+    // Build name map from allCandidates
     const nameMap = {};
-    if (candIds.length > 0) {
-      // Try from allCandidates first
-      allCandidates.forEach(c => { nameMap[c.id] = c.name; });
-      // Fetch any missing
-      const missing = candIds.filter(id => !nameMap[id]);
-      if (missing.length > 0) {
-        for (let i = 0; i < missing.length; i += 10) {
-          const batch = missing.slice(i, i+10);
-          const f = 'OR(' + batch.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
-          const r2 = await fetch(`${CAND_API_URL}?filterByFormula=${encodeURIComponent(f)}&fields[]=Full Name`, {
-            headers: { Authorization: `Bearer ${getToken()}` }
-          });
-          const d2 = await r2.json();
-          d2.records.forEach(r => { nameMap[r.id] = r.fields['Full Name'] || ''; });
-        }
-      }
+    allCandidates.forEach(c => { nameMap[c.id] = c.name; });
+
+    // Fetch names for any candidates not in allCandidates
+    const missing = acRecords.map(r => r.candidateId).filter(id => id && !nameMap[id]);
+    if (missing.length > 0) {
+      const f = 'OR(' + missing.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
+      const r2 = await fetch(`${CAND_API_URL}?filterByFormula=${encodeURIComponent(f)}&fields[]=Full Name`, {
+        headers: { Authorization: `Bearer ${getToken()}` }
+      });
+      const d2 = await r2.json();
+      (d2.records || []).forEach(r => { nameMap[r.id] = r.fields['Full Name'] || ''; });
     }
+
     renderACPipeline(nameMap);
   } catch(e) {
-    if (list) list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.82rem;">Error loading candidates: ${e.message}</div>`;
+    if (list) list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.82rem;">Error: ${e.message}</div>`;
   }
 }
 
