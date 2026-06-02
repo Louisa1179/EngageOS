@@ -1127,6 +1127,44 @@
         <button onclick="deleteACRecord()" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:0.65rem 1.25rem;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Remove</button>
       </div>
     </div>
+
+    <!-- INTERACTION LOG SECTION (shown when editing existing AC record) -->
+    <div id="ac-interaction-section" style="display:none;margin-top:1.5rem;border-top:1px solid var(--tee-border);padding-top:1.25rem;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;">
+        <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;">Interaction history</div>
+        <button onclick="openACLogModal()" style="background:var(--tee-accent);color:white;border:none;border-radius:8px;padding:0.25rem 0.75rem;font-size:0.75rem;cursor:pointer;font-family:'DM Sans',sans-serif;">+ Log interaction</button>
+      </div>
+      <div id="ac-interaction-list" style="max-height:280px;overflow-y:auto;">
+        <div style="color:var(--tee-muted);font-size:0.8rem;text-align:center;padding:1rem;">No interactions logged yet</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AC LOG INTERACTION MODAL -->
+<div class="modal-overlay" id="ac-log-modal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">Log interaction</div>
+    <div class="modal-sub">Record an interaction with this candidate for this assignment.</div>
+    <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Type</label>
+    <select class="edit-input" id="ac-log-type" style="margin-bottom:0.75rem;">
+      <option value="Email">Email</option>
+      <option value="LinkedIn Message">LinkedIn Message</option>
+      <option value="Phone Call">Phone Call</option>
+      <option value="Teams Meeting">Teams Meeting</option>
+      <option value="Face to Face Meeting">Face to Face Meeting</option>
+      <option value="Note">Note</option>
+      <option value="Stage Change">Stage Change</option>
+    </select>
+    <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Subject / description *</label>
+    <input type="text" class="edit-input" id="ac-log-subject" placeholder="e.g. Spoke to candidate about the role" style="margin-bottom:0.75rem;" />
+    <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Notes (optional)</label>
+    <textarea class="edit-input" id="ac-log-notes" rows="3" placeholder="Key points..." style="margin-bottom:0.75rem;resize:vertical;"></textarea>
+    <div id="ac-log-saving" style="display:none;text-align:center;padding:0.5rem;font-size:0.82rem;color:var(--tee-muted);">Saving...</div>
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-yes" onclick="saveACLog()">Save</button>
+      <button class="modal-btn modal-btn-no" onclick="closeACLogModal()">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -5686,7 +5724,8 @@ async function loadACPipeline(assignmentId) {
       cvDate: r.fields['CV Submitted Date'] || '',
       cvLink: r.fields['Submitted CV Link'] || '',
       submittedBy: r.fields['Submitted By'] || '',
-      dateAdded: r.fields['Date Added'] || ''
+      dateAdded: r.fields['Date Added'] || '',
+      interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : []
     }));
 
     // Match by record ID or by name (Airtable returns name when "show display name" is enabled)
@@ -5783,11 +5822,14 @@ async function openACModal(acId, assignmentId) {
       document.getElementById('ac-submitted-by').value = rec.submittedBy || '';
       document.getElementById('ac-notes').value = rec.notes || '';
       document.getElementById('ac-delete-btn').style.display = 'block';
+      document.getElementById('ac-interaction-section').style.display = 'block';
+      loadACInteractions(acId);
     }
   } else {
     title.textContent = 'Add candidate to assignment';
     sub.textContent = 'Link an existing candidate and set their pipeline stage.';
     document.getElementById('ac-delete-btn').style.display = 'none';
+    document.getElementById('ac-interaction-section').style.display = 'none';
   }
   modal.classList.add('show');
 }
@@ -5795,6 +5837,121 @@ async function openACModal(acId, assignmentId) {
 function closeACModal() {
   document.getElementById('ac-modal').classList.remove('show');
   document.getElementById('ac-cand-dropdown').style.display = 'none';
+}
+
+function openACLogModal() {
+  document.getElementById('ac-log-subject').value = '';
+  document.getElementById('ac-log-notes').value = '';
+  document.getElementById('ac-log-type').value = 'Email';
+  document.getElementById('ac-log-saving').style.display = 'none';
+  document.getElementById('ac-log-modal').classList.add('show');
+}
+
+function closeACLogModal() {
+  document.getElementById('ac-log-modal').classList.remove('show');
+}
+
+async function saveACLog() {
+  if (!editingACId) return;
+  const subject = document.getElementById('ac-log-subject').value.trim();
+  const type = document.getElementById('ac-log-type').value;
+  const notes = document.getElementById('ac-log-notes').value.trim();
+  if (!subject) { showToast('Please add a subject', 'error'); return; }
+  document.getElementById('ac-log-saving').style.display = 'block';
+  const loggedBy = getViewUser() && getViewUser() !== 'All' ? getViewUser() : getOwner();
+  try {
+    // Create interaction record
+    const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: {
+        'Interaction Subject': subject,
+        'Type': type,
+        'Date': new Date().toISOString().split('T')[0],
+        'Notes': notes || null,
+        'Logged by': loggedBy
+      }})
+    });
+    const intData = await intResp.json();
+    if (!intResp.ok) throw new Error(intData.error?.message || 'Log failed');
+
+    // Link interaction to AC record
+    const rec = acRecords.find(r => r.id === editingACId);
+    const existingIntIds = rec?.interactionIds || [];
+    const updatedIds = [intData.id, ...existingIntIds];
+    await fetch(`${AC_API_URL}/${editingACId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Interactions': updatedIds } })
+    });
+
+    // Update local
+    const idx = acRecords.findIndex(r => r.id === editingACId);
+    if (idx > -1) acRecords[idx].interactionIds = updatedIds;
+
+    closeACLogModal();
+    await loadACInteractions(editingACId);
+    showToast('Interaction logged ✓', 'success');
+  } catch(e) {
+    document.getElementById('ac-log-saving').style.display = 'none';
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+async function loadACInteractions(acId) {
+  const list = document.getElementById('ac-interaction-list');
+  if (!list) return;
+  const rec = acRecords.find(r => r.id === acId);
+  const ids = rec?.interactionIds || [];
+  if (ids.length === 0) {
+    list.innerHTML = '<div style="color:var(--tee-muted);font-size:0.8rem;text-align:center;padding:1rem;">No interactions logged yet</div>';
+    return;
+  }
+  try {
+    const f = 'OR(' + ids.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
+    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions?filterByFormula=${encodeURIComponent(f)}&pageSize=100`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    const data = await resp.json();
+    const ints = (data.records || []).map(r => ({
+      id: r.id,
+      subject: r.fields['Interaction Subject'] || '',
+      type: r.fields['Type'] || '',
+      date: r.fields['Date'] || '',
+      notes: r.fields['Notes'] || '',
+      loggedBy: r.fields['Logged by'] || ''
+    })).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+
+    const TYPE_ICONS = { 'Email': '✉', 'LinkedIn Message': '💼', 'Phone Call': '📞', 'Teams Meeting': '💻', 'Face to Face Meeting': '🤝', 'Note': '📝', 'Stage Change': '🔄' };
+    list.innerHTML = ints.map((i, idx) => {
+      const icon = TYPE_ICONS[i.type] || '💬';
+      const dateStr = i.date ? new Date(i.date).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '';
+      const uid = `ac-int-${idx}`;
+      return `<div style="border:1px solid var(--tee-border);border-radius:10px;margin-bottom:0.5rem;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:0.6rem;padding:0.6rem 0.875rem;cursor:pointer;background:var(--tee-card);" onclick="toggleACInt('${uid}')">
+          <span style="font-size:0.85rem;">${icon}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:0.78rem;font-weight:500;color:var(--tee-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${i.subject}</div>
+            <div style="font-size:0.68rem;color:var(--tee-muted);">${dateStr}${i.loggedBy ? ' · ' + i.loggedBy.split(' ')[0] : ''}</div>
+          </div>
+          ${i.type ? `<span style="font-size:0.65rem;color:var(--tee-muted);background:var(--tee-mid);padding:2px 6px;border-radius:6px;flex-shrink:0;">${i.type}</span>` : ''}
+          <span style="font-size:0.65rem;color:var(--tee-muted);" id="${uid}-arrow">▼</span>
+        </div>
+        ${i.notes ? `<div id="${uid}" style="display:none;padding:0.6rem 0.875rem;border-top:1px solid var(--tee-border);font-size:0.76rem;color:var(--tee-text);line-height:1.6;white-space:pre-wrap;">${i.notes}</div>` : `<div id="${uid}" style="display:none;"></div>`}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.8rem;">Error loading interactions: ${e.message}</div>`;
+  }
+}
+
+function toggleACInt(uid) {
+  const body = document.getElementById(uid);
+  const arrow = document.getElementById(uid + '-arrow');
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
 }
 
 function searchACCandidates(val) {
@@ -5838,6 +5995,8 @@ function clearACCand() {
 }
 
 async function saveACRecord() {
+  // Check if stage changed so we can log it automatically
+  const prevStage = editingACId ? (acRecords.find(r => r.id === editingACId)?.stage || '') : '';
   const candId = document.getElementById('ac-cand-id').value;
   const assignmentId = currentACAssignmentId;
   if (!candId && !editingACId) { showToast('Please select a candidate', 'error'); return; }
@@ -5865,6 +6024,34 @@ async function saveACRecord() {
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error?.message || 'Save failed');
+    // Auto-log stage change if stage was updated
+    const newStage = fields['Stage'];
+    if (editingACId && newStage && newStage !== prevStage) {
+      const loggedBy = getViewUser() && getViewUser() !== 'All' ? getViewUser() : getOwner();
+      try {
+        const stageIntResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: {
+            'Interaction Subject': `Stage changed: ${prevStage || 'None'} → ${newStage}`,
+            'Type': 'Stage Change',
+            'Date': new Date().toISOString().split('T')[0],
+            'Logged by': loggedBy
+          }})
+        });
+        const stageIntData = await stageIntResp.json();
+        if (stageIntResp.ok && stageIntData.id) {
+          const rec = acRecords.find(r => r.id === editingACId);
+          const existingIds = rec?.interactionIds || [];
+          const updatedIds = [stageIntData.id, ...existingIds];
+          await fetch(`${AC_API_URL}/${editingACId}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { 'Interactions': updatedIds } })
+          });
+        }
+      } catch(e) { console.log('Stage log error:', e); }
+    }
     closeACModal();
     await loadACPipeline(assignmentId);
     showToast(editingACId ? 'Updated ✓' : 'Candidate added ✓', 'success');
