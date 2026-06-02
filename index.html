@@ -1076,7 +1076,7 @@
           oninput="searchACCandidates(this.value)" onfocus="searchACCandidates(this.value)" />
         <div class="org-dropdown" id="ac-cand-dropdown"></div>
       </div>
-      <div id="ac-cand-selected" style="display:none;margin-top:0.4rem;padding:0.4rem 0.75rem;background:rgba(53,150,194,0.08);border-radius:8px;font-size:0.82rem;color:var(--tee-accent);display:none;align-items:center;justify-content:space-between;">
+      <div id="ac-cand-selected" style="display:none;margin-top:0.4rem;padding:0.4rem 0.75rem;background:rgba(53,150,194,0.08);border-radius:8px;font-size:0.82rem;color:var(--tee-accent);align-items:center;justify-content:space-between;">
         <span id="ac-cand-selected-name"></span>
         <span onclick="clearACCand()" style="cursor:pointer;color:var(--tee-muted);">✕</span>
       </div>
@@ -1400,16 +1400,15 @@
 <!-- CANDIDATE LOG MODAL -->
 <div class="modal-overlay" id="cand-log-modal">
   <div class="modal">
-    <div class="modal-title">Log an action</div>
-    <div class="modal-sub">Record a conversation or interaction with this candidate.</div>
+    <div class="modal-title">Log interaction</div>
+    <div class="modal-sub">Record an interaction with this candidate.</div>
     <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Type</label>
     <select class="edit-input" id="cand-log-type" style="margin-bottom:0.75rem;">
-      <option value="First call">First call</option>
-      <option value="Follow-up call">Follow-up call</option>
-      <option value="Teams Meeting">Teams Meeting</option>
-      <option value="In person Meeting">In person Meeting</option>
       <option value="Email">Email</option>
-      <option value="LinkedIn">LinkedIn</option>
+      <option value="LinkedIn Message">LinkedIn Message</option>
+      <option value="Phone Call">Phone Call</option>
+      <option value="Teams Meeting">Teams Meeting</option>
+      <option value="Face to Face Meeting">Face to Face Meeting</option>
       <option value="Note">Note</option>
     </select>
     <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Subject / description *</label>
@@ -4992,16 +4991,25 @@ function renderCandPanel(c, interactions) {
   } else if (interactions.length === 0) {
     interactionsHtml = '<div style="font-size:0.78rem;color:var(--tee-muted);">No interactions logged yet</div>';
   } else {
-    interactionsHtml = interactions.map(i => `
-      <div style="padding:0.6rem 0;border-bottom:1px solid var(--tee-border);">
-        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.2rem;">
-          <span style="font-size:0.75rem;font-weight:500;color:var(--tee-text);">${i.subject}</span>
-          ${i.type ? `<span style="font-size:0.68rem;color:var(--tee-muted);background:var(--tee-card);padding:1px 6px;border-radius:8px;">${i.type}</span>` : ''}
-          ${i.loggedBy ? `<span style="font-size:0.68rem;color:var(--tee-accent);font-weight:500;">${i.loggedBy.split(' ')[0]}</span>` : ''}
+    const TYPE_ICONS = { 'Email': '✉', 'LinkedIn Message': '💼', 'Phone Call': '📞', 'Teams Meeting': '💻', 'Face to Face Meeting': '🤝', 'Note': '📝' };
+    interactionsHtml = interactions.sort((a,b) => (b.date||'').localeCompare(a.date||'')).map((i,idx) => {
+      const icon = TYPE_ICONS[i.type] || '💬';
+      const dateStr = i.date ? new Date(i.date).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '';
+      const ago = i.date ? timeAgo(i.date) : '';
+      const uid = `cand-int-${idx}`;
+      return `<div style="border:1px solid var(--tee-border);border-radius:10px;margin-bottom:0.5rem;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:0.6rem;padding:0.65rem 0.875rem;cursor:pointer;background:var(--tee-card);" onclick="toggleCandInt('${uid}')">
+          <span style="font-size:0.9rem;">${icon}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:0.8rem;font-weight:500;color:var(--tee-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${i.subject || i.type}</div>
+            <div style="font-size:0.7rem;color:var(--tee-muted);">${dateStr}${ago ? ' · ' + ago : ''}${i.loggedBy ? ' · <span style="color:var(--tee-accent);">' + i.loggedBy.split(' ')[0] + '</span>' : ''}</div>
+          </div>
+          ${i.type ? `<span style="font-size:0.68rem;color:var(--tee-muted);background:var(--tee-mid);padding:2px 8px;border-radius:8px;flex-shrink:0;">${i.type}</span>` : ''}
+          <span style="font-size:0.7rem;color:var(--tee-muted);flex-shrink:0;" id="${uid}-arrow">▼</span>
         </div>
-        <div style="font-size:0.72rem;color:var(--tee-muted);">${i.date ? new Date(i.date).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) + ' · ' + timeAgo(i.date) : ''}</div>
-        ${i.notes ? `<div style="font-size:0.75rem;color:var(--tee-text);margin-top:0.25rem;line-height:1.5;">${i.notes}</div>` : ''}
-      </div>`).join('');
+        ${i.notes ? `<div id="${uid}" style="display:none;padding:0.65rem 0.875rem;border-top:1px solid var(--tee-border);font-size:0.78rem;color:var(--tee-text);line-height:1.6;white-space:pre-wrap;">${i.notes}</div>` : `<div id="${uid}" style="display:none;"></div>`}
+      </div>`;
+    }).join('');
   }
 
   document.getElementById('cand-detail-panel').innerHTML = `
@@ -5036,7 +5044,7 @@ function renderCandPanel(c, interactions) {
 
     <div class="panel-section">
       <div class="panel-section-label">Actions</div>
-      <div onclick="openCandLogModal()" class="btn-secondary" style="cursor:pointer;">Log a call / meeting / note</div>
+      <div onclick="openCandLogModal()" class="btn-secondary" style="cursor:pointer;">+ Log interaction</div>
     </div>
 
     <div class="panel-section">
@@ -5062,15 +5070,25 @@ function renderCandPanel(c, interactions) {
       ${c.salary ? `<div class="field-row"><span class="field-key">Salary / rate</span><span class="field-val">${c.salary}</span></div>` : ''}
     </div>
 
-    ${c.summary ? `<div class="panel-section"><div class="panel-section-label">Summary / Notes</div><div style="font-size:0.78rem;color:var(--tee-muted);line-height:1.7;">${c.summary}</div></div>` : ''}
+    ${c.summary ? `<div class="panel-section"><div class="panel-section-label">Background</div><div style="font-size:0.78rem;color:var(--tee-muted);line-height:1.7;">${c.summary}</div></div>` : ''}
     ${c.lastThreeCompanies ? `<div class="panel-section"><div class="panel-section-label">Last three companies</div><div style="font-size:0.78rem;color:var(--tee-muted);line-height:1.7;">${c.lastThreeCompanies}</div></div>` : ''}
     ${c.previousEmployerNames && c.previousEmployerNames.length > 0 ? `<div class="panel-section"><div class="panel-section-label">Previous employers</div><div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.25rem;">${c.previousEmployerNames.map(n => `<span style="font-size:0.75rem;padding:2px 10px;border-radius:10px;background:rgba(53,150,194,0.08);color:var(--tee-accent);border:1px solid rgba(53,150,194,0.2);">${n}</span>`).join('')}</div></div>` : ''}
 
     <div class="panel-section">
-      <div class="panel-section-label">Interaction history</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;"><div class="panel-section-label" style="margin-bottom:0;">Interactions</div><div onclick="openCandLogModal()" style="font-size:0.72rem;color:var(--tee-accent);cursor:pointer;padding:2px 8px;border:1px solid rgba(53,150,194,0.3);border-radius:6px;">+ Log</div></div>
       ${interactionsHtml}
     </div>
   `;
+}
+
+// TOGGLE CANDIDATE INTERACTION EXPAND
+function toggleCandInt(uid) {
+  const body = document.getElementById(uid);
+  const arrow = document.getElementById(uid + '-arrow');
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
 }
 
 // SAVE NEXT ACTION DATE
@@ -5533,7 +5551,7 @@ async function confirmDeleteCandidate() {
 // LOG MODAL
 function openCandLogModal() {
   if (!selectedCandidate) return;
-  document.getElementById('cand-log-type').value = 'Follow-up call';
+  document.getElementById('cand-log-type').value = 'Email';
   document.getElementById('cand-log-subject').value = '';
   document.getElementById('cand-log-notes').value = '';
   document.getElementById('cand-log-set-reminder').checked = false;
