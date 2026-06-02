@@ -6152,7 +6152,7 @@ async function saveAssignEdit() {
   if (remValue) fields['Remuneration Value'] = parseFloat(remValue);
   if (feeAmount) fields['Fee Amount'] = parseFloat(feeAmount);
   if (feePct) fields['Fee Percentage'] = parseFloat(feePct);
-  if (excl !== '') fields['Exclusivity'] = excl === 'true';
+  if (excl !== '') fields['Exclusivity'] = excl === 'true' ? 'Yes' : 'No';
   if (dateOpened) fields['Date Opened'] = dateOpened;
   if (startDate) fields['Start Date'] = startDate;
   if (int1) fields['Interview 1'] = int1;
