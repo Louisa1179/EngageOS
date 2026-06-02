@@ -5680,6 +5680,7 @@ async function loadACPipeline(assignmentId) {
       id: r.id,
       candidateId: Array.isArray(r.fields['Candidate']) ? r.fields['Candidate'][0] : '',
       assignmentId: Array.isArray(r.fields['Assignment']) ? r.fields['Assignment'][0] : '',
+      rawAssignment: r.fields['Assignment'] || [],
       stage: r.fields['Stage'] || '',
       notes: r.fields['Notes'] || '',
       cvDate: r.fields['CV Submitted Date'] || '',
@@ -5688,7 +5689,12 @@ async function loadACPipeline(assignmentId) {
       dateAdded: r.fields['Date Added'] || ''
     }));
 
-    acRecords = allRecs.filter(r => r.assignmentId === assignmentId);
+    // Match by record ID or by name (Airtable returns name when "show display name" is enabled)
+    const assignmentName = selectedAssignment?.name || '';
+    acRecords = allRecs.filter(r => 
+      r.assignmentId === assignmentId || 
+      r.assignmentId === assignmentName
+    );
 
     // Build name map from allCandidates
     const nameMap = {};
