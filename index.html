@@ -5665,7 +5665,7 @@ async function loadACPipeline(assignmentId) {
   const list = document.getElementById('ac-pipeline-list');
   if (!list) return;
   try {
-    const formula = encodeURIComponent(`{Assignment} = "${assignmentId}"`);
+    const formula = encodeURIComponent(`FIND("${assignmentId}", ARRAYJOIN({Assignment}))`);
     const resp = await fetch(`${AC_API_URL}?filterByFormula=${formula}&pageSize=100`, {
       headers: { Authorization: `Bearer ${getToken()}` }
     });
