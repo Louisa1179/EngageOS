@@ -1713,23 +1713,24 @@ function resetSetup() {
 }
 
 // INIT
-window.onload = function() {
+window.onload = async function() {
   applyStoredTheme();
   if (getToken()) {
     document.getElementById('setup-screen').style.display = 'none';
     document.getElementById('app').style.display = 'block';
     updateToggleUI(getViewUser());
     renderSidebar();
-    loadContacts();
-    setTimeout(() => loadAllContactsForCounting(), 500);
+    await loadContacts();
+    loadAllContactsForCounting();
     // Restore last workspace
     const savedWs = localStorage.getItem('tee_workspace');
     if (savedWs && savedWs !== 'bd') {
-      setTimeout(() => switchWorkspace(savedWs), 100);
+      switchWorkspace(savedWs);
     } else {
-      // Restore last BD view
+      // Restore last BD view, keeping the open contact, then re-open it
       const savedView = localStorage.getItem('tee_view');
-      if (savedView) setTimeout(() => switchView(savedView), 100);
+      if (savedView) switchView(savedView, { keepSelection: true });
+      restoreSelectedContact();
     }
   }
 };
@@ -1806,6 +1807,7 @@ async function loadContacts() {
     updateOrgCounts();
     {
       renderView();
+      restoreSelectedContact();
     }
   } catch(e) {
     document.getElementById('contact-list').innerHTML = `<div class="empty-state"><div class="empty-state-title">Connection error</div><div class="empty-state-text">${e.message}<br><br>Please check your token and try refreshing.</div></div>`;
@@ -2283,11 +2285,12 @@ async function loadUnsubContacts() {
 }
 
 // SWITCH VIEW
-function switchView(view) {
+function switchView(view, opts = {}) {
   localStorage.setItem('tee_view', view);
   currentView = view;
   currentFilter = 'all';
   selectedContact = null;
+  if (!opts.keepSelection) localStorage.removeItem('tee_selected_contact');
   // Reset warm filter chips when leaving warm-contacts view
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   document.querySelectorAll('.filter-chip')[0]?.classList.add('active');
@@ -2395,6 +2398,7 @@ async function selectContact(id) {
     || dnsContacts.find(c => c.id === id)
     || unsubContacts.find(c => c.id === id)
     || null;
+  localStorage.setItem('tee_selected_contact', id);
   document.querySelectorAll('.contact-card').forEach(el => el.classList.remove('selected'));
   document.querySelector(`[onclick="selectContact('${id}')"]`)?.classList.add('selected');
   renderPanel(selectedContact, []);
@@ -2402,7 +2406,16 @@ async function selectContact(id) {
   renderPanel(selectedContact, interactions);
 }
 
-// RENDER DETAIL PANEL
+// Re-open the previously selected contact after a data reload (in-app Refresh or
+// browser refresh) so the panel stays on the same person instead of going blank.
+function restoreSelectedContact() {
+  const savedId = localStorage.getItem('tee_selected_contact');
+  if (!savedId) return;
+  const ws = document.querySelector('.workspace-tab.active')?.id;
+  if (ws && ws !== 'tab-bd') return; // only restore within the Contacts workspace
+  if (!allContacts.find(c => c.id === savedId)) return; // contact no longer in the active list
+  selectContact(savedId);
+}
 function renderPanel(contact, interactions) {
   const panel = document.getElementById('detail-panel');
   if (!contact) {
