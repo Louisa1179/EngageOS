@@ -413,7 +413,7 @@
       </div>
       <button class="refresh-btn" onclick="toggleTheme()" id="theme-toggle" title="Toggle dark/light mode">☀️</button>
       <button class="refresh-btn" id="add-btn" onclick="handleAddBtn()" style="color:var(--tee-accent);border-color:rgba(53,150,194,0.3);">+ Add contact</button>
-      <button class="refresh-btn" onclick="loadContacts()">↻ Refresh</button>
+      <button class="refresh-btn" onclick="refreshCurrent()">↻ Refresh</button>
       <button class="refresh-btn" onclick="resetSetup()" style="color: #ff6b6b; border-color: rgba(255,107,107,0.3);">Sign out</button>
     </div>
   </div>
@@ -3160,6 +3160,18 @@ function switchWorkspace(ws) {
   updateSearchPlaceholder();
 }
 
+// Context-aware refresh from the header button: reloads the data for the tab
+// you're on and keeps your place (selected contact / organisation).
+async function refreshCurrent() {
+  const activeTab = document.querySelector('.workspace-tab.active')?.id;
+  if (activeTab === 'tab-orgs') {
+    await loadContacts();       // refresh the contact data behind the org panels
+    await loadOrganisations();  // rebuild the org list and re-open the selected org
+  } else {
+    loadContacts();
+  }
+}
+
 async function loadAllContactsForCounting() {
   try {
     let records = [], offset = null;
@@ -3378,6 +3390,7 @@ async function loadOrganisations() {
     if (allContactsUnfiltered.length === 0) await loadAllContactsForCounting();
     updateOrgCounts();
     filterOrgs();
+    restoreSelectedOrg();
   } catch(e) {
     document.getElementById('org-list').innerHTML = `<div class="empty-state"><div class="empty-state-title">Error</div><div class="empty-state-text">${e.message}</div></div>`;
   }
@@ -3555,11 +3568,23 @@ function renderOrgList(orgs) {
 function selectOrg(id) {
   selectedOrg = allOrgs.find(o => o.id === id);
   if (!selectedOrg) return;
+  localStorage.setItem('tee_selected_org', id);
   const detail = document.getElementById('org-contact-detail');
   if (detail) detail.innerHTML = '<div style="text-align:center;padding:3rem 2rem;color:var(--tee-muted);"><div style="font-size:2rem;margin-bottom:0.5rem;opacity:0.3;">→</div><div style="font-size:0.82rem;line-height:1.6;">Select a contact to see their details</div></div>';
   selectedContact = null;
   renderOrgDetail(selectedOrg);
   filterOrgs();
+}
+
+// Re-open the previously selected organisation after an org-data reload so the
+// panel stays on the same organisation instead of going blank.
+function restoreSelectedOrg() {
+  const savedId = localStorage.getItem('tee_selected_org');
+  if (!savedId) return;
+  const tabOrgs = document.getElementById('tab-orgs');
+  if (tabOrgs && !tabOrgs.classList.contains('active')) return; // only when on the Organisations tab
+  if (!allOrgs.find(o => o.id === savedId)) return; // org no longer exists
+  selectOrg(savedId);
 }
 
 // Add a contact straight from the organisation page — opens the standard
