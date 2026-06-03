@@ -1168,6 +1168,51 @@
   </div>
 </div>
 
+<!-- ASSIGN LOG MODAL -->
+<div class="modal-overlay" id="assign-log-modal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">Log client interaction</div>
+    <div class="modal-sub">Record an interaction with the client on this assignment.</div>
+    <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Type</label>
+    <select class="edit-input" id="assign-log-type" style="margin-bottom:0.75rem;">
+      <option value="Email">Email</option>
+      <option value="Phone Call">Phone Call</option>
+      <option value="Teams Meeting">Teams Meeting</option>
+      <option value="Face to Face Meeting">Face to Face Meeting</option>
+      <option value="Submission">Submission</option>
+      <option value="Note">Note</option>
+    </select>
+    <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Subject *</label>
+    <input type="text" class="edit-input" id="assign-log-subject" placeholder="e.g. Sent terms to Amanda Lane" style="margin-bottom:0.75rem;" />
+    <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Notes (optional)</label>
+    <textarea class="edit-input" id="assign-log-notes" rows="3" placeholder="Key points..." style="margin-bottom:0.75rem;resize:vertical;"></textarea>
+    <div id="assign-log-saving" style="display:none;text-align:center;padding:0.5rem;font-size:0.82rem;color:var(--tee-muted);">Saving...</div>
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-yes" onclick="saveAssignLog()">Save</button>
+      <button class="modal-btn modal-btn-no" onclick="closeAssignLogModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- TERMS MODAL -->
+<div class="modal-overlay" id="terms-modal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">Add terms link</div>
+    <div class="modal-sub">Record a set of terms sent to this client.</div>
+    <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Name *</label>
+    <input type="text" class="edit-input" id="terms-name" placeholder="e.g. Terms v1, Revised terms" style="margin-bottom:0.75rem;" />
+    <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Link *</label>
+    <input type="url" class="edit-input" id="terms-url" placeholder="https://..." style="margin-bottom:0.75rem;" />
+    <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Date sent</label>
+    <input type="date" class="edit-input" id="terms-sent" style="margin-bottom:0.75rem;" />
+    <div id="terms-saving" style="display:none;text-align:center;padding:0.5rem;font-size:0.82rem;color:var(--tee-muted);">Saving...</div>
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-yes" onclick="saveTermsLink()">Save</button>
+      <button class="modal-btn modal-btn-no" onclick="closeTermsModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- ASSIGNMENT EDIT MODAL -->
 <div class="modal-overlay" id="assign-edit-modal">
   <div class="modal edit-modal" style="max-width:640px;">
@@ -6080,6 +6125,179 @@ function openAddCandidateToAssignment(assignmentId) {
   openAddCandidateModal();
 }
 
+// ─── ASSIGNMENT CLIENT ACTIVITY ──────────────────────────────────────────────
+
+let currentAssignLogId = null;
+let currentTermsAssignId = null;
+
+function openAssignLogModal(assignId) {
+  currentAssignLogId = assignId;
+  document.getElementById('assign-log-subject').value = '';
+  document.getElementById('assign-log-notes').value = '';
+  document.getElementById('assign-log-type').value = 'Email';
+  document.getElementById('assign-log-saving').style.display = 'none';
+  document.getElementById('assign-log-modal').classList.add('show');
+}
+
+function closeAssignLogModal() {
+  document.getElementById('assign-log-modal').classList.remove('show');
+}
+
+async function saveAssignLog() {
+  const assignId = currentAssignLogId;
+  const subject = document.getElementById('assign-log-subject').value.trim();
+  const type = document.getElementById('assign-log-type').value;
+  const notes = document.getElementById('assign-log-notes').value.trim();
+  if (!subject) { showToast('Please add a subject', 'error'); return; }
+  document.getElementById('assign-log-saving').style.display = 'block';
+  const loggedBy = getViewUser() && getViewUser() !== 'All' ? getViewUser() : getOwner();
+  try {
+    const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: {
+        'Interaction Subject': subject,
+        'Type': type,
+        'Date': new Date().toISOString().split('T')[0],
+        'Notes': notes || null,
+        'Logged by': loggedBy
+      }})
+    });
+    const intData = await intResp.json();
+    if (!intResp.ok) throw new Error(intData.error?.message || 'Log failed');
+    // Link to assignment
+    const assign = allAssignments.find(a => a.id === assignId);
+    const existingIds = assign?.interactionIds || [];
+    const updatedIds = [intData.id, ...existingIds];
+    await fetch(`https://api.airtable.com/v0/${BASE_ID}/Assignments/${assignId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Interactions': updatedIds } })
+    });
+    const idx = allAssignments.findIndex(a => a.id === assignId);
+    if (idx > -1) allAssignments[idx].interactionIds = updatedIds;
+    closeAssignLogModal();
+    await loadAssignInteractions(assignId);
+    showToast('Interaction logged ✓', 'success');
+  } catch(e) {
+    document.getElementById('assign-log-saving').style.display = 'none';
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+async function loadAssignInteractions(assignId) {
+  const list = document.getElementById('assign-interaction-list');
+  if (!list) return;
+  const assign = allAssignments.find(a => a.id === assignId);
+  const ids = assign?.interactionIds || [];
+  if (ids.length === 0) {
+    list.innerHTML = '<div style="color:var(--tee-muted);font-size:0.8rem;text-align:center;padding:0.75rem;">No client interactions logged yet</div>';
+    return;
+  }
+  try {
+    const f = 'OR(' + ids.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
+    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions?filterByFormula=${encodeURIComponent(f)}&pageSize=100`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    const data = await resp.json();
+    const ints = (data.records || []).map(r => ({
+      id: r.id,
+      subject: r.fields['Interaction Subject'] || '',
+      type: r.fields['Type'] || '',
+      date: r.fields['Date'] || '',
+      notes: r.fields['Notes'] || '',
+      loggedBy: r.fields['Logged by'] || ''
+    })).sort((a,b) => (b.date||'').localeCompare(a.date||''));
+    const TYPE_ICONS = { 'Email': '✉', 'Phone Call': '📞', 'Teams Meeting': '💻', 'Face to Face Meeting': '🤝', 'Submission': '📄', 'Note': '📝' };
+    list.innerHTML = ints.map((i, idx) => {
+      const icon = TYPE_ICONS[i.type] || '💬';
+      const dateStr = i.date ? new Date(i.date).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '';
+      const uid = `assign-int-${idx}`;
+      return `<div style="border:1px solid var(--tee-border);border-radius:10px;margin-bottom:0.4rem;overflow:hidden;">
+        <div style="display:flex;align-items:center;gap:0.5rem;padding:0.55rem 0.75rem;cursor:pointer;background:var(--tee-card);" onclick="toggleAssignInt('${uid}')">
+          <span style="font-size:0.85rem;">${icon}</span>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:0.78rem;font-weight:500;color:var(--tee-text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${i.subject}</div>
+            <div style="font-size:0.68rem;color:var(--tee-muted);">${dateStr}${i.loggedBy ? ' · ' + i.loggedBy.split(' ')[0] : ''}</div>
+          </div>
+          ${i.type ? `<span style="font-size:0.65rem;color:var(--tee-muted);background:var(--tee-mid);padding:2px 6px;border-radius:6px;flex-shrink:0;">${i.type}</span>` : ''}
+          <span style="font-size:0.65rem;color:var(--tee-muted);" id="${uid}-arrow">▼</span>
+        </div>
+        ${i.notes ? `<div id="${uid}" style="display:none;padding:0.55rem 0.75rem;border-top:1px solid var(--tee-border);font-size:0.76rem;color:var(--tee-text);line-height:1.6;white-space:pre-wrap;">${i.notes}</div>` : `<div id="${uid}" style="display:none;"></div>`}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.8rem;">Error: ${e.message}</div>`;
+  }
+}
+
+function toggleAssignInt(uid) {
+  const body = document.getElementById(uid);
+  const arrow = document.getElementById(uid + '-arrow');
+  if (!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : 'block';
+  if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
+}
+
+function openTermsModal(assignId) {
+  currentTermsAssignId = assignId;
+  document.getElementById('terms-name').value = '';
+  document.getElementById('terms-url').value = '';
+  document.getElementById('terms-sent').value = new Date().toISOString().split('T')[0];
+  document.getElementById('terms-saving').style.display = 'none';
+  document.getElementById('terms-modal').classList.add('show');
+}
+
+function closeTermsModal() {
+  document.getElementById('terms-modal').classList.remove('show');
+}
+
+async function saveTermsLink() {
+  const assignId = currentTermsAssignId;
+  const name = document.getElementById('terms-name').value.trim();
+  const url = document.getElementById('terms-url').value.trim();
+  const sent = document.getElementById('terms-sent').value;
+  if (!name || !url) { showToast('Please add a name and link', 'error'); return; }
+  document.getElementById('terms-saving').style.display = 'block';
+  try {
+    const assign = allAssignments.find(a => a.id === assignId);
+    const existing = assign?.termsLinks || [];
+    const sentFormatted = sent ? new Date(sent).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '';
+    const updated = [...existing, { name, url, sent: sentFormatted }];
+    await fetch(`https://api.airtable.com/v0/${BASE_ID}/Assignments/${assignId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Terms Links': JSON.stringify(updated) } })
+    });
+    const idx = allAssignments.findIndex(a => a.id === assignId);
+    if (idx > -1) allAssignments[idx].termsLinks = updated;
+    closeTermsModal();
+    renderAssignDetail(allAssignments.find(a => a.id === assignId));
+    showToast('Terms link added ✓', 'success');
+  } catch(e) {
+    document.getElementById('terms-saving').style.display = 'none';
+    showToast('Failed: ' + e.message, 'error');
+  }
+}
+
+async function removeTermsLink(assignId, index) {
+  const assign = allAssignments.find(a => a.id === assignId);
+  if (!assign) return;
+  const updated = assign.termsLinks.filter((_,i) => i !== index);
+  try {
+    await fetch(`https://api.airtable.com/v0/${BASE_ID}/Assignments/${assignId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Terms Links': JSON.stringify(updated) } })
+    });
+    const idx = allAssignments.findIndex(a => a.id === assignId);
+    if (idx > -1) allAssignments[idx].termsLinks = updated;
+    renderAssignDetail(allAssignments.find(a => a.id === assignId));
+    showToast('Terms link removed ✓', 'success');
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
 // ─── ASSIGNMENTS ─────────────────────────────────────────────────────────────
 
 let allAssignments = [];
@@ -6122,6 +6340,8 @@ async function loadAssignments() {
       notes: r.fields['Notes'] || '',
       candidateIds: r.fields['Related Candidates'] || [],
       contactRoles: r.fields['Contact Roles'] || [],
+      interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
+      termsLinks: r.fields['Terms Links'] ? (() => { try { return JSON.parse(r.fields['Terms Links']); } catch(e) { return []; } })() : []
     }));
 
     updateAssignCounts();
@@ -6241,6 +6461,33 @@ function renderAssignDetail(a) {
       <div style="font-size:0.85rem;color:var(--tee-text);line-height:1.6;white-space:pre-wrap;">${a.notes}</div>
     </div>` : ''}
 
+    <div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1.25rem;margin-bottom:1rem;" id="assign-client-section">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
+        <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;">Client Activity</div>
+        <div style="display:flex;gap:0.5rem;">
+          <button onclick="openAssignLogModal('${a.id}')" style="background:var(--tee-accent);color:white;border:none;border-radius:8px;padding:0.3rem 0.75rem;font-size:0.75rem;cursor:pointer;font-family:'DM Sans',sans-serif;">+ Log interaction</button>
+          <button onclick="openTermsModal('${a.id}')" style="background:transparent;color:var(--tee-accent);border:1px solid rgba(53,150,194,0.3);border-radius:8px;padding:0.3rem 0.75rem;font-size:0.75rem;cursor:pointer;font-family:'DM Sans',sans-serif;">+ Add terms</button>
+        </div>
+      </div>
+      ${a.termsLinks && a.termsLinks.length > 0 ? `
+      <div style="margin-bottom:0.75rem;">
+        <div style="font-size:0.7rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.4rem;">Terms sent</div>
+        ${a.termsLinks.map((t,i) => `<div style="display:flex;align-items:center;justify-content:space-between;padding:0.4rem 0.75rem;background:var(--tee-card);border-radius:8px;margin-bottom:0.3rem;">
+          <div>
+            <span style="font-size:0.8rem;color:var(--tee-text);font-weight:500;">${t.name}</span>
+            ${t.sent ? `<span style="font-size:0.7rem;color:var(--tee-muted);margin-left:0.5rem;">${t.sent}</span>` : ''}
+          </div>
+          <div style="display:flex;gap:0.5rem;align-items:center;">
+            <a href="${t.url}" target="_blank" style="font-size:0.72rem;color:var(--tee-accent);">View ↗</a>
+            <span onclick="removeTermsLink('${a.id}',${i})" style="font-size:0.7rem;color:var(--tee-muted);cursor:pointer;">✕</span>
+          </div>
+        </div>`).join('')}
+      </div>` : ''}
+      <div id="assign-interaction-list">
+        <div style="color:var(--tee-muted);font-size:0.82rem;text-align:center;padding:1rem;">Loading...</div>
+      </div>
+    </div>
+
     <div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1.25rem;margin-bottom:1rem;" id="ac-pipeline-section">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;">
         <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;">Candidate Pipeline</div>
@@ -6254,6 +6501,7 @@ function renderAssignDetail(a) {
       </div>
     </div>
   `;
+  loadAssignInteractions(a.id);
   loadACPipeline(a.id);
 }
 
