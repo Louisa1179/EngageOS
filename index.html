@@ -76,7 +76,7 @@
   .workspace-tabs { display: flex; gap: 3px; padding: 3px; background: var(--tee-dark); border-radius: 8px; }
   .workspace-tab { border: none; background: transparent; color: var(--tee-muted); border-radius: 6px; padding: 0.3rem 0.875rem; font-family: 'DM Sans', sans-serif; font-size: 0.8rem; font-weight: 500; cursor: pointer; transition: all 0.2s; }
   .workspace-tab.active { background: var(--tee-accent); color: white; }
-  #orgs-workspace { display: none; flex-direction: row; overflow: hidden; position: fixed; top: 65px; left: 0; right: 0; bottom: 0; z-index: 10; }
+  #orgs-workspace { display: none; flex-direction: row; overflow: hidden; position: fixed; top: 103px; left: 0; right: 0; bottom: 0; z-index: 10; }
   #candidates-workspace { display: none; flex-direction: row; overflow: hidden; position: fixed; top: 65px; left: 0; right: 0; bottom: 0; z-index: 10; }
   #assignments-workspace { display: none; flex-direction: row; overflow: hidden; position: fixed; top: 65px; left: 0; right: 0; bottom: 0; z-index: 10; }
 
@@ -100,7 +100,7 @@
   .assign-card-title { font-size: 0.9rem; font-weight: 500; color: var(--tee-text); margin-bottom: 0.25rem; }
   .assign-card-org { font-size: 0.78rem; color: var(--tee-muted); margin-bottom: 0.5rem; }
   .assign-card-meta { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
-  .desk-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 2rem; background: var(--tee-mid); border-bottom: 1px solid var(--tee-border); }
+  .desk-bar { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 2rem; background: var(--tee-mid); border-bottom: 1px solid var(--tee-border); position: relative; z-index: 11; }
   .desk-btn { border: 1px solid var(--tee-border); background: transparent; border-radius: 20px; padding: 0.25rem 0.875rem; font-family: 'DM Sans', sans-serif; font-size: 0.78rem; font-weight: 500; cursor: pointer; color: var(--tee-muted); transition: all 0.2s; }
   .desk-btn:hover { border-color: var(--tee-accent); color: var(--tee-accent); }
   .desk-btn.active { background: var(--tee-accent); color: white; border-color: var(--tee-accent); }
@@ -2422,6 +2422,15 @@ function renderPanel(contact, interactions) {
 
 
   const stepNames = ['LI request', 'Email 1', 'Email 2', 'Email 3', 'LI message', 'Follow-up call'];
+  const markDoneLabels = {
+    1: "✓ I've sent the LI connection request",
+    2: "✓ I've sent Email 1",
+    3: "✓ I've sent Email 2",
+    4: "✓ I've sent Email 3",
+    5: "✓ I've sent the LI message / InMail",
+    6: "✓ Follow-up call done"
+  };
+  const markDoneLabel = markDoneLabels[contact.step] || 'Mark done — advance sequence';
   const stepsHtml = stepNames.map((name, i) => {
     const stepNum = i + 1;
     const cls = stepNum < contact.step ? 'step-done' : stepNum === contact.step ? 'step-active' : 'step-todo';
@@ -2488,7 +2497,7 @@ function renderPanel(contact, interactions) {
         </div>
       </div>` : ''}
       <div class="panel-section">
-        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">→ Send LI connection request</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">Mark done — advance sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
+        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">▶ Start sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">${markDoneLabel}</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
       </div>
       <div class="panel-section">
         <div class="panel-section-label">Sequence progress</div>
@@ -2538,6 +2547,8 @@ function handleMarkDone() {
 async function advanceSequence(liConnected) {
   document.getElementById('li-modal').classList.remove('show');
   if (!selectedContact) return;
+  if (advanceSequence._busy) return; // guard: a second click can't double-advance while saving
+  advanceSequence._busy = true;
 
   const contact = selectedContact;
   const currentStep = contact.step;
@@ -2583,7 +2594,7 @@ async function advanceSequence(liConnected) {
   if (newStatus !== 'Active') fields['Sequence Status'] = newStatus;
   // LinkedIn Connected is set via toggleLiConnected() or when they respond — not automatically
 
-  await updateContact(contact.id, fields);
+  await updateContact(contact.id, fields, { silent: true });
 
   // Save Next Action Notes in a separate call to avoid silent failures on multiple select fields
   if (newNotes) {
@@ -2618,6 +2629,20 @@ async function advanceSequence(liConnected) {
       }})
     });
   } catch(e) { console.log('Interaction log error:', e); }
+
+  // Refresh the panel immediately so it's obvious the action registered, with a
+  // specific confirmation of what was just completed and what comes next.
+  selectedContact = allContacts.find(c => c.id === contact.id) || selectedContact;
+  try {
+    const ints = await fetchInteractions(contact.id);
+    renderPanel(selectedContact, ints);
+  } catch(e) { renderPanel(selectedContact, null); }
+  renderView();
+  const nextNames = { 2: 'Email 1', 3: 'Email 2', 4: 'Email 3', 5: 'LI message / InMail', 6: 'Follow-up call', 7: 'Ongoing programme' };
+  const nextLabel = nextNames[newStep] || 'next step';
+  const dueFmt = newDue ? new Date(newDue).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
+  showToast(`✓ ${stepLabels[currentStep] || 'Step done'} — next: ${nextLabel}${dueFmt ? ', due ' + dueFmt : ''}`, 'success');
+  advanceSequence._busy = false;
 }
 
 // MARK LI CONNECTED AND ADVANCE TO EMAIL 1 CONNECTED
@@ -2659,7 +2684,7 @@ async function markResponded() {
 
 // MARK DO NOT CONTACT
 // UPDATE CONTACT IN AIRTABLE
-async function updateContact(id, fields) {
+async function updateContact(id, fields, opts = {}) {
   try {
     console.log('updateContact called with fields:', JSON.stringify(fields));
     const resp = await fetch(`${API_URL}/${id}`, {
@@ -2698,9 +2723,11 @@ async function updateContact(id, fields) {
     selectedContact = allContacts.find(c => c.id === id) || null;
     updateCounts();
     renderView();
-    const interactions = await fetchInteractions(selectedContact?.id);
-    renderPanel(selectedContact, interactions);
-    showToast(`${selectedContact?.name || 'Contact'} updated ✓`, 'success');
+    if (!opts.silent) {
+      const interactions = await fetchInteractions(selectedContact?.id);
+      renderPanel(selectedContact, interactions);
+      showToast(`${selectedContact?.name || 'Contact'} updated ✓`, 'success');
+    }
   } catch(e) {
     console.error('updateContact caught error:', e.message);
     // Toast already shown above if Airtable error; only show generic if something else
@@ -3591,13 +3618,22 @@ function renderOrgDetail(org) {
 // START SEQUENCE
 async function startSequence() {
   if (!selectedContact) return;
-  await updateContact(selectedContact.id, { 'Sequence Step': 1, 'Sequence Status': 'Active', 'Next Action Due': addDays(14) });
+  const id = selectedContact.id;
+  // Start the sequence only — the LI request becomes the pending action (due now).
+  // It is logged as sent later, when the user confirms via "I've sent the LI connection request".
+  await updateContact(id, {
+    'Sequence Step': 1,
+    'Sequence Status': 'Active',
+    'Next Action Due': addDays(0),
+    'Next Action Notes': ['Send LI connection request']
+  }, { silent: true });
+  selectedContact = allContacts.find(c => c.id === id) || selectedContact;
   try {
-    await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
-      method: 'POST', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: { 'Interaction Subject': 'Sent LI connection request', 'Type': 'LinkedIn', 'Date': new Date().toISOString().split('T')[0], 'Related Contact': [selectedContact.id], 'Logged by': getOwner() }})
-    });
-  } catch(e) {}
+    const ints = await fetchInteractions(id);
+    renderPanel(selectedContact, ints);
+  } catch(e) { renderPanel(selectedContact, null); }
+  renderView();
+  showToast('Sequence started — send the LI request, then mark it done', 'success');
 }
 
 // DNC HELPERS
@@ -5691,7 +5727,7 @@ async function saveCandidateLog() {
     const loggedBy = getViewUser() && getViewUser() !== 'All' ? getViewUser() : getOwner();
     const intFields = { 'Interaction Subject': subject, 'Type': type, 'Date': new Date().toISOString().split('T')[0], 'Logged by': loggedBy };
     if (notes) intFields['Notes'] = notes;
-    const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: intFields }) });
+    const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: intFields, typecast: true }) });
     const intData = await intResp.json();
     if (!intResp.ok) throw new Error(intData.error?.message || 'Log failed');
     // Update candidate interaction IDs — save back to Airtable linked field AND update locally
@@ -5938,7 +5974,7 @@ async function saveACLog() {
         'Date': new Date().toISOString().split('T')[0],
         'Notes': notes || null,
         'Logged by': loggedBy
-      }})
+      }, typecast: true })
     });
     const intData = await intResp.json();
     if (!intResp.ok) throw new Error(intData.error?.message || 'Log failed');
@@ -6105,7 +6141,7 @@ async function saveACRecord() {
             'Type': 'Stage Change',
             'Date': new Date().toISOString().split('T')[0],
             'Logged by': loggedBy
-          }})
+          }, typecast: true })
         });
         const stageIntData = await stageIntResp.json();
         if (stageIntResp.ok && stageIntData.id) {
@@ -6184,7 +6220,7 @@ async function saveAssignLog() {
         'Date': new Date().toISOString().split('T')[0],
         'Notes': notes || null,
         'Logged by': loggedBy
-      }})
+      }, typecast: true })
     });
     const intData = await intResp.json();
     if (!intResp.ok) throw new Error(intData.error?.message || 'Log failed');
