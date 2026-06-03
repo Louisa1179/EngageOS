@@ -3522,6 +3522,16 @@ function selectOrg(id) {
   filterOrgs();
 }
 
+// Add a contact straight from the organisation page — opens the standard
+// contact form with this organisation pre-selected, then refreshes the org
+// panel on save so the new person appears in place.
+function addContactToOrg() {
+  if (!selectedOrg) return;
+  openAddContactModal();
+  selectOrgForEdit(selectedOrg.id, selectedOrg.name);
+  window._addContactFromOrgId = selectedOrg.id;
+}
+
 function renderOrgDetail(org) {
   const contacts = getOrgContacts(org.id);
   const active = contacts.filter(c => c.status !== 'Do Not Contact' && c.status !== 'Responded');
@@ -3565,10 +3575,14 @@ function renderOrgDetail(org) {
       </div>
     </div>
     <div style="padding:1rem 1.5rem;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <div style="font-size:0.68rem;font-weight:600;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;">Contacts${contacts.length ? ' (' + contacts.length + ')' : ''}</div>
+        <span onclick="addContactToOrg()" style="font-size:0.74rem;color:var(--tee-accent);cursor:pointer;font-weight:500;padding:3px 10px;border:1px solid rgba(53,150,194,0.3);border-radius:8px;white-space:nowrap;" onmouseover="this.style.background='rgba(53,150,194,0.08)'" onmouseout="this.style.background='transparent'">+ Add contact</span>
+      </div>
       ${responded.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Responded</div>${responded.map(contactRow).join('')}</div>` : ''}
       ${active.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Active (${active.length})</div>${active.map(contactRow).join('')}</div>` : ''}
       ${dnc.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Do not contact (${dnc.length})</div>${dnc.map(contactRow).join('')}</div>` : ''}
-      ${contacts.length === 0 ? `<div style="font-size:0.82rem;color:var(--tee-muted);text-align:center;padding:2rem;">No contacts at this organisation yet</div>` : ''}
+      ${contacts.length === 0 ? `<div style="font-size:0.82rem;color:var(--tee-muted);text-align:center;padding:1.5rem 1rem;line-height:1.6;">No contacts here yet.<br>Use <span style="color:var(--tee-accent);font-weight:500;">+ Add contact</span> above to add the people you know.</div>` : ''}
       ${org.notes ? `<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--tee-border);font-size:0.78rem;color:var(--tee-muted);line-height:1.6;">${org.notes}</div>` : ''}
     </div>`;
 }
@@ -4307,6 +4321,7 @@ function initContactPrevEmpPicker(existingIds, existingNames) {
 
 function openAddContactModal() {
   editMode = 'add';
+  window._addContactFromOrgId = null;
   document.getElementById('edit-modal-title').textContent = 'Add new contact';
   document.getElementById('edit-modal-sub').textContent = 'Create a new contact record in Airtable.';
   document.getElementById('ef-firstname').value = '';
@@ -4504,6 +4519,14 @@ async function saveEditContact() {
       closeEditModal();
       updateCounts();
       renderView();
+      // If this add came from the organisation page, refresh the org panel in
+      // place so the new contact appears without leaving the organisation.
+      if (window._addContactFromOrgId && selectedOrg && selectedOrg.id === window._addContactFromOrgId) {
+        renderOrgDetail(selectedOrg);
+        filterOrgs();
+        if (typeof updateOrgCounts === 'function') updateOrgCounts();
+      }
+      window._addContactFromOrgId = null;
       showToast(fullName + ' added ✓', 'success');
     }
   } catch(e) {
