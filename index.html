@@ -1575,6 +1575,12 @@ let pendingAdvance = null;
 function getToken() { return localStorage.getItem('tee_token'); }
 function getOwner() { return localStorage.getItem('tee_owner') || ''; }
 function getViewUser() { return localStorage.getItem('tee_view_user') || getOwner(); }
+// LinkedIn connection is per-person. The relevant status for sequence timing is
+// the contact owner's (the person actually sending). Unassigned defaults to Louisa.
+function ownerLiConnected(contact) {
+  if (!contact) return false;
+  return contact.owner === 'John Daly' ? !!contact.liConnectedJohn : !!contact.liConnected;
+}
 
 function renderSidebar() {
   const sidebar = document.getElementById('main-sidebar');
@@ -1781,7 +1787,7 @@ async function loadContacts() {
       tier: String(getField(r, 'Tier')),
       step: parseInt(getField(r, 'Sequence Step', 0)) || 0,
       interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
-      liConnected: r.fields['LinkedIn Connected'] || false,
+      liConnected: r.fields['LinkedIn Connected'] || false, liConnectedJohn: r.fields['LinkedIn Connected John'] || false,
       status: getField(r, 'Sequence Status', 'Active'),
       nextActionNotes: getField(r, 'Next Action Notes'),
       nextActionDue: getField(r, 'Next Action Due'),
@@ -2149,7 +2155,7 @@ async function loadDncContacts() {
       tier: String(getField(r, 'Tier')),
       step: parseInt(getField(r, 'Sequence Step', 0)) || 0,
       interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
-      liConnected: r.fields['LinkedIn Connected'] || false,
+      liConnected: r.fields['LinkedIn Connected'] || false, liConnectedJohn: r.fields['LinkedIn Connected John'] || false,
       status: 'Do Not Contact',
       nextActionNotes: getField(r, 'Next Action Notes'),
       nextActionDue: getField(r, 'Next Action Due'),
@@ -2208,7 +2214,7 @@ async function loadDnsContacts() {
       phone: gf(r, 'Phone') || gf(r, 'Mobile'), linkedin: gf(r, 'LinkedIn'),
       tier: String(gf(r, 'Tier')), step: parseInt(gf(r, 'Sequence Step', 0)) || 0,
       interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
-      liConnected: r.fields['LinkedIn Connected'] || false, status: 'Do Not Sequence',
+      liConnected: r.fields['LinkedIn Connected'] || false, liConnectedJohn: r.fields['LinkedIn Connected John'] || false, status: 'Do Not Sequence',
       nextActionNotes: gf(r, 'Next Action Notes'), nextActionDue: gf(r, 'Next Action Due'),
       relationshipStatus: r.fields['Relationship Status'] || '', contactLevel: gf(r, 'Contact Level'),
       followUpDate: gf(r, 'Follow-up Date'), dncReason: '', owner: gf(r, 'Owner')
@@ -2261,7 +2267,7 @@ async function loadUnsubContacts() {
       phone: gf(r, 'Phone') || gf(r, 'Mobile'), linkedin: gf(r, 'LinkedIn'),
       tier: String(gf(r, 'Tier')), step: parseInt(gf(r, 'Sequence Step', 0)) || 0,
       interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
-      liConnected: r.fields['LinkedIn Connected'] || false, status: 'Unsubscribed',
+      liConnected: r.fields['LinkedIn Connected'] || false, liConnectedJohn: r.fields['LinkedIn Connected John'] || false, status: 'Unsubscribed',
       nextActionNotes: gf(r, 'Next Action Notes'), nextActionDue: gf(r, 'Next Action Due'),
       relationshipStatus: r.fields['Relationship Status'] || '', contactLevel: gf(r, 'Contact Level'),
       followUpDate: gf(r, 'Follow-up Date'), dncReason: '', owner: gf(r, 'Owner')
@@ -2319,8 +2325,8 @@ function matchesFilter(contact) {
   if (currentFilter === 'clevel') return level.includes('c-level') || level.includes('board') || level.includes('ceo') || level.includes('cfo') || level.includes('coo') || level.includes('chro');
   if (currentFilter === 'director') return level.includes('director') || level.includes('head of');
   if (currentFilter === 'management') return level.includes('management') || level.includes('junior');
-  if (currentFilter === 'li-connected') return contact.liConnected === true;
-  if (currentFilter === 'li-not-connected') return !contact.liConnected;
+  if (currentFilter === 'li-connected') return ownerLiConnected(contact) === true;
+  if (currentFilter === 'li-not-connected') return !ownerLiConnected(contact);
   if (currentFilter === 'very-warm') { const r = contact.relationshipStatus || ''; return r.startsWith('1'); }
   if (currentFilter === 'warm') { const r = contact.relationshipStatus || ''; return r.startsWith('2'); }
   return true;
@@ -2429,9 +2435,13 @@ function renderPanel(contact, interactions) {
   const color = avatarColors[colorIdx];
   const due = duePill(contact.nextActionDue);
   const tierLabel = contact.tier ? `<span class="tier-pill t${contact.tier}" style="font-size:0.75rem; padding: 3px 10px;">Tier ${contact.tier}</span>` : '';
-  const liTag = contact.liConnected 
-    ? `<span onclick="toggleLiConnected()" style="font-size:0.72rem; padding: 2px 8px; border-radius: 20px; background: rgba(0,119,181,0.25); color: #4da6d6; cursor:pointer;" title="Click to mark as not connected">✓ LI connected</span>`
-    : `<span onclick="toggleLiConnected()" style="font-size:0.72rem; padding: 2px 8px; border-radius: 20px; background: #f5f7fa; color: var(--tee-muted); cursor:pointer;" title="Click to mark as LI connected">+ Mark LI connected</span>`;
+  const liPill = (who, connected) => {
+    const label = who === 'john' ? 'John' : 'Louisa';
+    return connected
+      ? `<span onclick="toggleLiConnected('${who}')" style="font-size:0.72rem; padding: 2px 8px; border-radius: 20px; background: rgba(0,119,181,0.25); color: #4da6d6; cursor:pointer;" title="Click to mark ${label} as not connected">✓ ${label} LI</span>`
+      : `<span onclick="toggleLiConnected('${who}')" style="font-size:0.72rem; padding: 2px 8px; border-radius: 20px; background: #f5f7fa; color: var(--tee-muted); cursor:pointer;" title="Click to mark ${label} as LI connected">+ ${label} LI</span>`;
+  };
+  const liTag = liPill('louisa', contact.liConnected) + ' ' + liPill('john', contact.liConnectedJohn);
 
 
   const stepNames = ['LI request', 'Email 1', 'Email 2', 'Email 3', 'LI message', 'Follow-up call'];
@@ -2546,6 +2556,14 @@ function renderPanel(contact, interactions) {
         }
       </div>
     </div>`;
+  // Mirror into the Organisations-tab contact panel when that tab is on screen,
+  // so panel actions (mark done, log, skip, edit, etc.) update in place there too
+  // rather than only on the hidden Contacts-tab panel.
+  const _orgsActive = document.getElementById('tab-orgs')?.classList.contains('active');
+  const _orgDetail = document.getElementById('org-contact-detail');
+  if (_orgsActive && _orgDetail && !_orgDetail.innerHTML.includes('Select a contact to see their details')) {
+    _orgDetail.innerHTML = panel.innerHTML;
+  }
 }
 
 // HANDLE MARK DONE
@@ -2553,7 +2571,7 @@ function handleMarkDone() {
   if (!selectedContact) return;
   // Step 1 (LI request) just records it was sent — no need to ask if connected yet
   // Connected status is updated later via "They connected" or auto-advances after 14 days
-  advanceSequence(selectedContact.liConnected);
+  advanceSequence(ownerLiConnected(selectedContact));
 }
 
 // ADVANCE SEQUENCE
@@ -2564,6 +2582,7 @@ async function advanceSequence(liConnected) {
   advanceSequence._busy = true;
 
   const contact = selectedContact;
+  const connected = ownerLiConnected(contact);
   const currentStep = contact.step;
   const newStep = currentStep + 1;
   const timingKeys = ['afterStep1','afterStep2','afterStep3','afterStep4','afterStep5'];
@@ -2578,11 +2597,11 @@ async function advanceSequence(liConnected) {
     // After sending LI request, wait 14 days and check if connected
     newNotes = 'Send Email 1 - not connected'; // Default after 14 days — overridden if they connect
   } else if (currentStep === 2) {
-    newNotes = contact.liConnected ? 'Send Email 2 - connected' : 'Send Email 2 - not connected';
+    newNotes = connected ? 'Send Email 2 - connected' : 'Send Email 2 - not connected';
   } else if (currentStep === 3) {
     newNotes = 'Send Email 3';
   } else if (currentStep === 4) {
-    newNotes = liConnected ? 'LinkedIn Message - connected' : 'InMail - not connected';
+    newNotes = connected ? 'LinkedIn Message - connected' : 'InMail - not connected';
   } else if (currentStep === 5) {
     newNotes = 'Follow-up call';
   } else if (currentStep >= 6) {
@@ -2663,8 +2682,9 @@ async function markLiConnectedAndAdvance() {
   if (!selectedContact) return;
   const contact = selectedContact;
   const newDue = addDays(3);
+  const ownerField = contact.owner === 'John Daly' ? 'LinkedIn Connected John' : 'LinkedIn Connected';
   const fields = {
-    'LinkedIn Connected': true,
+    [ownerField]: true,
     'Next Action Notes': ['Send Email 1 - connected'],
     'Next Action Due': newDue
   };
@@ -2722,6 +2742,7 @@ async function updateContact(id, fields, opts = {}) {
       if ('Next Action Due' in updated.fields) patch.nextActionDue = updated.fields['Next Action Due'];
       if ('Sequence Status' in updated.fields) patch.status = updated.fields['Sequence Status'];
       if ('LinkedIn Connected' in updated.fields) patch.liConnected = updated.fields['LinkedIn Connected'];
+      if ('LinkedIn Connected John' in updated.fields) patch.liConnectedJohn = updated.fields['LinkedIn Connected John'];
       if ('Status Reason' in updated.fields) patch.dncReason = updated.fields['Status Reason'];
       if ('Follow-up Date' in updated.fields) patch.followUpDate = updated.fields['Follow-up Date'];
       // Handle null clears (Airtable omits null fields from response, so check what we sent)
@@ -2729,6 +2750,8 @@ async function updateContact(id, fields, opts = {}) {
       if ('Next Action Due' in fields && fields['Next Action Due'] === null) patch.nextActionDue = '';
       // Force local update from what we sent, in case Airtable doesn't echo it back
       if ('Next Action Due' in fields && fields['Next Action Due']) patch.nextActionDue = fields['Next Action Due'];
+      if ('LinkedIn Connected' in fields) patch.liConnected = !!fields['LinkedIn Connected'];
+      if ('LinkedIn Connected John' in fields) patch.liConnectedJohn = !!fields['LinkedIn Connected John'];
       if ('Follow-up Date' in fields && fields['Follow-up Date']) patch.followUpDate = fields['Follow-up Date'];
       if ('Next Action Notes' in fields) patch.nextActionNotes = fields['Next Action Notes'];
       allContacts[idx] = { ...allContacts[idx], ...patch };
@@ -2956,7 +2979,7 @@ async function resumeSequence() {
   if (!selectedContact) return;
   
   const step = selectedContact.step;
-  const li = selectedContact.liConnected;
+  const li = ownerLiConnected(selectedContact);
   
   // Work out what the next action notes should be at this step
   let nextNotes = '';
@@ -3018,12 +3041,16 @@ async function clearReminder() {
 }
 
 // TOGGLE LINKEDIN CONNECTED
-async function toggleLiConnected() {
+async function toggleLiConnected(who = 'louisa') {
   if (!selectedContact) return;
-  const newValue = !selectedContact.liConnected;
-  const fields = { 'LinkedIn Connected': newValue };
-  // If marking as connected while at step 2 (waiting after LI request), advance to Email 1 connected
-  if (newValue && selectedContact.step === 2) {
+  const field = who === 'john' ? 'LinkedIn Connected John' : 'LinkedIn Connected';
+  const current = who === 'john' ? selectedContact.liConnectedJohn : selectedContact.liConnected;
+  const newValue = !current;
+  const fields = { [field]: newValue };
+  // Only bring Email 1 forward when the contact's OWNER (the sender) connects,
+  // since the 3-vs-14-day timing is owner-based.
+  const isOwner = who === 'john' ? selectedContact.owner === 'John Daly' : selectedContact.owner !== 'John Daly';
+  if (newValue && selectedContact.step === 2 && isOwner) {
     fields['Next Action Notes'] = ['Send Email 1 - connected'];
     fields['Next Action Due'] = addDays(3);
     showToast('Marked connected — Email 1 due in 3 days ✓', 'success');
@@ -3614,7 +3641,7 @@ function renderOrgDetail(org) {
       <div style="flex:1;min-width:0;">
         <div style="font-size:0.82rem;font-weight:500;color:var(--tee-text);">${c.name}${ownerBadge}</div>
         <div style="font-size:0.72rem;color:var(--tee-muted);">${c.role || '—'}</div>
-        <div style="font-size:0.7rem;margin-top:2px;color:${statusColor};">${statusLabel}${c.liConnected ? '<span style="color:#0077b5;margin-left:6px;">· LI connected</span>' : ''}</div>
+        <div style="font-size:0.7rem;margin-top:2px;color:${statusColor};">${statusLabel}${c.liConnected ? '<span style="color:#0077b5;margin-left:6px;">· L LI</span>' : ''}${c.liConnectedJohn ? '<span style="color:#0077b5;margin-left:6px;">· J LI</span>' : ''}</div>
       </div>
       <div style="font-size:0.7rem;color:var(--tee-muted);align-self:center;">→</div>
     </div>`;
@@ -4565,6 +4592,7 @@ async function saveEditContact() {
         status: routing === 'warm' ? 'Ongoing Programme' : 'Active',
         relationshipStatus: relationshipStatus || '',
         liConnected: false,
+        liConnectedJohn: false,
         nextActionDue: routing === 'sequence' ? new Date().toISOString().split('T')[0] : '',
         nextActionNotes: routing === 'sequence' ? 'Send LI connection request' : '',
         interactionIds: [], followUpDate: '', dncReason: '',
