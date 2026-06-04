@@ -2788,6 +2788,8 @@ async function updateContact(id, fields, opts = {}) {
       if ('LinkedIn Connected John' in fields) patch.liConnectedJohn = !!fields['LinkedIn Connected John'];
       if ('Follow-up Date' in fields && fields['Follow-up Date']) patch.followUpDate = fields['Follow-up Date'];
       if ('Next Action Notes' in fields) patch.nextActionNotes = fields['Next Action Notes'];
+      if ('Sequence Step' in fields) patch.step = fields['Sequence Step'];
+      if ('Sequence Status' in fields) patch.status = fields['Sequence Status'];
       allContacts[idx] = { ...allContacts[idx], ...patch };
     }
     selectedContact = allContacts.find(c => c.id === id) || null;
@@ -3175,26 +3177,42 @@ async function confirmSetPosition() {
   document.getElementById('setpos-modal').classList.remove('show');
 
   const li = ownerLiConnected(selectedContact);
-  let fields, notesArr;
+  let due, notesArr;
   if (step === 0) {
+    due = null;
     notesArr = [];
-    fields = { 'Sequence Step': 0, 'Sequence Status': 'Active', 'Next Action Due': null, 'Next Action Notes': [] };
   } else {
-    const due = document.getElementById('setpos-due').value || addDays(0);
+    due = document.getElementById('setpos-due').value || addDays(0);
     const note = setPosNotesForStep(step, li);
     notesArr = note ? [note] : [];
-    fields = { 'Sequence Step': step, 'Sequence Status': 'Active', 'Next Action Due': due, 'Next Action Notes': notesArr };
   }
 
+  // Step / status / due in one call (no multiple-select fields here, so it won't
+  // silently fail). updateContact surfaces its own error toast on failure.
   try {
-    await updateContact(id, fields, { silent: true });
-  } catch(e) { return; } // updateContact already surfaces the error toast
+    await updateContact(id, { 'Sequence Step': step, 'Sequence Status': 'Active', 'Next Action Due': due }, { silent: true });
+  } catch(e) { return; }
 
-  // Keep local notes cache in sync (Airtable omits emptied fields from its response)
+  // Next Action Notes is a multiple-select — set it in its OWN PATCH, exactly as
+  // advanceSequence does, because combining it with other fields causes silent failures.
+  try {
+    await fetch(`${API_URL}/${id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Next Action Notes': notesArr } })
+    });
+  } catch(e) { console.log('Set position notes error:', e); }
+
+  // Force the local cache so the bucket, the blue action button and the due date all
+  // reflect the new position immediately, regardless of what Airtable echoes back.
   const idx = allContacts.findIndex(c => c.id === id);
-  if (idx > -1) allContacts[idx].nextActionNotes = notesArr;
+  if (idx > -1) {
+    allContacts[idx].step = step;
+    allContacts[idx].status = 'Active';
+    allContacts[idx].nextActionNotes = notesArr;
+    allContacts[idx].nextActionDue = due || '';
+  }
   selectedContact = allContacts.find(c => c.id === id) || selectedContact;
-  if (selectedContact) selectedContact.nextActionNotes = notesArr;
 
   try {
     const ints = await fetchInteractions(id);
