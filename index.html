@@ -1460,8 +1460,11 @@
       <input type="hidden" id="cf-salary" />
     </div>
     <div class="edit-field-group">
-      <label class="edit-label">Summary / notes</label>
-      <textarea class="edit-input" id="cf-summary" rows="3" placeholder="Brief summary of background and what they are looking for..." style="resize:vertical;"></textarea>
+      <label class="edit-label" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Summary / notes</span>
+        <span onclick="toggleSummaryExpand()" id="cf-summary-expand" style="font-size:0.72rem;color:var(--tee-accent);cursor:pointer;font-weight:500;">⤢ Expand</span>
+      </label>
+      <textarea class="edit-input" id="cf-summary" rows="10" placeholder="Brief summary of background and what they are looking for..." style="resize:vertical;min-height:200px;line-height:1.6;"></textarea>
     </div>
     <div id="cand-edit-saving" style="display:none;text-align:center;padding:0.5rem;font-size:0.82rem;color:var(--tee-muted);">Saving...</div>
     <div class="modal-btns" style="margin-top:0.5rem;">
@@ -5146,6 +5149,34 @@ function renderCandList(candidates) {
 }
 
 // SELECT CANDIDATE
+// Expand/collapse the candidate Summary/notes box so long first-call write-ups
+// can be read in one go.
+function toggleSummaryExpand() {
+  const ta = document.getElementById('cf-summary');
+  const btn = document.getElementById('cf-summary-expand');
+  if (!ta) return;
+  if (ta.dataset.expanded === '1') {
+    ta.style.height = '';
+    ta.style.minHeight = '200px';
+    ta.dataset.expanded = '0';
+    if (btn) btn.textContent = '⤢ Expand';
+  } else {
+    ta.style.minHeight = '';
+    ta.style.height = '60vh';
+    ta.dataset.expanded = '1';
+    if (btn) btn.textContent = '⤡ Collapse';
+    ta.focus();
+  }
+}
+
+// Reset the Summary box to its default (collapsed) size when the form opens.
+function resetSummaryBox() {
+  const ta = document.getElementById('cf-summary');
+  const btn = document.getElementById('cf-summary-expand');
+  if (ta) { ta.style.height = ''; ta.style.minHeight = '200px'; ta.dataset.expanded = '0'; }
+  if (btn) btn.textContent = '⤢ Expand';
+}
+
 async function selectCandidate(id) {
   selectedCandidate = allCandidates.find(c => c.id === id) || null;
   document.querySelectorAll('#cand-list .contact-card').forEach(el => el.classList.remove('selected'));
@@ -5510,6 +5541,7 @@ function openAddCandidateModal() {
   document.getElementById('cand-modal-sub').textContent = 'Create a new candidate record in Airtable.';
   ['cf-firstname','cf-lastname','cf-role','cf-email','cf-phone','cf-mobile','cf-linkedin','cf-cvurl','cf-salary','cf-location','cf-summary'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
   ['cf-status','cf-relationship','cf-availability','cf-notice','cf-travel','cf-contract','cf-dayrate'].forEach(id => { const el = document.getElementById(id); if(el) el.value = ''; });
+  resetSummaryBox();
   ['cf-specialism-picker','cf-qualifications-picker','cf-contract-picker','cf-dayrate-picker','cf-travel-picker','cf-salary-picker'].forEach(id => { const el = document.getElementById(id); if(el) el.innerHTML = ''; });
   candSectorExpertise = [];
   renderCandSectorTags();
@@ -5558,6 +5590,7 @@ function openEditCandidateModal() {
   document.getElementById('cf-salary').value = c.salary || '';
   document.getElementById('cf-location').value = c.location || '';
   document.getElementById('cf-summary').value = c.summary || '';
+  resetSummaryBox();
   document.getElementById('cf-status').value = c.status || '';
   document.getElementById('cf-relationship').value = Array.isArray(c.relationship) ? (c.relationship[0]||'') : (c.relationship||'');
   document.getElementById('cf-availability').value = c.availability || '';
