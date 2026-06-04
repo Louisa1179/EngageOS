@@ -558,6 +558,35 @@
   </div>
 </div>
 
+<!-- SET SEQUENCE POSITION MODAL -->
+<div class="modal-overlay" id="setpos-modal">
+  <div class="modal">
+    <div class="modal-title">Set sequence position</div>
+    <div class="modal-sub" id="setpos-modal-name"></div>
+    <div style="margin-bottom: 1rem;">
+      <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Move to step</label>
+      <select id="setpos-step" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: 'DM Sans', sans-serif; font-size: 0.9rem; appearance: none;">
+        <option value="0">Not started</option>
+        <option value="1">LI connection request</option>
+        <option value="2">Email 1</option>
+        <option value="3">Email 2</option>
+        <option value="4">Email 3</option>
+        <option value="5">LI message / InMail</option>
+        <option value="6">Follow-up call</option>
+      </select>
+    </div>
+    <div style="margin-bottom: 1rem;" id="setpos-due-wrap">
+      <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Next action due</label>
+      <input type="date" id="setpos-due" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: 'DM Sans', sans-serif; font-size: 0.9rem;">
+    </div>
+    <div class="modal-sub" id="setpos-note" style="margin-bottom:1.25rem;font-size:0.78rem;"></div>
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-yes" onclick="confirmSetPosition()">Apply</button>
+      <button class="modal-btn modal-btn-no" onclick="document.getElementById('setpos-modal').classList.remove('show')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- LINKEDIN CONNECTED MODAL -->
 <div class="modal-overlay" id="li-modal">
   <div class="modal">
@@ -1937,6 +1966,7 @@ async function fetchInteractions(contactId) {
       if (!resp.ok) return [];
       const data = await resp.json();
       return data.records.map(r => ({
+        id: r.id,
         subject: r.fields['Interaction Subject'] || '',
         type: r.fields['Type'] || '',
         date: r.fields['Date'] || '',
@@ -2523,7 +2553,7 @@ function renderPanel(contact, interactions) {
         </div>
       </div>` : ''}
       <div class="panel-section">
-        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">▶ Start sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">${markDoneLabel}</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
+        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">▶ Start sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">${markDoneLabel}</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-secondary" onclick="openSetPositionModal()">⇄ Set sequence position</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
       </div>
       <div class="panel-section">
         <div class="panel-section-label">Sequence progress</div>
@@ -2555,6 +2585,7 @@ function renderPanel(contact, interactions) {
                 ${i.notes ? `<div id="inote-${idx}" style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;line-height:1.5;display:none;">${i.notes}</div>
                 <div id="inote-preview-${idx}" style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;line-height:1.5;">${i.notes.slice(0,80)}${i.notes.length>80?'<span style="color:var(--tee-accent);"> · tap to read</span>':''}</div>` : ''}
               </div>
+              ${i.id ? `<div onclick="event.stopPropagation(); deleteInteraction('${i.id}')" title="Remove this interaction" style="flex-shrink:0;font-size:0.85rem;color:var(--tee-muted);opacity:0.4;cursor:pointer;padding:0 4px;line-height:1.3;" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.4';this.style.color='var(--tee-muted)'">✕</div>` : ''}
             </div>`).join('')
         }
       </div>
@@ -3069,6 +3100,109 @@ function toggleInteraction(idx) {
   const isHidden = full.style.display === 'none';
   full.style.display = isHidden ? 'block' : 'none';
   preview.style.display = isHidden ? 'none' : 'block';
+}
+
+// DELETE INTERACTION — removes a single logged interaction from Airtable.
+// Does NOT touch Sequence Step / bucket (those are a separate field); this only
+// tidies the interaction history. Guarded with a confirm so it can't mis-fire.
+async function deleteInteraction(intId) {
+  if (!intId) return;
+  if (!confirm('Remove this interaction permanently? This cannot be undone, and it does not change the contact\u2019s sequence position.')) return;
+  try {
+    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions/${intId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    if (!resp.ok) { showToast('Could not remove interaction', 'error'); return; }
+    // Drop the id from the local cache so it doesn't linger in the fetch window
+    if (selectedContact && Array.isArray(selectedContact.interactionIds)) {
+      selectedContact.interactionIds = selectedContact.interactionIds.filter(x => x !== intId);
+    }
+    showToast('Interaction removed', 'success');
+    if (selectedContact) {
+      const interactions = await fetchInteractions(selectedContact.id);
+      renderPanel(selectedContact, interactions);
+    }
+  } catch(e) {
+    console.log('Interaction delete error:', e);
+    showToast('Could not remove interaction', 'error');
+  }
+}
+
+// SET SEQUENCE POSITION — manual correction tool for the odd contact that's in the
+// wrong place. Acts on the selected contact ONLY, and only on Apply. Sets Sequence
+// Step, Next Action Due and Next Action Notes together so nothing is left stale.
+// Does not log an interaction and never touches any other contact.
+function setPosNotesForStep(step, li) {
+  if (step === 1) return 'Send LI connection request';
+  if (step === 2) return li ? 'Send Email 1 - connected' : 'Send Email 1 - not connected';
+  if (step === 3) return li ? 'Send Email 2 - connected' : 'Send Email 2 - not connected';
+  if (step === 4) return 'Send Email 3';
+  if (step === 5) return li ? 'LinkedIn Message - connected' : 'InMail - not connected';
+  if (step === 6) return 'Follow-up call';
+  return '';
+}
+
+function updateSetPositionNote() {
+  if (!selectedContact) return;
+  const step = parseInt(document.getElementById('setpos-step').value, 10) || 0;
+  const dueWrap = document.getElementById('setpos-due-wrap');
+  const noteEl = document.getElementById('setpos-note');
+  if (step === 0) {
+    dueWrap.style.display = 'none';
+    noteEl.textContent = 'Resets to not started — clears the due date and next action, and the Start sequence button returns.';
+  } else {
+    dueWrap.style.display = 'block';
+    noteEl.textContent = 'Next action will be set to: ' + setPosNotesForStep(step, ownerLiConnected(selectedContact)) + '.';
+  }
+}
+
+function openSetPositionModal() {
+  if (!selectedContact) return;
+  document.getElementById('setpos-modal-name').textContent = selectedContact.name || '';
+  const stepSel = document.getElementById('setpos-step');
+  stepSel.value = String(selectedContact.step || 0);
+  document.getElementById('setpos-due').value = addDays(0); // default due today
+  stepSel.onchange = updateSetPositionNote;
+  updateSetPositionNote();
+  document.getElementById('setpos-modal').classList.add('show');
+}
+
+async function confirmSetPosition() {
+  if (!selectedContact) return;
+  const id = selectedContact.id;
+  const step = parseInt(document.getElementById('setpos-step').value, 10) || 0;
+  document.getElementById('setpos-modal').classList.remove('show');
+
+  const li = ownerLiConnected(selectedContact);
+  let fields, notesArr;
+  if (step === 0) {
+    notesArr = [];
+    fields = { 'Sequence Step': 0, 'Sequence Status': 'Active', 'Next Action Due': null, 'Next Action Notes': [] };
+  } else {
+    const due = document.getElementById('setpos-due').value || addDays(0);
+    const note = setPosNotesForStep(step, li);
+    notesArr = note ? [note] : [];
+    fields = { 'Sequence Step': step, 'Sequence Status': 'Active', 'Next Action Due': due, 'Next Action Notes': notesArr };
+  }
+
+  try {
+    await updateContact(id, fields, { silent: true });
+  } catch(e) { return; } // updateContact already surfaces the error toast
+
+  // Keep local notes cache in sync (Airtable omits emptied fields from its response)
+  const idx = allContacts.findIndex(c => c.id === id);
+  if (idx > -1) allContacts[idx].nextActionNotes = notesArr;
+  selectedContact = allContacts.find(c => c.id === id) || selectedContact;
+  if (selectedContact) selectedContact.nextActionNotes = notesArr;
+
+  try {
+    const ints = await fetchInteractions(id);
+    renderPanel(selectedContact, ints);
+  } catch(e) { renderPanel(selectedContact, null); }
+  renderView();
+  const names = ['Not started','LI connection request','Email 1','Email 2','Email 3','LI message / InMail','Follow-up call'];
+  showToast('Moved to ' + (names[step] || ('step ' + step)), 'success');
 }
 
 // THEME TOGGLE
