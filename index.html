@@ -1455,6 +1455,26 @@
     </div>
     <div class="edit-row">
       <div class="edit-field-group">
+        <label class="edit-label">Country</label>
+        <select class="edit-input" id="cf-country" style="width:100%;" onchange="onGeoChange('country','cf-country','cf-region','cf-county','cf-city')"><option value="">— select —</option></select>
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Region</label>
+        <select class="edit-input" id="cf-region" style="width:100%;" onchange="onGeoChange('region','cf-country','cf-region','cf-county','cf-city')"><option value="">— select —</option></select>
+      </div>
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">County</label>
+        <select class="edit-input" id="cf-county" style="width:100%;" onchange="onGeoChange('county','cf-country','cf-region','cf-county','cf-city')"><option value="">— select —</option></select>
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">City / Town</label>
+        <select class="edit-input" id="cf-city" style="width:100%;"><option value="">— select —</option></select>
+      </div>
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group">
         <label class="edit-label">Email</label>
         <input type="email" class="edit-input" id="cf-email" placeholder="email@..." />
       </div>
@@ -5037,6 +5057,9 @@ async function loadCandidates() {
       subsectorExpertise: r.fields['Subsector Expertise'] ? r.fields['Subsector Expertise'].split(', ').map(s => s.trim()).filter(Boolean) : [],
       workedSectors: Array.isArray(r.fields['Worked Sectors']) ? r.fields['Worked Sectors'] : [],
       location: cf(r, 'Base Location'),
+      region: cf(r, 'Region'),
+      county: cf(r, 'County'),
+      cityTown: cf(r, 'City / Town'),
       willTravel: cf(r, 'Will Travel'),
       email: cf(r, 'Email') || cf(r, 'Email'),
       phone: cf(r, 'Landline'),
@@ -5464,6 +5487,8 @@ function renderCandPanel(c, interactions) {
       <div class="field-row"><span class="field-key">Contract type</span><span class="field-val">${candFieldStr(c.contractType) || '—'}</span></div>
       <div class="field-row"><span class="field-key">Day rate</span><span class="field-val">${c.dayRate || '—'}</span></div>
       <div class="field-row"><span class="field-key">Location</span><span class="field-val">${c.location || '—'}</span></div>
+      <div class="field-row"><span class="field-key">Region</span><span class="field-val">${c.region || '—'}</span></div>
+      <div class="field-row"><span class="field-key">County</span><span class="field-val">${c.county || '—'}</span></div>
       <div class="field-row"><span class="field-key">Will travel</span><span class="field-val">${c.willTravel || '—'}</span></div>
     </div>
 
@@ -5726,6 +5751,8 @@ function openAddCandidateModal() {
   document.getElementById('cand-delete-btn').style.display = 'none';
   document.getElementById('cand-delete-confirm').style.display = 'none';
   document.getElementById('cand-edit-saving').style.display = 'none';
+  // Geography cascade — fresh, default Country to United Kingdom
+  fetchGeographies().then(() => populateGeoDropdowns('cf-country','cf-region','cf-county','cf-city', 'United Kingdom', '', '', ''));
   initPrevEmpPicker([], []);
   document.getElementById('cand-edit-modal').classList.add('show');
   if (allOrgs.length === 0) ensureOrgsLoaded();
@@ -5761,6 +5788,8 @@ function openEditCandidateModal() {
   document.getElementById('cf-salary').value = c.salary || '';
   document.getElementById('cf-location').value = c.location || '';
   document.getElementById('cf-summary').value = c.summary || '';
+  // Geography cascade — load options then pre-select the candidate's saved values
+  fetchGeographies().then(() => populateGeoDropdowns('cf-country','cf-region','cf-county','cf-city', c.country || 'United Kingdom', c.region || '', c.county || '', c.cityTown || ''));
   resetSummaryBox();
   document.getElementById('cf-status').value = c.status || '';
   document.getElementById('cf-relationship').value = Array.isArray(c.relationship) ? (c.relationship[0]||'') : (c.relationship||'');
@@ -5857,6 +5886,13 @@ async function saveCandidateEdit() {
   if (dayrateVals.length > 0) fields['Day Rate Range'] = dayrateVals;
   const travelVals = getTagPickerValues('cf-travel-picker');
   if (travelVals.length > 0) fields['Will Travel'] = travelVals;
+  // Geography (single line text fields on the Candidates table)
+  const geoRegion = document.getElementById('cf-region')?.value?.trim();
+  const geoCounty = document.getElementById('cf-county')?.value?.trim();
+  const geoCity = document.getElementById('cf-city')?.value?.trim();
+  if (geoRegion) fields['Region'] = geoRegion;
+  if (geoCounty) fields['County'] = geoCounty;
+  if (geoCity) fields['City / Town'] = geoCity;
   selectFields.forEach(([elId, fn]) => { const v = document.getElementById(elId)?.value; if(v) fields[fn] = candFieldTypes[fn] === 'multipleSelects' ? [v] : v; });
   const relVal = document.getElementById('cf-relationship')?.value; if(relVal) fields['Relationship Context'] = candFieldTypes['Relationship Context'] === 'multipleSelects' ? [relVal] : relVal;
   if (specialisms.length > 0) fields['Specialisms'] = specialisms;
@@ -5876,7 +5912,7 @@ async function saveCandidateEdit() {
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || selectedCandidate.orgName) : selectedCandidate.orgName;
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
       if (idx > -1) {
-        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, email: fields['Email']||allCandidates[idx].email, phone: fields['Landline']||allCandidates[idx].phone, mobile: fields['Mobile']||allCandidates[idx].mobile, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary Objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary, previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
+        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, region: fields['Region']!==undefined?fields['Region']:allCandidates[idx].region, county: fields['County']!==undefined?fields['County']:allCandidates[idx].county, cityTown: fields['City / Town']!==undefined?fields['City / Town']:allCandidates[idx].cityTown, email: fields['Email']||allCandidates[idx].email, phone: fields['Landline']||allCandidates[idx].phone, mobile: fields['Mobile']||allCandidates[idx].mobile, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary Objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary, previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
         selectedCandidate = allCandidates[idx];
       }
       closeCandidateModal();
@@ -5890,7 +5926,7 @@ async function saveCandidateEdit() {
       data = await resp.json();
       if (!resp.ok) throw new Error(data.error?.message || 'Create failed');
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || '') : '';
-      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [], previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
+      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', region: fields['Region']||'', county: fields['County']||'', cityTown: fields['City / Town']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [], previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
       allCandidates.push(newCand);
       // If created from an assignment, create AC record linking them
       if (window._pendingACAssignmentId) {
