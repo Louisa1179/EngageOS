@@ -1550,6 +1550,24 @@
   </div>
 </div>
 
+<!-- CANDIDATE REMINDER MODAL -->
+<div class="modal-overlay" id="cand-reminder-modal">
+  <div class="modal">
+    <div class="modal-title">Set a reminder</div>
+    <div class="modal-sub" id="cand-reminder-name"></div>
+    <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Reminder date *</label>
+    <input type="date" id="cand-reminder-date" style="width:100%;background:#f5f7fa;border:1px solid var(--tee-border);border-radius:8px;padding:0.65rem 0.875rem;color:var(--tee-text);font-family:var(--font-sans,sans-serif);font-size:0.88rem;margin-bottom:0.75rem;" />
+    <label class="edit-label" style="margin-bottom:0.4rem;display:block;">Note (optional)</label>
+    <input type="text" id="cand-reminder-note" placeholder="e.g. Check in to stay in touch" style="width:100%;background:#f5f7fa;border:1px solid var(--tee-border);border-radius:8px;padding:0.65rem 0.875rem;color:var(--tee-text);font-family:var(--font-sans,sans-serif);font-size:0.88rem;margin-bottom:0.5rem;" />
+    <div class="modal-sub" style="font-size:0.74rem;margin-bottom:1rem;">Sets this candidate's next action date and note. Does not log an interaction.</div>
+    <div id="cand-reminder-saving" style="display:none;text-align:center;padding:0.5rem;font-size:0.82rem;color:var(--tee-muted);">Saving...</div>
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-yes" onclick="saveCandReminder()">Save</button>
+      <button class="modal-btn modal-btn-no" onclick="document.getElementById('cand-reminder-modal').classList.remove('show')">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
 
@@ -5436,6 +5454,7 @@ function renderCandPanel(c, interactions) {
     <div class="panel-section">
       <div class="panel-section-label">Actions</div>
       <div onclick="openCandLogModal()" class="btn-secondary" style="cursor:pointer;">+ Log interaction</div>
+      <div onclick="openCandReminderModal()" class="btn-secondary" style="cursor:pointer;">⏰ Set a reminder</div>
     </div>
 
     <div class="panel-section">
@@ -5961,6 +5980,47 @@ function closeCandidateLogModal() {
 
 function toggleCandReminderSection(checked) {
   document.getElementById('cand-reminder-fields').style.display = checked ? 'block' : 'none';
+}
+
+// STANDALONE CANDIDATE REMINDER — sets Next action date + note without logging an
+// interaction. Mirrors the reminder save used inside saveCandidateLog.
+function openCandReminderModal() {
+  if (!selectedCandidate) return;
+  document.getElementById('cand-reminder-name').textContent = selectedCandidate.name || '';
+  document.getElementById('cand-reminder-date').value = selectedCandidate.nextActionDate || '';
+  const existing = Array.isArray(selectedCandidate.nextActionNotes) ? selectedCandidate.nextActionNotes.join(', ') : (selectedCandidate.nextActionNotes || '');
+  document.getElementById('cand-reminder-note').value = existing;
+  document.getElementById('cand-reminder-saving').style.display = 'none';
+  document.getElementById('cand-reminder-modal').classList.add('show');
+}
+
+async function saveCandReminder() {
+  if (!selectedCandidate) return;
+  const date = document.getElementById('cand-reminder-date').value;
+  const note = document.getElementById('cand-reminder-note').value.trim();
+  if (!date) { showToast('Please set a reminder date', 'error'); return; }
+  document.getElementById('cand-reminder-saving').style.display = 'block';
+  try {
+    const r1 = await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': date } }) });
+    if (!r1.ok) { const e = await r1.json(); throw new Error(e.error?.message || 'Save failed'); }
+    // Next action notes saved separately, matching saveCandidateLog
+    await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action notes': note } }) });
+    const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
+    if (idx > -1) {
+      allCandidates[idx].nextActionDate = date;
+      allCandidates[idx].nextActionNotes = note ? [note] : [];
+      selectedCandidate = allCandidates[idx];
+    }
+    document.getElementById('cand-reminder-modal').classList.remove('show');
+    updateCandCounts();
+    renderCandList(filteredCandidates);
+    const ints = await fetchCandInteractions(selectedCandidate.id);
+    renderCandPanel(selectedCandidate, ints);
+    showToast('Reminder set for ' + date, 'success');
+  } catch(e) {
+    document.getElementById('cand-reminder-saving').style.display = 'none';
+    showToast('Failed: ' + e.message, 'error');
+  }
 }
 
 async function saveCandidateLog() {
