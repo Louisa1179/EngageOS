@@ -1118,9 +1118,10 @@
         <select id="ac-stage" class="edit-input">
           <option value="">Select stage...</option>
           <option>Considering</option><option>Contacted</option><option>Responded</option>
-          <option>Interested</option><option>Not Interested</option><option>Submitted</option>
-          <option>Interviewing</option><option>Offered</option><option>Accepted</option>
-          <option>Rejected</option><option>Withdrawn</option><option>Placed</option>
+          <option>Interested</option><option>Submitted</option>
+          <option>Interview Arranged</option><option>Interviewed</option><option>2nd Interview</option>
+          <option>Interviewing</option><option>Offered</option><option>Accepted</option><option>Placed</option>
+          <option>Not Interested</option><option>Rejected</option><option>Withdrawn</option>
         </select>
       </div>
       <div class="edit-field-group">
@@ -6220,6 +6221,39 @@ const AC_STAGE_TEXT = {
   'Rejected': '#ef4444', 'Withdrawn': '#9ca3af', 'Placed': '#059669'
 };
 
+// PIPELINE PROGRESS — visual stage tracker. The seven milestones below are the
+// at-a-glance flow; each detailed Stage value maps onto one of them. Out-of-process
+// outcomes map to -1 and show as a red marker rather than a position on the track.
+const PIPELINE_MILESTONES = ['Sourced','Submitted','Interview','2nd interview','Offer','Accepted','Placed'];
+const STAGE_TO_MILESTONE = {
+  'Considering':0,'Contacted':0,'Responded':0,'Interested':0,
+  'Submitted':1,
+  'Interview Arranged':2,'Interviewed':2,'Interviewing':2,
+  '2nd Interview':3,
+  'Offered':4,'Offer':4,
+  'Accepted':5,
+  'Placed':6,
+  'Not Interested':-1,'Rejected':-1,'Withdrawn':-1
+};
+function pipelineStepperHTML(stage) {
+  const m = STAGE_TO_MILESTONE[stage];
+  if (m === -1) {
+    return `<div style="display:flex;align-items:center;gap:0.4rem;margin-top:0.55rem;"><span style="font-size:0.7rem;color:#ef4444;font-weight:600;">● ${stage}</span><span style="font-size:0.66rem;color:var(--tee-muted);">— out of process</span></div>`;
+  }
+  const cur = (m === undefined || m === null) ? 0 : m;
+  const segs = PIPELINE_MILESTONES.map((label, idx) => {
+    const done = idx < cur, active = idx === cur;
+    const bar = active ? 'var(--tee-accent)' : (done ? 'rgba(53,150,194,0.45)' : 'var(--tee-border)');
+    const tcol = active ? 'var(--tee-text)' : (done ? 'var(--tee-muted)' : 'var(--tee-border)');
+    return `<div style="flex:1;text-align:center;min-width:0;">
+      <div style="height:5px;border-radius:3px;background:${bar};margin-bottom:3px;"></div>
+      <div style="font-size:0.6rem;color:${tcol};font-weight:${active?'600':'400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
+    </div>`;
+  }).join('');
+  return `<div style="display:flex;gap:3px;margin-top:0.55rem;">${segs}</div>`;
+}
+
+
 async function loadACPipeline(assignmentId) {
   const list = document.getElementById('ac-pipeline-list');
   if (!list) return;
@@ -6286,7 +6320,14 @@ function renderACPipeline(nameMap) {
     return;
   }
   const fmt = v => v ? new Date(v).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '';
-  list.innerHTML = acRecords.map(r => {
+  // Assignment-level tally across the milestones, for the at-a-glance summary strip
+  const tally = PIPELINE_MILESTONES.map(() => 0);
+  let outCount = 0;
+  acRecords.forEach(r => { const m = STAGE_TO_MILESTONE[r.stage]; if (m === -1) outCount++; else tally[(m === undefined ? 0 : m)]++; });
+  const summaryPills = PIPELINE_MILESTONES.map((l, i) => `<span style="font-size:0.7rem;color:var(--tee-muted);"><span style="font-weight:700;color:${tally[i] ? 'var(--tee-text)' : 'var(--tee-border)'};">${tally[i]}</span> ${l}</span>`).join('<span style="color:var(--tee-border);">·</span>');
+  const outPill = outCount ? `<span style="color:var(--tee-border);">·</span><span style="font-size:0.7rem;color:#ef4444;"><span style="font-weight:700;">${outCount}</span> out</span>` : '';
+  const summary = `<div style="display:flex;flex-wrap:wrap;gap:0.55rem;align-items:center;padding:0.55rem 0.8rem;background:var(--tee-card);border:1px solid var(--tee-border);border-radius:8px;margin-bottom:0.75rem;">${summaryPills}${outPill}</div>`;
+  list.innerHTML = summary + acRecords.map(r => {
     const name = nameMap[r.candidateId] || 'Unknown candidate';
     const stageBg = AC_STAGE_COLORS[r.stage] || 'rgba(53,150,194,0.1)';
     const stageCol = AC_STAGE_TEXT[r.stage] || 'var(--tee-accent)';
@@ -6295,7 +6336,8 @@ function renderACPipeline(nameMap) {
         <div style="font-size:0.88rem;font-weight:500;color:var(--tee-text);">${name}</div>
         ${r.stage ? `<span style="font-size:0.72rem;padding:2px 10px;border-radius:10px;background:${stageBg};color:${stageCol};font-weight:500;">${r.stage}</span>` : ''}
       </div>
-      <div style="display:flex;gap:1rem;flex-wrap:wrap;">
+      ${pipelineStepperHTML(r.stage)}
+      <div style="display:flex;gap:1rem;flex-wrap:wrap;margin-top:0.55rem;">
         ${r.cvDate ? `<span style="font-size:0.75rem;color:var(--tee-muted);">CV: ${fmt(r.cvDate)}</span>` : ''}
         ${r.cvLink ? `<a href="${r.cvLink}" target="_blank" onclick="event.stopPropagation()" style="font-size:0.75rem;color:var(--tee-accent);">View CV ↗</a>` : ''}
         ${r.coverLink ? `<a href="${r.coverLink}" target="_blank" onclick="event.stopPropagation()" style="font-size:0.75rem;color:var(--tee-accent);">View cover letter ↗</a>` : ''}
