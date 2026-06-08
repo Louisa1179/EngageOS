@@ -6320,10 +6320,17 @@ function renderACPipeline(nameMap) {
     return;
   }
   const fmt = v => v ? new Date(v).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : '';
-  // Assignment-level tally across the milestones, for the at-a-glance summary strip
+  // Assignment-level funnel: each stage counts candidates who have reached it or
+  // beyond (so the numbers step down through the funnel). Sourced = everyone attached.
   const tally = PIPELINE_MILESTONES.map(() => 0);
   let outCount = 0;
-  acRecords.forEach(r => { const m = STAGE_TO_MILESTONE[r.stage]; if (m === -1) outCount++; else tally[(m === undefined ? 0 : m)]++; });
+  acRecords.forEach(r => {
+    const m = STAGE_TO_MILESTONE[r.stage];
+    if (m === -1) { outCount++; return; }
+    const cur = (m === undefined ? 0 : m);
+    for (let i = 1; i <= cur; i++) tally[i]++;
+  });
+  tally[0] = acRecords.length; // everyone you've attached was sourced, including any now out of process
   const summaryPills = PIPELINE_MILESTONES.map((l, i) => `<span style="font-size:0.7rem;color:var(--tee-muted);"><span style="font-weight:700;color:${tally[i] ? 'var(--tee-text)' : 'var(--tee-border)'};">${tally[i]}</span> ${l}</span>`).join('<span style="color:var(--tee-border);">·</span>');
   const outPill = outCount ? `<span style="color:var(--tee-border);">·</span><span style="font-size:0.7rem;color:#ef4444;"><span style="font-weight:700;">${outCount}</span> out</span>` : '';
   const summary = `<div style="display:flex;flex-wrap:wrap;gap:0.55rem;align-items:center;padding:0.55rem 0.8rem;background:var(--tee-card);border:1px solid var(--tee-border);border-radius:8px;margin-bottom:0.75rem;">${summaryPills}${outPill}</div>`;
