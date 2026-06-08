@@ -2623,15 +2623,17 @@ function renderPanel(contact, interactions) {
           interactions.length === 0 ? 
           '<div style="font-size:0.78rem;color:var(--tee-muted);">No interactions logged yet</div>' :
           interactions.map((i, idx) => `
-            <div onclick="toggleInteraction(${idx})" style="display:flex;gap:0.625rem;padding:0.5rem 0;border-bottom:1px solid rgba(255,255,255,0.04);cursor:pointer;" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
-              <div style="width:8px;height:8px;border-radius:50%;background:${typeColor(i.type)};flex-shrink:0;margin-top:5px;"></div>
-              <div style="flex:1;min-width:0;">
-                <div style="font-size:0.78rem;color:var(--tee-text);font-weight:500;">${i.subject || i.type}</div>
-                <div style="font-size:0.72rem;color:var(--tee-muted);margin-top:1px;">${i.date ? new Date(i.date).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : ''} · ${timeAgo(i.date)}${i.loggedBy ? ` · <span style="color:var(--tee-accent);font-weight:500;">${i.loggedBy.split(' ')[0]}</span>` : ''}</div>
-                ${i.notes ? `<div id="inote-${idx}" style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;line-height:1.5;display:none;">${i.notes}</div>
-                <div id="inote-preview-${idx}" style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;line-height:1.5;">${i.notes.slice(0,80)}${i.notes.length>80?'<span style="color:var(--tee-accent);"> · tap to read</span>':''}</div>` : ''}
+            <div style="border-bottom:1px solid rgba(255,255,255,0.04);padding:0.5rem 0;">
+              <div onclick="${i.id ? 'toggleIntRow(this)' : ''}" style="display:flex;gap:0.625rem;cursor:${i.id ? 'pointer' : 'default'};" onmouseover="this.style.opacity='0.8'" onmouseout="this.style.opacity='1'">
+                <div style="width:8px;height:8px;border-radius:50%;background:${typeColor(i.type)};flex-shrink:0;margin-top:5px;"></div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:0.78rem;color:var(--tee-text);font-weight:500;">${i.subject || i.type}</div>
+                  <div style="font-size:0.72rem;color:var(--tee-muted);margin-top:1px;">${i.date ? new Date(i.date).toLocaleDateString('en-GB', {day:'numeric',month:'short',year:'numeric'}) : ''} · ${timeAgo(i.date)}${i.loggedBy ? ` · <span style="color:var(--tee-accent);font-weight:500;">${i.loggedBy.split(' ')[0]}</span>` : ''}</div>
+                  ${i.notes ? `<div style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;line-height:1.5;">${i.notes.slice(0,80)}${i.notes.length>80?'…':''}</div>` : ''}
+                </div>
+                ${i.id ? `<div onclick="event.stopPropagation(); deleteInteraction('${i.id}')" title="Remove this interaction" style="flex-shrink:0;font-size:0.85rem;color:var(--tee-muted);opacity:0.4;cursor:pointer;padding:0 4px;line-height:1.3;" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.4';this.style.color='var(--tee-muted)'">✕</div>` : ''}
               </div>
-              ${i.id ? `<div onclick="event.stopPropagation(); deleteInteraction('${i.id}')" title="Remove this interaction" style="flex-shrink:0;font-size:0.85rem;color:var(--tee-muted);opacity:0.4;cursor:pointer;padding:0 4px;line-height:1.3;" onmouseover="this.style.opacity='1';this.style.color='#ef4444'" onmouseout="this.style.opacity='0.4';this.style.color='var(--tee-muted)'">✕</div>` : ''}
+              ${i.id ? `<div class="int-editor-wrap" style="display:none;margin-top:0.5rem;padding-top:0.5rem;border-top:1px dashed var(--tee-border);">${intEditorHTML(i, 'contact')}</div>` : ''}
             </div>`).join('')
         }
       </div>
@@ -3148,6 +3150,66 @@ function toggleInteraction(idx) {
   const isHidden = full.style.display === 'none';
   full.style.display = isHidden ? 'block' : 'none';
   preview.style.display = isHidden ? 'none' : 'block';
+}
+
+// SHARED INTERACTION EDITOR — full edit (subject, type, date, notes) used by every
+// interaction list (contacts, candidates, pipeline, client activity). Inputs are
+// read relative to the button, so it works even in mirrored panels with no ID clash.
+function intEditorHTML(i, ctx) {
+  const types = ['Email','LinkedIn Message','Phone Call','Teams Meeting','Face to Face Meeting','Submission','Note','Stage Change'];
+  const list = (i.type && !types.includes(i.type)) ? [i.type, ...types] : types;
+  const opts = list.map(t => `<option value="${t}"${t===i.type?' selected':''}>${t}</option>`).join('');
+  const subj = (i.subject || '').replace(/"/g,'&quot;');
+  const lbl = 'font-size:0.64rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:0.2rem;';
+  const inp = 'width:100%;font-size:0.78rem;padding:0.35rem 0.5rem;border:1px solid var(--tee-border);border-radius:6px;background:var(--tee-card);color:var(--tee-text);box-sizing:border-box;';
+  return `<div class="int-editor" data-ctx="${ctx}" data-int-id="${i.id}" style="display:grid;gap:0.5rem;text-align:left;">
+    <div><label style="${lbl}">Subject</label><input type="text" class="int-f-subject" value="${subj}" style="${inp}" /></div>
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+      <div style="flex:1;min-width:130px;"><label style="${lbl}">Type</label><select class="int-f-type" style="${inp}">${opts}</select></div>
+      <div style="flex:1;min-width:130px;"><label style="${lbl}">Date</label><input type="date" class="int-f-date" value="${i.date || ''}" style="${inp}" /></div>
+    </div>
+    <div><label style="${lbl}">Notes / body</label><textarea class="int-f-notes" rows="6" placeholder="Add or update the detail. You can keep appending to a running trail here." style="${inp}line-height:1.6;resize:vertical;">${i.notes || ''}</textarea></div>
+    <div><button onclick="saveInteractionEditFromBtn(this)" style="font-size:0.74rem;padding:0.4rem 0.9rem;background:var(--tee-accent);color:#fff;border:none;border-radius:6px;cursor:pointer;">Save changes</button></div>
+  </div>`;
+}
+
+async function saveInteractionEditFromBtn(btn) {
+  const box = btn.closest('.int-editor');
+  if (!box) return;
+  const intId = box.dataset.intId;
+  const ctx = box.dataset.ctx;
+  if (!intId) return;
+  const subject = (box.querySelector('.int-f-subject')?.value || '').trim();
+  const type = box.querySelector('.int-f-type')?.value || '';
+  const date = box.querySelector('.int-f-date')?.value || '';
+  const notes = box.querySelector('.int-f-notes')?.value || '';
+  const fields = { 'Interaction Subject': subject, 'Type': type, 'Notes': notes };
+  if (date) fields['Date'] = date;
+  btn.textContent = 'Saving...'; btn.disabled = true;
+  try {
+    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions/${intId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields, typecast: true })
+    });
+    if (!resp.ok) { showToast('Could not save changes', 'error'); btn.textContent = 'Save changes'; btn.disabled = false; return; }
+    showToast('Interaction updated', 'success');
+    if (ctx === 'assign') { if (selectedAssignment) loadAssignInteractions(selectedAssignment.id); }
+    else if (ctx === 'pipeline') { if (typeof editingACId !== 'undefined' && editingACId) loadACInteractions(editingACId); }
+    else if (ctx === 'candidate') { if (selectedCandidate) { const ints = await fetchCandInteractions(selectedCandidate.id); renderCandPanel(selectedCandidate, ints); } }
+    else if (ctx === 'contact') { if (selectedContact) { const ints = await fetchInteractions(selectedContact.id); renderPanel(selectedContact, ints); } }
+  } catch(e) {
+    console.log('Edit interaction error:', e);
+    showToast('Could not save changes', 'error');
+    btn.textContent = 'Save changes'; btn.disabled = false;
+  }
+}
+
+// Toggle the editor under a contact interaction row (relative to the clicked header).
+function toggleIntRow(headerEl) {
+  const wrap = headerEl.parentElement.querySelector('.int-editor-wrap');
+  if (!wrap) return;
+  wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
 }
 
 // DELETE INTERACTION — removes a single logged interaction from Airtable.
@@ -5447,7 +5509,7 @@ function renderCandPanel(c, interactions) {
           ${i.type ? `<span style="font-size:0.68rem;color:var(--tee-muted);background:var(--tee-mid);padding:2px 8px;border-radius:8px;flex-shrink:0;">${i.type}</span>` : ''}
           <span style="font-size:0.7rem;color:var(--tee-muted);flex-shrink:0;" id="${uid}-arrow">▼</span>
         </div>
-        ${i.notes ? `<div id="${uid}" style="display:none;padding:0.65rem 0.875rem;border-top:1px solid var(--tee-border);font-size:0.78rem;color:var(--tee-text);line-height:1.6;white-space:pre-wrap;">${i.notes}</div>` : `<div id="${uid}" style="display:none;"></div>`}
+        <div id="${uid}" style="display:none;padding:0.65rem 0.875rem;border-top:1px solid var(--tee-border);">${intEditorHTML(i, 'candidate')}</div>
       </div>`;
     }).join('');
   }
@@ -6400,7 +6462,7 @@ async function loadACInteractions(acId) {
           ${i.type ? `<span style="font-size:0.65rem;color:var(--tee-muted);background:var(--tee-mid);padding:2px 6px;border-radius:6px;flex-shrink:0;">${i.type}</span>` : ''}
           <span style="font-size:0.65rem;color:var(--tee-muted);" id="${uid}-arrow">▼</span>
         </div>
-        ${i.notes ? `<div id="${uid}" style="display:none;padding:0.6rem 0.875rem;border-top:1px solid var(--tee-border);font-size:0.76rem;color:var(--tee-text);line-height:1.6;white-space:pre-wrap;">${i.notes}</div>` : `<div id="${uid}" style="display:none;"></div>`}
+        <div id="${uid}" style="display:none;padding:0.6rem 0.875rem;border-top:1px solid var(--tee-border);">${intEditorHTML(i, 'pipeline')}</div>
       </div>`;
     }).join('');
   } catch(e) {
@@ -6642,7 +6704,7 @@ async function loadAssignInteractions(assignId) {
           ${i.type ? `<span style="font-size:0.65rem;color:var(--tee-muted);background:var(--tee-mid);padding:2px 6px;border-radius:6px;flex-shrink:0;">${i.type}</span>` : ''}
           <span style="font-size:0.65rem;color:var(--tee-muted);" id="${uid}-arrow">▼</span>
         </div>
-        <div id="${uid}" style="display:none;padding:0.55rem 0.75rem;border-top:1px solid var(--tee-border);"><div style="display:flex;align-items:center;gap:0.45rem;flex-wrap:wrap;${i.notes ? 'margin-bottom:0.6rem;' : ''}"><span style="font-size:0.7rem;color:var(--tee-muted);">Date sent</span><input type="date" id="${uid}-date" value="${i.date || ''}" style="font-size:0.74rem;padding:0.3rem 0.5rem;border:1px solid var(--tee-border);border-radius:6px;background:var(--tee-card);color:var(--tee-text);" /><button onclick="editAssignIntDate('${i.id}','${uid}')" style="font-size:0.7rem;padding:0.32rem 0.7rem;background:var(--tee-accent);color:#fff;border:none;border-radius:6px;cursor:pointer;">Save date</button></div>${i.notes ? `<div style="font-size:0.76rem;color:var(--tee-text);line-height:1.6;white-space:pre-wrap;">${i.notes}</div>` : ''}</div>
+        <div id="${uid}" style="display:none;padding:0.6rem 0.75rem;border-top:1px solid var(--tee-border);">${intEditorHTML(i, 'assign')}</div>
       </div>`;
     }).join('');
   } catch(e) {
@@ -6676,6 +6738,31 @@ async function editAssignIntDate(intId, uid) {
   } catch(e) {
     console.log('Edit interaction date error:', e);
     showToast('Could not update date', 'error');
+  }
+}
+
+// Full edit of a client interaction — subject, type, date and notes together.
+// typecast:true so the Type single-select accepts the value safely.
+async function saveAssignIntEdit(intId, uid) {
+  if (!intId) return;
+  const subject = (document.getElementById(`${uid}-subject`)?.value || '').trim();
+  const type = document.getElementById(`${uid}-type`)?.value || '';
+  const date = document.getElementById(`${uid}-date`)?.value || '';
+  const notes = document.getElementById(`${uid}-notes`)?.value || '';
+  const fields = { 'Interaction Subject': subject, 'Type': type, 'Notes': notes };
+  if (date) fields['Date'] = date;
+  try {
+    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions/${intId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields, typecast: true })
+    });
+    if (!resp.ok) { showToast('Could not save changes', 'error'); return; }
+    showToast('Interaction updated', 'success');
+    if (selectedAssignment) loadAssignInteractions(selectedAssignment.id);
+  } catch(e) {
+    console.log('Edit interaction error:', e);
+    showToast('Could not save changes', 'error');
   }
 }
 
