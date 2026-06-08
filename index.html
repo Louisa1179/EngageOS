@@ -1138,9 +1138,17 @@
         <input type="date" id="ac-cv-date" class="edit-input" />
       </div>
       <div class="edit-field-group">
-        <label class="edit-label">CV / covering sheet link</label>
+        <label class="edit-label">CV link</label>
         <input type="url" id="ac-cv-link" class="edit-input" placeholder="https://..." />
       </div>
+    </div>
+
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">Covering letter / intro link</label>
+        <input type="url" id="ac-cover-link" class="edit-input" placeholder="https://..." />
+      </div>
+      <div class="edit-field-group"></div>
     </div>
 
     <div class="edit-field-group">
@@ -6174,6 +6182,7 @@ async function loadACPipeline(assignmentId) {
       notes: r.fields['Notes'] || '',
       cvDate: r.fields['CV Submitted Date'] || '',
       cvLink: r.fields['Submitted CV Link'] || '',
+      coverLink: r.fields['Covering Letter Link'] || '',
       submittedBy: r.fields['Submitted By'] || '',
       dateAdded: r.fields['Date Added'] || '',
       interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : []
@@ -6227,6 +6236,7 @@ function renderACPipeline(nameMap) {
       <div style="display:flex;gap:1rem;flex-wrap:wrap;">
         ${r.cvDate ? `<span style="font-size:0.75rem;color:var(--tee-muted);">CV: ${fmt(r.cvDate)}</span>` : ''}
         ${r.cvLink ? `<a href="${r.cvLink}" target="_blank" onclick="event.stopPropagation()" style="font-size:0.75rem;color:var(--tee-accent);">View CV ↗</a>` : ''}
+        ${r.coverLink ? `<a href="${r.coverLink}" target="_blank" onclick="event.stopPropagation()" style="font-size:0.75rem;color:var(--tee-accent);">View cover letter ↗</a>` : ''}
         ${r.submittedBy ? `<span style="font-size:0.75rem;color:var(--tee-muted);">${r.submittedBy.split(' ')[0]}</span>` : ''}
       </div>
       ${r.notes ? `<div style="font-size:0.78rem;color:var(--tee-muted);margin-top:0.35rem;line-height:1.5;">${r.notes}</div>` : ''}
@@ -6251,6 +6261,7 @@ async function openACModal(acId, assignmentId) {
   document.getElementById('ac-stage').value = '';
   document.getElementById('ac-cv-date').value = '';
   document.getElementById('ac-cv-link').value = '';
+  document.getElementById('ac-cover-link').value = '';
   document.getElementById('ac-submitted-by').value = '';
   document.getElementById('ac-notes').value = '';
   document.getElementById('ac-cand-dropdown').style.display = 'none';
@@ -6270,6 +6281,7 @@ async function openACModal(acId, assignmentId) {
       document.getElementById('ac-stage').value = rec.stage || '';
       document.getElementById('ac-cv-date').value = rec.cvDate || '';
       document.getElementById('ac-cv-link').value = rec.cvLink || '';
+      document.getElementById('ac-cover-link').value = rec.coverLink || '';
       document.getElementById('ac-submitted-by').value = rec.submittedBy || '';
       document.getElementById('ac-notes').value = rec.notes || '';
       document.getElementById('ac-delete-btn').style.display = 'block';
@@ -6456,6 +6468,7 @@ async function saveACRecord() {
     'Stage': document.getElementById('ac-stage').value || null,
     'Notes': document.getElementById('ac-notes').value || null,
     'Submitted CV Link': document.getElementById('ac-cv-link').value || null,
+    'Covering Letter Link': document.getElementById('ac-cover-link').value || null,
     'Submitted By': document.getElementById('ac-submitted-by').value || null,
   };
   const cvDate = document.getElementById('ac-cv-date').value;
