@@ -6642,7 +6642,7 @@ async function loadAssignInteractions(assignId) {
           ${i.type ? `<span style="font-size:0.65rem;color:var(--tee-muted);background:var(--tee-mid);padding:2px 6px;border-radius:6px;flex-shrink:0;">${i.type}</span>` : ''}
           <span style="font-size:0.65rem;color:var(--tee-muted);" id="${uid}-arrow">▼</span>
         </div>
-        ${i.notes ? `<div id="${uid}" style="display:none;padding:0.55rem 0.75rem;border-top:1px solid var(--tee-border);font-size:0.76rem;color:var(--tee-text);line-height:1.6;white-space:pre-wrap;">${i.notes}</div>` : `<div id="${uid}" style="display:none;"></div>`}
+        <div id="${uid}" style="display:none;padding:0.55rem 0.75rem;border-top:1px solid var(--tee-border);"><div style="display:flex;align-items:center;gap:0.45rem;flex-wrap:wrap;${i.notes ? 'margin-bottom:0.6rem;' : ''}"><span style="font-size:0.7rem;color:var(--tee-muted);">Date sent</span><input type="date" id="${uid}-date" value="${i.date || ''}" style="font-size:0.74rem;padding:0.3rem 0.5rem;border:1px solid var(--tee-border);border-radius:6px;background:var(--tee-card);color:var(--tee-text);" /><button onclick="editAssignIntDate('${i.id}','${uid}')" style="font-size:0.7rem;padding:0.32rem 0.7rem;background:var(--tee-accent);color:#fff;border:none;border-radius:6px;cursor:pointer;">Save date</button></div>${i.notes ? `<div style="font-size:0.76rem;color:var(--tee-text);line-height:1.6;white-space:pre-wrap;">${i.notes}</div>` : ''}</div>
       </div>`;
     }).join('');
   } catch(e) {
@@ -6657,6 +6657,26 @@ function toggleAssignInt(uid) {
   const isOpen = body.style.display !== 'none';
   body.style.display = isOpen ? 'none' : 'block';
   if (arrow) arrow.textContent = isOpen ? '▼' : '▲';
+}
+
+// Edit the date of a logged client interaction (e.g. correct a date sent).
+async function editAssignIntDate(intId, uid) {
+  if (!intId) return;
+  const val = document.getElementById(`${uid}-date`)?.value;
+  if (!val) { showToast('Pick a date first', 'error'); return; }
+  try {
+    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions/${intId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Date': val } })
+    });
+    if (!resp.ok) { showToast('Could not update date', 'error'); return; }
+    showToast('Date updated', 'success');
+    if (selectedAssignment) loadAssignInteractions(selectedAssignment.id);
+  } catch(e) {
+    console.log('Edit interaction date error:', e);
+    showToast('Could not update date', 'error');
+  }
 }
 
 function openTermsModal(assignId) {
