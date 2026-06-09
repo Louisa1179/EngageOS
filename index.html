@@ -627,7 +627,7 @@
     <div class="modal-title">Edit organisation</div>
     <div style="margin-bottom:1rem;">
       <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Organisation name</label>
-      <input type="text" class="edit-input" id="org-edit-name" style="width:100%;" />
+      <input type="text" class="edit-input" id="org-edit-name" style="width:100%;" oninput="checkOrgDupInline()" />
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.75rem;margin-bottom:1rem;">
       <div>
@@ -790,11 +790,11 @@
     <div class="edit-row">
       <div class="edit-field-group">
         <label class="edit-label">First name</label>
-        <input type="text" class="edit-input" id="ef-firstname" placeholder="First name" />
+        <input type="text" class="edit-input" id="ef-firstname" placeholder="First name" oninput="checkContactDupInline()" />
       </div>
       <div class="edit-field-group">
         <label class="edit-label">Last name</label>
-        <input type="text" class="edit-input" id="ef-lastname" placeholder="Last name" />
+        <input type="text" class="edit-input" id="ef-lastname" placeholder="Last name" oninput="checkContactDupInline()" />
       </div>
     </div>
 
@@ -3547,6 +3547,7 @@ async function openOrgEditModal() {
 
 function closeOrgEditModal() {
   document.getElementById('org-edit-modal').classList.remove('show');
+  const w = document.getElementById('org-dup-warn'); if (w) { w.style.display = 'none'; w.innerHTML = ''; }
 }
 
 async function confirmDeleteOrg() {
@@ -3592,6 +3593,36 @@ function findOrgDuplicates(name){
   return allOrgs.filter(o => looksLikeDuplicate(name, o.name, true)).slice(0,5);
 }
 
+// Live inline warning shown under the name field as you type, so a likely duplicate
+// is flagged before any other data is entered. Non-blocking.
+function _renderDupWarn(anchorEl, warnId, matches, label, describe) {
+  let warn = document.getElementById(warnId);
+  if (!warn) {
+    if (!anchorEl || !anchorEl.parentNode) return;
+    warn = document.createElement('div');
+    warn.id = warnId;
+    warn.style.cssText = 'margin-top:0.45rem;font-size:0.76rem;color:#b45309;background:rgba(245,158,11,0.12);border:1px solid rgba(245,158,11,0.35);border-radius:8px;padding:0.5rem 0.7rem;line-height:1.5;';
+    anchorEl.parentNode.insertBefore(warn, anchorEl.nextSibling);
+  }
+  if (!matches.length) { warn.style.display = 'none'; warn.innerHTML = ''; return; }
+  warn.innerHTML = '\u26a0\ufe0f Possible duplicate ' + label + ': ' + matches.map(describe).join(', ') + '. Worth checking before you save.';
+  warn.style.display = 'block';
+}
+function checkOrgDupInline() {
+  const el = document.getElementById('org-edit-name');
+  const name = (orgEditMode === 'add' ? (el?.value || '').trim() : '');
+  const matches = name.length >= 3 ? findOrgDuplicates(name) : [];
+  _renderDupWarn(el, 'org-dup-warn', matches, 'organisation', o => o.name + (o.sector ? ' (' + o.sector + ')' : ''));
+}
+function checkContactDupInline() {
+  const fn = (document.getElementById('ef-firstname')?.value || '').trim();
+  const ln = (document.getElementById('ef-lastname')?.value || '').trim();
+  const email = (document.getElementById('ef-email')?.value || '').trim();
+  const full = (editMode === 'add') ? [fn, ln].filter(Boolean).join(' ') : '';
+  const matches = full.length >= 3 ? findContactDuplicates(full, email) : [];
+  _renderDupWarn(document.getElementById('ef-lastname'), 'contact-dup-warn', matches, 'contact', c => c.name + (c.orgName ? ' (' + c.orgName + ')' : ''));
+}
+
 async function saveOrgEdit() {
   const name = document.getElementById('org-edit-name').value.trim();
   const sector = document.getElementById('org-edit-sector').value.trim();
@@ -3606,12 +3637,6 @@ async function saveOrgEdit() {
   const website = document.getElementById('org-edit-website').value.trim();
   const notes = document.getElementById('org-edit-notes').value.trim();
   if (!name) { showToast('Organisation name is required', 'error'); return; }
-  if (orgEditMode === 'add') {
-    const dupes = findOrgDuplicates(name);
-    if (dupes.length && !confirm('This looks like it might already be an organisation:\n\n' + dupes.map(o => '\u2022 ' + o.name + (o.sector ? '  (' + o.sector + ')' : '')).join('\n') + '\n\nAdd anyway? Cancel to go back and check.')) {
-      return;
-    }
-  }
   document.getElementById('org-edit-saving').style.display = 'block';
   try {
     const fields = { 'Organisation Name': name };
@@ -4749,6 +4774,7 @@ function openAddContactModal() {
 function closeEditModal() {
   document.getElementById('edit-modal').classList.remove('show');
   document.getElementById('org-dropdown').style.display = 'none';
+  const w = document.getElementById('contact-dup-warn'); if (w) { w.style.display = 'none'; w.innerHTML = ''; }
 }
 
 async function confirmDeleteContact() {
@@ -4798,13 +4824,6 @@ async function saveEditContact() {
 
   const fullName = [firstName, lastName].filter(Boolean).join(' ');
 
-  if (editMode === 'add') {
-    const dupes = findContactDuplicates(fullName, email);
-    if (dupes.length && !confirm('This looks like it might already be a contact:\n\n' + dupes.map(c => '\u2022 ' + c.name + (c.orgName ? '  (' + c.orgName + ')' : '')).join('\n') + '\n\nAdd anyway? Cancel to go back and check.')) {
-      document.getElementById('edit-saving').style.display = 'none';
-      return;
-    }
-  }
 
   // Determine tier from contact level
   const tierMap = { 'Board Level': '1', 'CEO/MD': '1', 'C-Level': '1', 'Director Level': '1', 'Head of': '1', 'Senior Management': '2', 'Management': '2', 'Junior': '3' };
