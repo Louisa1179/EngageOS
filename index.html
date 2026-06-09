@@ -3567,6 +3567,31 @@ async function confirmDeleteOrg() {
   }
 }
 
+// DUPLICATE DETECTION — soft, non-blocking. Flags likely matches on add so a near
+// twin can be caught before it's created. Never blocks; just asks you to confirm.
+function dupNorm(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim(); }
+function dupBase(s){ const stripped = (s||'').replace(/\s*[-\u2013\u2014]\s*[^-\u2013\u2014]*$/, ''); return dupNorm(stripped) || dupNorm(s); }
+function dupTokens(s){ return dupNorm(s).split(' ').filter(t => t.length >= 3); }
+function looksLikeDuplicate(aName, bName, useBase){
+  const a = useBase ? dupBase(aName) : dupNorm(aName);
+  const b = useBase ? dupBase(bName) : dupNorm(bName);
+  if (!a || !b) return false;
+  if (a === b) return true;
+  const shorter = a.length <= b.length ? a : b, longer = a.length <= b.length ? b : a;
+  if (shorter.length >= 5 && longer.includes(shorter)) return true;
+  const ta = dupTokens(aName), tb = dupTokens(bName);
+  const shared = ta.filter(t => tb.includes(t));
+  if (shared.length >= 2 && shared.length / Math.max(ta.length, tb.length, 1) >= 0.5) return true;
+  return false;
+}
+function findContactDuplicates(name, email){
+  const e = (email||'').toLowerCase().trim();
+  return allContacts.filter(c => looksLikeDuplicate(name, c.name, false) || (e && c.email && e === c.email.toLowerCase().trim())).slice(0,5);
+}
+function findOrgDuplicates(name){
+  return allOrgs.filter(o => looksLikeDuplicate(name, o.name, true)).slice(0,5);
+}
+
 async function saveOrgEdit() {
   const name = document.getElementById('org-edit-name').value.trim();
   const sector = document.getElementById('org-edit-sector').value.trim();
@@ -3581,6 +3606,12 @@ async function saveOrgEdit() {
   const website = document.getElementById('org-edit-website').value.trim();
   const notes = document.getElementById('org-edit-notes').value.trim();
   if (!name) { showToast('Organisation name is required', 'error'); return; }
+  if (orgEditMode === 'add') {
+    const dupes = findOrgDuplicates(name);
+    if (dupes.length && !confirm('This looks like it might already be an organisation:\n\n' + dupes.map(o => '\u2022 ' + o.name + (o.sector ? '  (' + o.sector + ')' : '')).join('\n') + '\n\nAdd anyway? Cancel to go back and check.')) {
+      return;
+    }
+  }
   document.getElementById('org-edit-saving').style.display = 'block';
   try {
     const fields = { 'Organisation Name': name };
@@ -4766,6 +4797,14 @@ async function saveEditContact() {
   document.getElementById('edit-saving').style.display = 'block';
 
   const fullName = [firstName, lastName].filter(Boolean).join(' ');
+
+  if (editMode === 'add') {
+    const dupes = findContactDuplicates(fullName, email);
+    if (dupes.length && !confirm('This looks like it might already be a contact:\n\n' + dupes.map(c => '\u2022 ' + c.name + (c.orgName ? '  (' + c.orgName + ')' : '')).join('\n') + '\n\nAdd anyway? Cancel to go back and check.')) {
+      document.getElementById('edit-saving').style.display = 'none';
+      return;
+    }
+  }
 
   // Determine tier from contact level
   const tierMap = { 'Board Level': '1', 'CEO/MD': '1', 'C-Level': '1', 'Director Level': '1', 'Head of': '1', 'Senior Management': '2', 'Management': '2', 'Junior': '3' };
