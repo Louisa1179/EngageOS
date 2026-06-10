@@ -1119,7 +1119,7 @@
           <option value="">Select stage...</option>
           <option>Considering</option><option>Contacted</option><option>Responded</option>
           <option>Interested</option><option>Submitted</option>
-          <option>Interview Arranged</option><option>Interviewed</option><option>2nd Interview</option>
+          <option>Interview Arranged</option><option>Awaiting Interview Feedback</option><option>2nd Interview</option>
           <option>Interviewing</option><option>Offered</option><option>Accepted</option><option>Placed</option>
           <option>Not Interested</option><option>Rejected</option><option>Withdrawn</option>
         </select>
@@ -1810,6 +1810,7 @@ function saveSetup() {
   updateToggleUI(owner);
   loadContacts();
   setTimeout(() => loadAllContactsForCounting(), 500);
+  loadSelectOptions().then(refreshDynamicSelects);
 }
 
 function resetSetup() {
@@ -1829,6 +1830,7 @@ window.onload = async function() {
     renderSidebar();
     await loadContacts();
     loadAllContactsForCounting();
+    loadSelectOptions().then(refreshDynamicSelects);
     // Restore last workspace
     const savedWs = localStorage.getItem('tee_workspace');
     if (savedWs && savedWs !== 'bd') {
@@ -5160,6 +5162,52 @@ const CAND_API_URL = `https://api.airtable.com/v0/${BASE_ID}/${CAND_TABLE_ID}`;
 const AC_TABLE_ID = 'tblGslTI7bZzoVCKH';
 const AC_API_URL = `https://api.airtable.com/v0/${BASE_ID}/${AC_TABLE_ID}`;
 
+// LIVE SELECT OPTIONS — reads single-select options straight from Airtable's field
+// definitions so dropdowns only ever offer values that exist (no "create new option"
+// errors). Falls back to the built-in lists if the schema read is unavailable.
+let schemaOptions = {};
+async function loadSelectOptions() {
+  try {
+    const resp = await fetch(`https://api.airtable.com/v0/meta/bases/${BASE_ID}/tables`, { headers: { Authorization: `Bearer ${getToken()}` } });
+    if (!resp.ok) { console.log('Schema read unavailable (status ' + resp.status + ') — using built-in option lists.'); return; }
+    const data = await resp.json();
+    (data.tables || []).forEach(t => {
+      (t.fields || []).forEach(f => {
+        const choices = f.options && f.options.choices;
+        if (Array.isArray(choices)) {
+          const names = choices.map(c => c.name);
+          schemaOptions[t.id + '::' + f.name] = names;
+          schemaOptions[t.name + '::' + f.name] = names;
+        }
+      });
+    });
+  } catch(e) { console.log('Schema read error — using built-in option lists.', e); }
+}
+const STAGE_FALLBACK = ['Considering','Contacted','Responded','Interested','Submitted','Interview Arranged','Awaiting Interview Feedback','2nd Interview','Interviewing','Offered','Accepted','Placed','Not Interested','Rejected','Withdrawn'];
+const STATUS_FALLBACK = ['Active','Shortlisting','Interviewing','Offer','Closed','Lost'];
+const IR35_FALLBACK = ['Inside IR35','Outside IR35','Not Applicable'];
+const REMTYPE_FALLBACK = ['Salaried','FTC Salary','Day rate','Hourly rate'];
+function optionsFor(tableKey, field, fallback) {
+  return schemaOptions[tableKey + '::' + field] || fallback;
+}
+function populateSelectOptions(el, options, placeholder) {
+  if (!el) return;
+  el.innerHTML = `<option value="">${placeholder}</option>` + options.map(o => `<option>${o}</option>`).join('');
+}
+function setSelectVal(el, val) {
+  if (!el) return;
+  if (val && !Array.from(el.options).some(o => o.value === val || o.text === val)) {
+    const opt = document.createElement('option'); opt.text = val; el.add(opt);
+  }
+  el.value = val || '';
+}
+function refreshDynamicSelects() {
+  populateSelectOptions(document.getElementById('ac-stage'), optionsFor(AC_TABLE_ID, 'Stage', STAGE_FALLBACK), 'Select stage...');
+  populateSelectOptions(document.getElementById('ae-status'), optionsFor('Assignments', 'Status', STATUS_FALLBACK), 'Select...');
+  populateSelectOptions(document.getElementById('ae-ir35'), optionsFor('Assignments', 'IR35 Status', IR35_FALLBACK), 'Select...');
+  populateSelectOptions(document.getElementById('ae-remtype'), optionsFor('Assignments', 'Remuneration Type', REMTYPE_FALLBACK), 'Select...');
+}
+
 let allCandidates = [];
 let filteredCandidates = [];
 let selectedCandidate = null;
@@ -6308,7 +6356,7 @@ const PIPELINE_MILESTONES = ['Sourced','Submitted','Interview','2nd interview','
 const STAGE_TO_MILESTONE = {
   'Considering':0,'Contacted':0,'Responded':0,'Interested':0,
   'Submitted':1,
-  'Interview Arranged':2,'Interviewed':2,'Interviewing':2,
+  'Interview Arranged':2,'Awaiting Interview Feedback':2,'Interviewed':2,'Interviewing':2,
   '2nd Interview':3,
   'Offered':4,'Offer':4,
   'Accepted':5,
@@ -6391,6 +6439,7 @@ async function loadACPipeline(assignmentId) {
     }
 
     renderACPipeline(nameMap);
+    if (selectedAssignment && document.getElementById('interview-stages-list')) loadInterviewStages(selectedAssignment.id);
   } catch(e) {
     if (list) list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.82rem;">Error: ${e.message}</div>`;
   }
@@ -6448,6 +6497,7 @@ function renderACPipeline(nameMap) {
 }
 
 async function openACModal(acId, assignmentId) {
+  refreshDynamicSelects();
   currentACAssignmentId = assignmentId;
   editingACId = acId;
   const modal = document.getElementById('ac-modal');
@@ -6482,7 +6532,7 @@ async function openACModal(acId, assignmentId) {
         document.getElementById('ac-cand-selected').style.display = 'flex';
         document.getElementById('ac-cand-search').style.display = 'none';
       }
-      document.getElementById('ac-stage').value = rec.stage || '';
+      setSelectVal(document.getElementById('ac-stage'), rec.stage || '');
       document.getElementById('ac-cv-date').value = rec.cvDate || '';
       document.getElementById('ac-int1-date').value = rec.interview1Date || '';
       document.getElementById('ac-int2-date').value = rec.interview2Date || '';
@@ -7090,6 +7140,81 @@ function selectAssignment(id) {
   renderAssignDetail(selectedAssignment);
 }
 
+async function loadInterviewStages(assignmentId) {
+  const list = document.getElementById('interview-stages-list');
+  if (!list) return;
+  try {
+    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent('Interview Stages')}?pageSize=100`, {
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message || 'Failed to load');
+
+    const assignmentName = selectedAssignment?.name || '';
+    const stages = (data.records || []).map(r => {
+      const asg = r.fields['Assignment'] || [];
+      return {
+        id: r.id,
+        name: r.fields['Stage Name'] || '',
+        number: (r.fields['Stage Number'] != null) ? r.fields['Stage Number'] : null,
+        format: r.fields['Format'] || '',
+        details: r.fields['Details'] || '',
+        interviewers: Array.isArray(r.fields['Interviewers']) ? r.fields['Interviewers'] : [],
+        assignmentRef: Array.isArray(asg) ? (asg[0] || '') : asg
+      };
+    }).filter(s => s.assignmentRef === assignmentId || s.assignmentRef === assignmentName);
+
+    stages.sort((a,b) => {
+      const an = a.number==null?999:a.number, bn = b.number==null?999:b.number;
+      if (an!==bn) return an-bn;
+      return (a.name||'').localeCompare(b.name||'');
+    });
+
+    if (stages.length === 0) {
+      list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.82rem;padding:0.25rem 0;">No interview stages yet. Add them in the Interview Stages table in Airtable, linked to this assignment.</div>`;
+      return;
+    }
+
+    const candName = id => { const c = allCandidates.find(x => x.id === id); return c ? c.name : id; };
+    const interviewerName = v => {
+      if (typeof v === 'string' && v.startsWith('rec')) { const c = allContacts.find(x => x.id === v); return c ? c.name : v; }
+      return v;
+    };
+    const fmtD = v => v ? new Date(v).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '';
+
+    list.innerHTML = stages.map(s => {
+      let stageCandStages = [], dateField = null;
+      if (s.number === 1) { stageCandStages = ['Interview Arranged','Awaiting Interview Feedback']; dateField = 'interview1Date'; }
+      else if (s.number === 2) { stageCandStages = ['2nd Interview']; dateField = 'interview2Date'; }
+      const cands = (acRecords || []).filter(r => stageCandStages.includes(r.stage));
+      const intvNames = s.interviewers.map(interviewerName).filter(Boolean);
+
+      return `<div style="background:var(--tee-card);border:1px solid var(--tee-border);border-radius:10px;padding:1rem;margin-bottom:0.75rem;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+          <div style="font-size:0.95rem;font-weight:600;color:var(--tee-text);">${s.name || ('Stage ' + (s.number||''))}</div>
+          ${s.format ? `<span style="font-size:0.72rem;background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:999px;padding:0.2rem 0.6rem;color:var(--tee-muted);">${s.format}</span>` : ''}
+        </div>
+        ${s.details ? `<div style="font-size:0.83rem;color:var(--tee-text);line-height:1.5;white-space:pre-wrap;margin-bottom:0.75rem;">${s.details}</div>` : ''}
+        <div style="display:flex;flex-wrap:wrap;gap:2rem;">
+          <div style="min-width:140px;">
+            <div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem;">Interviewers</div>
+            ${intvNames.length ? intvNames.map(n => `<div style="font-size:0.83rem;color:var(--tee-text);margin-bottom:0.15rem;">${n}</div>`).join('') : '<div style="font-size:0.82rem;color:var(--tee-muted);">–</div>'}
+          </div>
+          <div style="min-width:180px;">
+            <div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem;">Candidates at this stage</div>
+            ${cands.length ? cands.map(r => {
+              const d = dateField ? fmtD(r[dateField]) : '';
+              return `<div style="font-size:0.83rem;color:var(--tee-text);margin-bottom:0.15rem;">${candName(r.candidateId)}${d ? ` <span style="color:var(--tee-muted);">· ${d}</span>` : ''}</div>`;
+            }).join('') : `<div style="font-size:0.82rem;color:var(--tee-muted);">${(s.number===1||s.number===2) ? 'None at this stage yet' : 'Set Stage Number to 1 or 2 to link pipeline candidates'}</div>`}
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.82rem;padding:0.25rem 0;">Couldn't load interview stages: ${e.message}</div>`;
+  }
+}
+
 function renderAssignDetail(a) {
   const panel = document.getElementById('assign-detail');
   if (!panel || !a) return;
@@ -7123,12 +7248,8 @@ function renderAssignDetail(a) {
     </div>
 
     <div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1.25rem;margin-bottom:1rem;">
-      <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.875rem;">Process</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
-        ${detailBlock('Interview 1', fmt(a.int1))}
-        ${detailBlock('Interview 2', fmt(a.int2))}
-        ${detailBlock('Interview 3', fmt(a.int3))}
-      </div>
+      <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.875rem;">Interview Stages</div>
+      <div id="interview-stages-list"><div style="color:var(--tee-muted);font-size:0.82rem;">Loading...</div></div>
     </div>
 
     ${a.notes ? `
@@ -7179,6 +7300,7 @@ function renderAssignDetail(a) {
   `;
   loadAssignInteractions(a.id);
   loadACPipeline(a.id);
+  loadInterviewStages(a.id);
 }
 
 function detailBlock(label, value) {
@@ -7190,6 +7312,7 @@ function detailBlock(label, value) {
 
 function openAssignEditModal(id) {
   editingAssignId = id;
+  refreshDynamicSelects();
   const modal = document.getElementById('assign-edit-modal');
   const title = document.getElementById('assign-modal-title');
   const sub = document.getElementById('assign-modal-sub');
@@ -7205,11 +7328,11 @@ function openAssignEditModal(id) {
     title.textContent = 'Edit assignment';
     sub.textContent = 'Update this assignment record.';
     document.getElementById('ae-name').value = a.name;
-    document.getElementById('ae-status').value = a.status || '';
+    setSelectVal(document.getElementById('ae-status'), a.status || '');
     orgSel.value = a.orgIds?.[0] || '';
     document.getElementById('ae-jobtitle').value = a.jobTitle || '';
-    document.getElementById('ae-ir35').value = a.ir35 || '';
-    document.getElementById('ae-remtype').value = a.remType || '';
+    setSelectVal(document.getElementById('ae-ir35'), a.ir35 || '');
+    setSelectVal(document.getElementById('ae-remtype'), a.remType || '');
     document.getElementById('ae-remvalue').value = a.remValue || '';
     document.getElementById('ae-feeamount').value = a.feeAmount || '';
     document.getElementById('ae-feepct').value = a.feePct || '';
