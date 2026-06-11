@@ -6472,6 +6472,12 @@ async function loadACPipeline(assignmentId) {
       s2Cand:   !!r.fields['Stage 2 Candidate Feedback'],
       s3Client: !!r.fields['Stage 3 Client Feedback'],
       s3Cand:   !!r.fields['Stage 3 Candidate Feedback'],
+      s1ClientN: r.fields['Stage 1 Client Feedback Notes'] || '',
+      s1CandN:   r.fields['Stage 1 Candidate Feedback Notes'] || '',
+      s2ClientN: r.fields['Stage 2 Client Feedback Notes'] || '',
+      s2CandN:   r.fields['Stage 2 Candidate Feedback Notes'] || '',
+      s3ClientN: r.fields['Stage 3 Client Feedback Notes'] || '',
+      s3CandN:   r.fields['Stage 3 Candidate Feedback Notes'] || '',
       offerDate: r.fields['Offer Date'] || '',
       startDate: r.fields['Start Date'] || '',
       submittedBy: r.fields['Submitted By'] || '',
@@ -7206,6 +7212,7 @@ function selectAssignment(id) {
 // Interview Stages: fetched once per assignment, then rendered from cache so that
 // feedback toggles re-render instantly without re-hitting Airtable.
 let interviewStagesData = [];
+let openNoteKey = null; // `${acId}|${n}|${which}` of the feedback note currently being edited
 
 // Furthest interview round a pipeline candidate has reached. Drives which cards a
 // candidate appears on and which feedback boxes are enabled. Out-of-process and
@@ -7284,16 +7291,46 @@ function renderInterviewStages() {
     .filter(r => acRoundReached(r) >= 1)
     .sort((a,b) => candName(a.candidateId).localeCompare(candName(b.candidateId)));
 
+  const escHTML = s => (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const keyBaseOf = which => which === 'Client' ? 'Client' : 'Cand';
+
   const feedbackToggle = (r, n, which) => {
     if (!Number.isInteger(n) || n < 1 || n > 3) return ''; // feedback fields exist only for rounds 1–3
-    const keyBase = which === 'Client' ? 'Client' : 'Cand';
-    const on = !!r['s' + n + keyBase];
+    const kb = keyBaseOf(which);
     const reached = acRoundReached(r) >= n;
-    const box = on ? '☑' : '☐';
     if (!reached) {
       return `<span style="font-size:0.74rem;color:var(--tee-muted);opacity:0.4;cursor:not-allowed;user-select:none;">☐ ${which}</span>`;
     }
-    return `<span onclick="toggleStageFeedback('${r.id}',${n},'${which}')" style="font-size:0.74rem;color:${on ? 'var(--tee-accent)' : 'var(--tee-muted)'};cursor:pointer;user-select:none;" title="${on ? 'Received' : 'Not yet received'} — click to toggle">${box} ${which}</span>`;
+    const on = !!r['s' + n + kb];
+    const hasNote = !!(r['s' + n + kb + 'N'] && r['s' + n + kb + 'N'].trim());
+    const box = on ? '☑' : '☐';
+    return `<span style="display:inline-flex;align-items:center;gap:0.35rem;">
+      <span onclick="toggleStageFeedback('${r.id}',${n},'${which}')" style="font-size:0.74rem;color:${on ? 'var(--tee-accent)' : 'var(--tee-muted)'};cursor:pointer;user-select:none;" title="${on ? 'Received' : 'Not yet received'} — click to toggle">${box} ${which}</span>
+      <span onclick="toggleNoteEditor('${r.id}',${n},'${which}')" title="${hasNote ? 'Edit note' : 'Add note'}" style="cursor:pointer;font-size:0.72rem;color:${hasNote ? 'var(--tee-accent)' : 'var(--tee-muted)'};user-select:none;">✎</span>
+    </span>`;
+  };
+
+  const sideNote = (r, n, which) => {
+    if (!Number.isInteger(n) || n < 1 || n > 3) return '';
+    if (acRoundReached(r) < n) return '';
+    const kb = keyBaseOf(which);
+    const note = r['s' + n + kb + 'N'] || '';
+    const key = `${r.id}|${n}|${which}`;
+    if (openNoteKey === key) {
+      return `<div style="margin-top:0.4rem;">
+        <div style="font-size:0.64rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.25rem;">${which} feedback</div>
+        <textarea id="note-${r.id}-${n}-${which}" rows="3" style="width:100%;box-sizing:border-box;background:#f5f7fa;border:1px solid var(--tee-border);border-radius:8px;padding:0.5rem 0.65rem;font-family:'DM Sans',sans-serif;font-size:0.82rem;color:var(--tee-text);resize:vertical;outline:none;">${escHTML(note)}</textarea>
+        <div style="display:flex;gap:0.5rem;margin-top:0.35rem;">
+          <button onclick="saveStageFeedbackNote('${r.id}',${n},'${which}')" style="background:var(--tee-accent);color:white;border:none;border-radius:7px;padding:0.3rem 0.75rem;font-size:0.74rem;cursor:pointer;font-family:'DM Sans',sans-serif;">Save</button>
+          <button onclick="closeNoteEditor()" style="background:transparent;color:var(--tee-muted);border:1px solid var(--tee-border);border-radius:7px;padding:0.3rem 0.75rem;font-size:0.74rem;cursor:pointer;font-family:'DM Sans',sans-serif;">Cancel</button>
+        </div>
+      </div>`;
+    }
+    if (note.trim()) {
+      return `<div onclick="toggleNoteEditor('${r.id}',${n},'${which}')" title="Click to edit" style="margin-top:0.35rem;font-size:0.8rem;color:var(--tee-text);line-height:1.45;white-space:pre-wrap;cursor:pointer;padding:0.45rem 0.6rem;background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:8px;">
+        <span style="font-size:0.64rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.05em;display:block;margin-bottom:0.15rem;">${which}</span>${escHTML(note)}</div>`;
+    }
+    return '';
   };
 
   list.innerHTML = stages.map(s => {
@@ -7301,12 +7338,16 @@ function renderInterviewStages() {
     const intvNames = s.interviewers.map(interviewerName).filter(Boolean);
     const candRows = inProcess.map(r => {
       const reached = acRoundReached(r) >= n;
-      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.4rem 0;border-top:1px solid var(--tee-border);">
-        <div style="font-size:0.83rem;color:${reached ? 'var(--tee-text)' : 'var(--tee-muted)'};${reached ? '' : 'opacity:0.6;'}">${candName(r.candidateId)}</div>
-        <div style="display:flex;gap:0.9rem;flex-shrink:0;">
-          ${feedbackToggle(r, n, 'Client')}
-          ${feedbackToggle(r, n, 'Candidate')}
+      return `<div style="padding:0.5rem 0;border-top:1px solid var(--tee-border);">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
+          <div style="font-size:0.83rem;color:${reached ? 'var(--tee-text)' : 'var(--tee-muted)'};${reached ? '' : 'opacity:0.6;'}">${candName(r.candidateId)}</div>
+          <div style="display:flex;gap:0.9rem;flex-shrink:0;align-items:center;">
+            ${feedbackToggle(r, n, 'Client')}
+            ${feedbackToggle(r, n, 'Candidate')}
+          </div>
         </div>
+        ${sideNote(r, n, 'Client')}
+        ${sideNote(r, n, 'Candidate')}
       </div>`;
     }).join('');
 
@@ -7359,6 +7400,56 @@ async function toggleStageFeedback(acId, n, which) {
     r[key] = !newVal;         // revert
     renderInterviewStages();
     showToast(`Couldn't save feedback: ${e.message}`, 'error');
+  }
+}
+
+function toggleNoteEditor(acId, n, which) {
+  const key = `${acId}|${n}|${which}`;
+  openNoteKey = (openNoteKey === key) ? null : key;
+  renderInterviewStages();
+  if (openNoteKey) {
+    const ta = document.getElementById(`note-${acId}-${n}-${which}`);
+    if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+  }
+}
+
+function closeNoteEditor() {
+  openNoteKey = null;
+  renderInterviewStages();
+}
+
+async function saveStageFeedbackNote(acId, n, which) {
+  const r = (acRecords || []).find(x => x.id === acId);
+  if (!r) return;
+  const kb = which === 'Client' ? 'Client' : 'Cand';
+  const ta = document.getElementById(`note-${acId}-${n}-${which}`);
+  const val = ta ? ta.value : (r['s' + n + kb + 'N'] || '');
+  const noteField = `Stage ${n} ${which} Feedback Notes`;
+  const boolField = `Stage ${n} ${which} Feedback`;
+  const prevNote = r['s' + n + kb + 'N'] || '';
+  const prevBool = !!r['s' + n + kb];
+  // Saving a note marks the tick received, unless it's already ticked or the note is blank.
+  const setBool = !!val.trim() && !prevBool;
+  const fields = { [noteField]: val };
+  if (setBool) fields[boolField] = true;
+  // optimistic
+  r['s' + n + kb + 'N'] = val;
+  if (setBool) r['s' + n + kb] = true;
+  openNoteKey = null;
+  renderInterviewStages();
+  try {
+    const resp = await fetch(`${AC_API_URL}/${acId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields })
+    });
+    if (!resp.ok) { const d = await resp.json(); throw new Error(d.error?.message || 'Save failed'); }
+    showToast('Feedback saved', 'success');
+  } catch(e) {
+    r['s' + n + kb + 'N'] = prevNote;   // revert
+    if (setBool) r['s' + n + kb] = prevBool;
+    renderInterviewStages();
+    showToast(`Couldn't save note: ${e.message}`, 'error');
   }
 }
 
