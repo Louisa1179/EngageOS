@@ -1119,8 +1119,9 @@
           <option value="">Select stage...</option>
           <option>Considering</option><option>Contacted</option><option>Responded</option>
           <option>Interested</option><option>Submitted</option>
-          <option>Interview Arranged</option><option>Awaiting Interview Feedback</option><option>2nd Interview</option>
-          <option>Interviewing</option><option>Offered</option><option>Accepted</option><option>Placed</option>
+          <option>Arranging Interview</option><option>1st Interview</option><option>Awaiting Interview Feedback</option>
+          <option>2nd Interview</option><option>3rd Interview</option>
+          <option>Offered</option><option>Accepted</option><option>Placed</option>
           <option>Not Interested</option><option>Rejected</option><option>Withdrawn</option>
         </select>
       </div>
@@ -1375,6 +1376,56 @@
       <button class="modal-cancel" onclick="closeAssignEditModal()">Cancel</button>
       <span id="assign-edit-saving" style="display:none;font-size:0.82rem;color:var(--tee-muted);align-self:center;">Saving...</span>
       <button class="modal-save" onclick="saveAssignEdit()">Save assignment</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD / EDIT INTERVIEW STAGE MODAL -->
+<div class="modal-overlay" id="stage-edit-modal">
+  <div class="modal edit-modal" style="max-width:560px;">
+    <div class="modal-title" id="stage-modal-title">Add interview stage</div>
+    <div class="modal-sub" id="stage-modal-sub">Create an interview stage for this assignment.</div>
+    <div class="edit-row">
+      <div class="edit-field-group" style="flex:2;">
+        <label class="edit-label">Stage name</label>
+        <input type="text" id="se-name" class="edit-input" placeholder="e.g. First interview" />
+      </div>
+      <div class="edit-field-group" style="flex:1;">
+        <label class="edit-label">Stage number</label>
+        <input type="number" id="se-number" class="edit-input" min="1" step="1" placeholder="1" />
+      </div>
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group" style="flex:1;">
+        <label class="edit-label">Format</label>
+        <select id="se-format" class="edit-input"><option value="">Select...</option></select>
+      </div>
+      <div class="edit-field-group" style="flex:1;">
+        <label class="edit-label">Stage date</label>
+        <input type="date" id="se-date" class="edit-input" />
+      </div>
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group" style="flex:1;">
+        <label class="edit-label">Details</label>
+        <textarea id="se-details" class="edit-input" rows="4" style="resize:vertical;" placeholder="Questions, presentation brief, logistics — varies per interview"></textarea>
+      </div>
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group" style="flex:1;">
+        <label class="edit-label">Interviewers</label>
+        <div id="se-intv-chips" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:0.4rem;"></div>
+        <input type="text" id="se-intv-search" class="edit-input" placeholder="Search contacts to add..." autocomplete="off" oninput="searchStageInterviewers()" />
+        <div id="se-intv-results" style="position:relative;"></div>
+      </div>
+    </div>
+    <div style="display:flex;gap:0.75rem;justify-content:space-between;align-items:center;margin-top:1rem;">
+      <button id="se-delete" onclick="deleteStage()" style="display:none;background:transparent;border:1px solid rgba(239,68,68,0.4);color:#ef4444;border-radius:8px;padding:0.5rem 0.875rem;font-size:0.8rem;cursor:pointer;font-family:'DM Sans',sans-serif;">Delete stage</button>
+      <div style="display:flex;gap:0.75rem;align-items:center;margin-left:auto;">
+        <button class="modal-cancel" onclick="closeStageModal()">Cancel</button>
+        <span id="se-saving" style="display:none;font-size:0.82rem;color:var(--tee-muted);align-self:center;">Saving...</span>
+        <button class="modal-save" onclick="saveStage()">Save stage</button>
+      </div>
     </div>
   </div>
 </div>
@@ -5183,7 +5234,7 @@ async function loadSelectOptions() {
     });
   } catch(e) { console.log('Schema read error — using built-in option lists.', e); }
 }
-const STAGE_FALLBACK = ['Considering','Contacted','Responded','Interested','Submitted','Interview Arranged','Awaiting Interview Feedback','2nd Interview','Interviewing','Offered','Accepted','Placed','Not Interested','Rejected','Withdrawn'];
+const STAGE_FALLBACK = ['Considering','Contacted','Responded','Interested','Submitted','Arranging Interview','1st Interview','Awaiting Interview Feedback','2nd Interview','3rd Interview','Offered','Accepted','Placed','Not Interested','Rejected','Withdrawn'];
 const STATUS_FALLBACK = ['Active','Shortlisting','Interviewing','Offer','Closed','Lost'];
 const IR35_FALLBACK = ['Inside IR35','Outside IR35','Not Applicable'];
 const REMTYPE_FALLBACK = ['Salaried','FTC Salary','Day rate','Hourly rate'];
@@ -6334,7 +6385,11 @@ const AC_STAGE_COLORS = {
   'Interested': 'rgba(16,185,129,0.25)',
   'Not Interested': 'rgba(239,68,68,0.1)',
   'Submitted': 'rgba(124,58,237,0.2)',
-  'Interviewing': 'rgba(124,58,237,0.3)',
+  'Arranging Interview': 'rgba(124,58,237,0.18)',
+  '1st Interview': 'rgba(124,58,237,0.3)',
+  'Awaiting Interview Feedback': 'rgba(124,58,237,0.24)',
+  '2nd Interview': 'rgba(124,58,237,0.4)',
+  '3rd Interview': 'rgba(124,58,237,0.5)',
   'Offered': 'rgba(5,150,105,0.25)',
   'Accepted': 'rgba(5,150,105,0.4)',
   'Rejected': 'rgba(239,68,68,0.15)',
@@ -6345,7 +6400,8 @@ const AC_STAGE_COLORS = {
 const AC_STAGE_TEXT = {
   'Considering': '#3596c2', 'Contacted': '#3596c2', 'Responded': '#10b981',
   'Interested': '#10b981', 'Not Interested': '#ef4444', 'Submitted': '#7c3aed',
-  'Interviewing': '#7c3aed', 'Offered': '#059669', 'Accepted': '#059669',
+  'Arranging Interview': '#7c3aed', '1st Interview': '#7c3aed', 'Awaiting Interview Feedback': '#7c3aed',
+  '2nd Interview': '#7c3aed', '3rd Interview': '#7c3aed', 'Offered': '#059669', 'Accepted': '#059669',
   'Rejected': '#ef4444', 'Withdrawn': '#9ca3af', 'Placed': '#059669'
 };
 
@@ -6356,8 +6412,9 @@ const PIPELINE_MILESTONES = ['Sourced','Submitted','Interview','2nd interview','
 const STAGE_TO_MILESTONE = {
   'Considering':0,'Contacted':0,'Responded':0,'Interested':0,
   'Submitted':1,
-  'Interview Arranged':2,'Awaiting Interview Feedback':2,'Interviewed':2,'Interviewing':2,
+  'Arranging Interview':2,'1st Interview':2,'Awaiting Interview Feedback':2,'Interviewed':2,
   '2nd Interview':3,
+  '3rd Interview':3,
   'Offered':4,'Offer':4,
   'Accepted':5,
   'Placed':6,
@@ -6409,6 +6466,12 @@ async function loadACPipeline(assignmentId) {
       coverLink: r.fields['Covering Letter Link'] || '',
       interview1Date: r.fields['Interview 1 Date'] || '',
       interview2Date: r.fields['Interview 2 Date'] || '',
+      s1Client: !!r.fields['Stage 1 Client Feedback'],
+      s1Cand:   !!r.fields['Stage 1 Candidate Feedback'],
+      s2Client: !!r.fields['Stage 2 Client Feedback'],
+      s2Cand:   !!r.fields['Stage 2 Candidate Feedback'],
+      s3Client: !!r.fields['Stage 3 Client Feedback'],
+      s3Cand:   !!r.fields['Stage 3 Candidate Feedback'],
       offerDate: r.fields['Offer Date'] || '',
       startDate: r.fields['Start Date'] || '',
       submittedBy: r.fields['Submitted By'] || '',
@@ -7140,10 +7203,32 @@ function selectAssignment(id) {
   renderAssignDetail(selectedAssignment);
 }
 
+// Interview Stages: fetched once per assignment, then rendered from cache so that
+// feedback toggles re-render instantly without re-hitting Airtable.
+let interviewStagesData = [];
+
+// Furthest interview round a pipeline candidate has reached. Drives which cards a
+// candidate appears on and which feedback boxes are enabled. Out-of-process and
+// pre-interview stages return 0 (candidate doesn't appear on any card).
+// 99 = through every round (Offered/Accepted/Placed). "Awaiting Interview Feedback"
+// has no round of its own (single-select overwrote the round), so it's inferred
+// from the candidate's interview dates: 2nd date filled -> round 2, else round 1.
+function acRoundReached(r) {
+  switch (r.stage) {
+    case 'Offered': case 'Offer': case 'Accepted': case 'Placed': return 99;
+    case '3rd Interview': return 3;
+    case '2nd Interview': return 2;
+    case '1st Interview': case 'Arranging Interview': return 1;
+    case 'Awaiting Interview Feedback': return r.interview2Date ? 2 : 1;
+    default: return 0;
+  }
+}
+
 async function loadInterviewStages(assignmentId) {
   const list = document.getElementById('interview-stages-list');
   if (!list) return;
   try {
+    if (allContacts.length === 0) { try { await loadContacts(); } catch(_){} }
     const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent('Interview Stages')}?pageSize=100`, {
       headers: { Authorization: `Bearer ${getToken()}` }
     });
@@ -7151,7 +7236,7 @@ async function loadInterviewStages(assignmentId) {
     if (!resp.ok) throw new Error(data.error?.message || 'Failed to load');
 
     const assignmentName = selectedAssignment?.name || '';
-    const stages = (data.records || []).map(r => {
+    interviewStagesData = (data.records || []).map(r => {
       const asg = r.fields['Assignment'] || [];
       return {
         id: r.id,
@@ -7159,59 +7244,276 @@ async function loadInterviewStages(assignmentId) {
         number: (r.fields['Stage Number'] != null) ? r.fields['Stage Number'] : null,
         format: r.fields['Format'] || '',
         details: r.fields['Details'] || '',
+        stageDate: r.fields['Stage Date'] || '',
         interviewers: Array.isArray(r.fields['Interviewers']) ? r.fields['Interviewers'] : [],
         assignmentRef: Array.isArray(asg) ? (asg[0] || '') : asg
       };
     }).filter(s => s.assignmentRef === assignmentId || s.assignmentRef === assignmentName);
 
-    stages.sort((a,b) => {
+    interviewStagesData.sort((a,b) => {
       const an = a.number==null?999:a.number, bn = b.number==null?999:b.number;
       if (an!==bn) return an-bn;
       return (a.name||'').localeCompare(b.name||'');
     });
 
-    if (stages.length === 0) {
-      list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.82rem;padding:0.25rem 0;">No interview stages yet. Add them in the Interview Stages table in Airtable, linked to this assignment.</div>`;
-      return;
+    renderInterviewStages();
+  } catch(e) {
+    list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.82rem;padding:0.25rem 0;">Couldn't load interview stages: ${e.message}</div>`;
+  }
+}
+
+function renderInterviewStages() {
+  const list = document.getElementById('interview-stages-list');
+  if (!list) return;
+  const stages = interviewStagesData;
+
+  if (stages.length === 0) {
+    list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.82rem;padding:0.25rem 0;">No interview stages yet. Use “+ Add stage” to create the first one.</div>`;
+    return;
+  }
+
+  const candName = id => { const c = allCandidates.find(x => x.id === id); return c ? c.name : id; };
+  const interviewerName = v => {
+    if (typeof v === 'string' && v.startsWith('rec')) { const c = allContacts.find(x => x.id === v); return c ? c.name : v; }
+    return v;
+  };
+  const fmtD = v => v ? new Date(v).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '';
+
+  // Candidates in the interview process (round 1+), live records only.
+  const inProcess = (acRecords || [])
+    .filter(r => acRoundReached(r) >= 1)
+    .sort((a,b) => candName(a.candidateId).localeCompare(candName(b.candidateId)));
+
+  const feedbackToggle = (r, n, which) => {
+    if (!Number.isInteger(n) || n < 1 || n > 3) return ''; // feedback fields exist only for rounds 1–3
+    const keyBase = which === 'Client' ? 'Client' : 'Cand';
+    const on = !!r['s' + n + keyBase];
+    const reached = acRoundReached(r) >= n;
+    const box = on ? '☑' : '☐';
+    if (!reached) {
+      return `<span style="font-size:0.74rem;color:var(--tee-muted);opacity:0.4;cursor:not-allowed;user-select:none;">☐ ${which}</span>`;
     }
+    return `<span onclick="toggleStageFeedback('${r.id}',${n},'${which}')" style="font-size:0.74rem;color:${on ? 'var(--tee-accent)' : 'var(--tee-muted)'};cursor:pointer;user-select:none;" title="${on ? 'Received' : 'Not yet received'} — click to toggle">${box} ${which}</span>`;
+  };
 
-    const candName = id => { const c = allCandidates.find(x => x.id === id); return c ? c.name : id; };
-    const interviewerName = v => {
-      if (typeof v === 'string' && v.startsWith('rec')) { const c = allContacts.find(x => x.id === v); return c ? c.name : v; }
-      return v;
-    };
-    const fmtD = v => v ? new Date(v).toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}) : '';
-
-    list.innerHTML = stages.map(s => {
-      let stageCandStages = [], dateField = null;
-      if (s.number === 1) { stageCandStages = ['Interview Arranged','Awaiting Interview Feedback']; dateField = 'interview1Date'; }
-      else if (s.number === 2) { stageCandStages = ['2nd Interview']; dateField = 'interview2Date'; }
-      const cands = (acRecords || []).filter(r => stageCandStages.includes(r.stage));
-      const intvNames = s.interviewers.map(interviewerName).filter(Boolean);
-
-      return `<div style="background:var(--tee-card);border:1px solid var(--tee-border);border-radius:10px;padding:1rem;margin-bottom:0.75rem;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
-          <div style="font-size:0.95rem;font-weight:600;color:var(--tee-text);">${s.name || ('Stage ' + (s.number||''))}</div>
-          ${s.format ? `<span style="font-size:0.72rem;background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:999px;padding:0.2rem 0.6rem;color:var(--tee-muted);">${s.format}</span>` : ''}
-        </div>
-        ${s.details ? `<div style="font-size:0.83rem;color:var(--tee-text);line-height:1.5;white-space:pre-wrap;margin-bottom:0.75rem;">${s.details}</div>` : ''}
-        <div style="display:flex;flex-wrap:wrap;gap:2rem;">
-          <div style="min-width:140px;">
-            <div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem;">Interviewers</div>
-            ${intvNames.length ? intvNames.map(n => `<div style="font-size:0.83rem;color:var(--tee-text);margin-bottom:0.15rem;">${n}</div>`).join('') : '<div style="font-size:0.82rem;color:var(--tee-muted);">–</div>'}
-          </div>
-          <div style="min-width:180px;">
-            <div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem;">Candidates at this stage</div>
-            ${cands.length ? cands.map(r => {
-              const d = dateField ? fmtD(r[dateField]) : '';
-              return `<div style="font-size:0.83rem;color:var(--tee-text);margin-bottom:0.15rem;">${candName(r.candidateId)}${d ? ` <span style="color:var(--tee-muted);">· ${d}</span>` : ''}</div>`;
-            }).join('') : `<div style="font-size:0.82rem;color:var(--tee-muted);">${(s.number===1||s.number===2) ? 'None at this stage yet' : 'Set Stage Number to 1 or 2 to link pipeline candidates'}</div>`}
-          </div>
+  list.innerHTML = stages.map(s => {
+    const n = s.number;
+    const intvNames = s.interviewers.map(interviewerName).filter(Boolean);
+    const candRows = inProcess.map(r => {
+      const reached = acRoundReached(r) >= n;
+      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:0.4rem 0;border-top:1px solid var(--tee-border);">
+        <div style="font-size:0.83rem;color:${reached ? 'var(--tee-text)' : 'var(--tee-muted)'};${reached ? '' : 'opacity:0.6;'}">${candName(r.candidateId)}</div>
+        <div style="display:flex;gap:0.9rem;flex-shrink:0;">
+          ${feedbackToggle(r, n, 'Client')}
+          ${feedbackToggle(r, n, 'Candidate')}
         </div>
       </div>`;
     }).join('');
+
+    return `<div style="background:var(--tee-card);border:1px solid var(--tee-border);border-radius:10px;padding:1rem;margin-bottom:0.75rem;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:0.75rem;margin-bottom:0.5rem;">
+        <div>
+          <div style="font-size:0.95rem;font-weight:600;color:var(--tee-text);">${s.name || ('Stage ' + (n||''))}</div>
+          ${s.stageDate ? `<div style="font-size:0.74rem;color:var(--tee-muted);margin-top:0.15rem;">${fmtD(s.stageDate)}</div>` : ''}
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-shrink:0;">
+          ${s.format ? `<span style="font-size:0.72rem;background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:999px;padding:0.2rem 0.6rem;color:var(--tee-muted);">${s.format}</span>` : ''}
+          <span onclick="openStageModal('${s.id}')" style="font-size:0.72rem;color:var(--tee-muted);cursor:pointer;border:1px solid var(--tee-border);border-radius:8px;padding:0.2rem 0.55rem;">Edit</span>
+        </div>
+      </div>
+      ${s.details ? `<div style="font-size:0.83rem;color:var(--tee-text);line-height:1.5;white-space:pre-wrap;margin-bottom:0.75rem;">${s.details}</div>` : ''}
+      <div style="display:flex;flex-wrap:wrap;gap:2rem;">
+        <div style="min-width:140px;">
+          <div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:0.35rem;">Interviewers</div>
+          ${intvNames.length ? intvNames.map(nm => `<div style="font-size:0.83rem;color:var(--tee-text);margin-bottom:0.15rem;">${nm}</div>`).join('') : '<div style="font-size:0.82rem;color:var(--tee-muted);">–</div>'}
+        </div>
+        <div style="flex:1;min-width:240px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.1rem;">
+            <div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;">Candidates</div>
+            ${(n>3 && inProcess.length) ? '<div style="font-size:0.66rem;color:var(--tee-muted);">feedback tracked for rounds 1–3</div>' : ''}
+          </div>
+          ${inProcess.length ? candRows : `<div style="font-size:0.82rem;color:var(--tee-muted);padding-top:0.3rem;">No candidates in the interview process yet</div>`}
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function toggleStageFeedback(acId, n, which) {
+  const r = (acRecords || []).find(x => x.id === acId);
+  if (!r) return;
+  const keyBase = which === 'Client' ? 'Client' : 'Cand';
+  const key = 's' + n + keyBase;
+  const fieldName = `Stage ${n} ${which} Feedback`;
+  const newVal = !r[key];
+  r[key] = newVal;            // optimistic
+  renderInterviewStages();
+  try {
+    const resp = await fetch(`${AC_API_URL}/${acId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { [fieldName]: newVal } })
+    });
+    if (!resp.ok) { const d = await resp.json(); throw new Error(d.error?.message || 'Save failed'); }
   } catch(e) {
-    list.innerHTML = `<div style="color:var(--tee-muted);font-size:0.82rem;padding:0.25rem 0;">Couldn't load interview stages: ${e.message}</div>`;
+    r[key] = !newVal;         // revert
+    renderInterviewStages();
+    showToast(`Couldn't save feedback: ${e.message}`, 'error');
+  }
+}
+
+// ---- Interview stage editor ----
+const FORMAT_FALLBACK = ['Teams Interview','Face to Face Interview','Telephone Interview','Panel Interview'];
+const STAGE_API_URL = `https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent('Interview Stages')}`;
+let editingStageId = null;
+let stageIntvSelected = []; // [{id, name}]
+
+function openStageModal(stageId) {
+  if (!selectedAssignment) { showToast('Open an assignment first', 'error'); return; }
+  editingStageId = stageId || null;
+  stageIntvSelected = [];
+  const modal = document.getElementById('stage-edit-modal');
+  populateSelectOptions(document.getElementById('se-format'), optionsFor('Interview Stages', 'Format', FORMAT_FALLBACK), 'Select...');
+  document.getElementById('se-intv-search').value = '';
+  document.getElementById('se-intv-results').innerHTML = '';
+  document.getElementById('se-saving').style.display = 'none';
+
+  if (stageId) {
+    const s = interviewStagesData.find(x => x.id === stageId);
+    if (!s) return;
+    document.getElementById('stage-modal-title').textContent = 'Edit interview stage';
+    document.getElementById('stage-modal-sub').textContent = 'Update this interview stage.';
+    document.getElementById('se-name').value = s.name || '';
+    document.getElementById('se-number').value = (s.number != null) ? s.number : '';
+    setSelectVal(document.getElementById('se-format'), s.format || '');
+    document.getElementById('se-date').value = s.stageDate || '';
+    document.getElementById('se-details').value = s.details || '';
+    // Resolve existing interviewers to {id,name}: record IDs direct, names matched against contacts
+    stageIntvSelected = (s.interviewers || []).map(v => {
+      if (typeof v === 'string' && v.startsWith('rec')) {
+        const c = allContacts.find(x => x.id === v);
+        return { id: v, name: c ? c.name : v };
+      }
+      const c = allContacts.find(x => x.name === v);
+      return c ? { id: c.id, name: c.name } : { id: null, name: v };
+    });
+    document.getElementById('se-delete').style.display = 'inline-block';
+  } else {
+    document.getElementById('stage-modal-title').textContent = 'Add interview stage';
+    document.getElementById('stage-modal-sub').textContent = 'Create an interview stage for this assignment.';
+    document.getElementById('se-name').value = '';
+    // default the stage number to the next in sequence
+    const maxNum = interviewStagesData.reduce((m,s) => Math.max(m, s.number||0), 0);
+    document.getElementById('se-number').value = maxNum + 1;
+    document.getElementById('se-format').value = '';
+    document.getElementById('se-date').value = '';
+    document.getElementById('se-details').value = '';
+    document.getElementById('se-delete').style.display = 'none';
+  }
+  renderStageIntvChips();
+  modal.style.display = 'flex';
+}
+
+function closeStageModal() {
+  document.getElementById('stage-edit-modal').style.display = 'none';
+  editingStageId = null;
+  stageIntvSelected = [];
+}
+
+function renderStageIntvChips() {
+  const wrap = document.getElementById('se-intv-chips');
+  if (!wrap) return;
+  if (!stageIntvSelected.length) { wrap.innerHTML = '<span style="font-size:0.78rem;color:var(--tee-muted);">No interviewers added</span>'; return; }
+  wrap.innerHTML = stageIntvSelected.map((c,i) =>
+    `<span style="display:inline-flex;align-items:center;gap:0.35rem;background:var(--tee-card);border:1px solid var(--tee-border);border-radius:999px;padding:0.2rem 0.6rem;font-size:0.78rem;color:var(--tee-text);">
+      ${c.name}${c.id ? '' : ' <span style="color:#ef4444;font-size:0.68rem;">(unlinked)</span>'}
+      <span onclick="removeStageInterviewer(${i})" style="cursor:pointer;color:var(--tee-muted);">✕</span>
+    </span>`).join('');
+}
+
+function searchStageInterviewers() {
+  const q = document.getElementById('se-intv-search').value.trim().toLowerCase();
+  const box = document.getElementById('se-intv-results');
+  if (!q) { box.innerHTML = ''; return; }
+  const chosen = new Set(stageIntvSelected.map(c => c.id).filter(Boolean));
+  const matches = allContacts
+    .filter(c => c.name && c.name.toLowerCase().includes(q) && !chosen.has(c.id))
+    .slice(0, 8);
+  if (!matches.length) { box.innerHTML = '<div style="font-size:0.78rem;color:var(--tee-muted);padding:0.4rem 0;">No matches</div>'; return; }
+  box.innerHTML = `<div style="position:absolute;top:0;left:0;right:0;background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:8px;box-shadow:0 6px 18px rgba(15,13,46,0.18);z-index:10;max-height:220px;overflow:auto;">
+    ${matches.map(c => `<div onclick="addStageInterviewer('${c.id}')" style="padding:0.5rem 0.75rem;font-size:0.82rem;color:var(--tee-text);cursor:pointer;border-bottom:1px solid var(--tee-border);">${c.name}${c.orgName ? ` <span style="color:var(--tee-muted);font-size:0.74rem;">· ${c.orgName}</span>` : ''}</div>`).join('')}
+  </div>`;
+}
+
+function addStageInterviewer(id) {
+  const c = allContacts.find(x => x.id === id);
+  if (c && !stageIntvSelected.some(s => s.id === id)) stageIntvSelected.push({ id: c.id, name: c.name });
+  document.getElementById('se-intv-search').value = '';
+  document.getElementById('se-intv-results').innerHTML = '';
+  renderStageIntvChips();
+}
+
+function removeStageInterviewer(i) {
+  stageIntvSelected.splice(i, 1);
+  renderStageIntvChips();
+}
+
+async function saveStage() {
+  const name = document.getElementById('se-name').value.trim();
+  const numRaw = document.getElementById('se-number').value;
+  if (!name) { showToast('Stage name is required', 'error'); return; }
+  if (numRaw === '' || isNaN(parseInt(numRaw, 10))) { showToast('Stage number is required', 'error'); return; }
+  document.getElementById('se-saving').style.display = 'inline';
+
+  // Text/select/date fields and the Assignment link go in the first write. Interviewers
+  // (linked record) is written as an array of IDs; keep it in the same fields object —
+  // linked records and single fields can share a PATCH, only multiple-SELECT needs splitting.
+  const fields = {
+    'Stage Name': name,
+    'Stage Number': parseInt(numRaw, 10),
+    'Format': document.getElementById('se-format').value || null,
+    'Details': document.getElementById('se-details').value || null,
+    'Stage Date': document.getElementById('se-date').value || null
+  };
+  Object.keys(fields).forEach(k => { if (fields[k] === null || fields[k] === '') delete fields[k]; });
+  const intvIds = stageIntvSelected.map(c => c.id).filter(Boolean);
+  fields['Interviewers'] = intvIds; // array; empty array clears the field
+  if (!editingStageId) fields['Assignment'] = [selectedAssignment.id];
+
+  try {
+    const resp = await fetch(editingStageId ? `${STAGE_API_URL}/${editingStageId}` : STAGE_API_URL, {
+      method: editingStageId ? 'PATCH' : 'POST',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields, typecast: true })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message || 'Save failed');
+    closeStageModal();
+    showToast(editingStageId ? 'Stage updated' : 'Stage added', 'success');
+    loadInterviewStages(selectedAssignment.id);
+  } catch(e) {
+    document.getElementById('se-saving').style.display = 'none';
+    showToast(`Couldn't save stage: ${e.message}`, 'error');
+  }
+}
+
+async function deleteStage() {
+  if (!editingStageId) return;
+  if (!confirm('Delete this interview stage? This cannot be undone.')) return;
+  document.getElementById('se-saving').style.display = 'inline';
+  try {
+    const resp = await fetch(`${STAGE_API_URL}/${editingStageId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message || 'Delete failed');
+    closeStageModal();
+    showToast('Stage deleted', 'success');
+    loadInterviewStages(selectedAssignment.id);
+  } catch(e) {
+    document.getElementById('se-saving').style.display = 'none';
+    showToast(`Couldn't delete stage: ${e.message}`, 'error');
   }
 }
 
@@ -7248,7 +7550,10 @@ function renderAssignDetail(a) {
     </div>
 
     <div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1.25rem;margin-bottom:1rem;">
-      <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:0.875rem;">Interview Stages</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.875rem;">
+        <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;">Interview Stages</div>
+        <button onclick="openStageModal(null)" style="background:var(--tee-accent);color:white;border:none;border-radius:8px;padding:0.3rem 0.75rem;font-size:0.75rem;cursor:pointer;font-family:'DM Sans',sans-serif;">+ Add stage</button>
+      </div>
       <div id="interview-stages-list"><div style="color:var(--tee-muted);font-size:0.82rem;">Loading...</div></div>
     </div>
 
