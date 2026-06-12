@@ -2733,6 +2733,16 @@ function handleMarkDone() {
 }
 
 // ADVANCE SEQUENCE
+// Prepend a freshly-created interaction's ID to a contact's local interaction list
+// so the history panel reflects it immediately, without waiting for a full reload.
+function linkInteractionLocally(contactId, interactionId) {
+  if (!interactionId) return;
+  const apply = obj => { if (obj) obj.interactionIds = [interactionId, ...((obj.interactionIds || []).filter(x => x !== interactionId))]; };
+  const idx = allContacts.findIndex(c => c.id === contactId);
+  if (idx > -1) apply(allContacts[idx]);
+  if (selectedContact && selectedContact.id === contactId) apply(selectedContact);
+}
+
 async function advanceSequence(liConnected) {
   document.getElementById('li-modal').classList.remove('show');
   if (!selectedContact) return;
@@ -2805,9 +2815,10 @@ async function advanceSequence(liConnected) {
     } catch(e) { console.log('Notes save error:', e); }
   }
 
-  // Log the completed action to interaction history
+  // Log the completed action to interaction history, capture its ID and link it
+  // locally so it appears in the panel immediately rather than only after a reload.
   try {
-    await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
+    const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields: {
@@ -2818,6 +2829,13 @@ async function advanceSequence(liConnected) {
         'Logged by': getOwner()
       }})
     });
+    const intData = await intResp.json();
+    if (intResp.ok && intData.id) {
+      linkInteractionLocally(contact.id, intData.id);
+    } else if (!intResp.ok) {
+      console.error('Interaction log error:', JSON.stringify(intData));
+      showToast('Step saved, but the interaction didn’t log — check the console', 'error');
+    }
   } catch(e) { console.log('Interaction log error:', e); }
 
   // Refresh the panel immediately so it's obvious the action registered, with a
@@ -2848,7 +2866,7 @@ async function markLiConnectedAndAdvance() {
   };
   await updateContact(contact.id, fields);
   try {
-    await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
+    const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields: {
@@ -2859,7 +2877,19 @@ async function markLiConnectedAndAdvance() {
         'Logged by': getOwner()
       }})
     });
+    const intData = await intResp.json();
+    if (intResp.ok && intData.id) {
+      linkInteractionLocally(contact.id, intData.id);
+    } else if (!intResp.ok) {
+      console.error('Interaction log error:', JSON.stringify(intData));
+    }
   } catch(e) { console.log('Interaction log error:', e); }
+  selectedContact = allContacts.find(c => c.id === contact.id) || selectedContact;
+  try {
+    const ints = await fetchInteractions(contact.id);
+    renderPanel(selectedContact, ints);
+  } catch(e) { renderPanel(selectedContact, null); }
+  renderView();
   showToast('Marked as connected — Email 1 due in 3 days ✓', 'success');
 }
 
