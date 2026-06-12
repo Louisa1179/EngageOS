@@ -3111,35 +3111,67 @@ async function saveLogAction() {
 
     const nextActionNotes = document.getElementById('log-next-action-notes').value.trim();
 
-    // If reminder date set — save Next Action Due directly
+    // If reminder date set — save it. The date and the (multiple-select) note must go
+    // in SEPARATE updates: a note value that isn't an existing option rejects the whole
+    // request, which previously took the date down with it and reported false success.
     if (setHold && followup) {
       const reminderLabel = nextActionNotes || subject || type;
-      const saveFields = { 'Next Action Due': followup, 'Next Action Notes': [reminderLabel] };
-      const dateResp = await fetch(`${API_URL}/${selectedContact.id}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: saveFields })
-      });
-      const dateData = await dateResp.json();
-      // Update local contact regardless — we know from console it saves fine
+
+      // 1) Save the reminder date on its own — must never fail over a note issue.
+      let dateOk = false;
+      try {
+        const dResp = await fetch(`${API_URL}/${selectedContact.id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'Next Action Due': followup } })
+        });
+        const dData = await dResp.json();
+        if (!dResp.ok) throw new Error(dData.error?.message || 'date save failed');
+        dateOk = true;
+      } catch(e) {
+        console.error('Reminder date save error:', e);
+        showToast('Could not save the reminder date: ' + e.message, 'error');
+      }
+
+      // 2) Try the note separately. Tolerate a value that isn't an existing option.
+      let noteOk = false;
+      if (dateOk && reminderLabel) {
+        try {
+          const nResp = await fetch(`${API_URL}/${selectedContact.id}`, {
+            method: 'PATCH',
+            headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ fields: { 'Next Action Notes': [reminderLabel] } })
+          });
+          noteOk = nResp.ok;
+          if (!nResp.ok) console.warn('Next Action Notes not saved (option may not exist):', reminderLabel);
+        } catch(e) { console.warn('Note save error:', e); }
+      }
+
+      // Local state reflects only what actually persisted.
       const idx = allContacts.findIndex(c => c.id === selectedContact.id);
-      if (idx > -1) {
+      if (idx > -1 && dateOk) {
         allContacts[idx].nextActionDue = followup;
-        if (nextActionNotes) allContacts[idx].nextActionNotes = nextActionNotes;
+        if (noteOk) allContacts[idx].nextActionNotes = [reminderLabel];
         selectedContact = allContacts[idx];
       }
-      // Silently try Follow-up Date — ignore 422 if field doesn't exist
-      fetch(`${API_URL}/${selectedContact.id}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: { 'Follow-up Date': followup } })
-      }).catch(() => {});
+
+      // Best-effort Follow-up Date mirror — ignore if the field doesn't exist.
+      if (dateOk) {
+        fetch(`${API_URL}/${selectedContact.id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'Follow-up Date': followup } })
+        }).catch(() => {});
+      }
+
       closeLogModal();
       updateCounts();
       renderView();
       const ints = await fetchInteractions(selectedContact?.id);
       renderPanel(selectedContact, ints);
-      showToast('Logged — next action set for ' + followup, 'success');
+      const dueFmt = new Date(followup).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+      if (dateOk && noteOk) showToast('Logged — next action set for ' + dueFmt, 'success');
+      else if (dateOk && !noteOk) showToast(`Reminder set for ${dueFmt}. Note “${reminderLabel}” isn’t a saved label — add it as an option in Airtable to tag it`, 'success');
     } else {
       if (nextActionNotes) {
         await updateContact(selectedContact.id, { 'Next Action Notes': [nextActionNotes] });
