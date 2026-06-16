@@ -6533,8 +6533,8 @@ function pipelineStepperHTML(stage) {
   const cur = (m === undefined || m === null) ? 0 : m;
   const segs = PIPELINE_MILESTONES.map((label, idx) => {
     const done = idx < cur, active = idx === cur;
-    const bar = active ? 'var(--tee-accent)' : (done ? 'rgba(53,150,194,0.45)' : 'var(--tee-border)');
-    const tcol = active ? 'var(--tee-text)' : (done ? 'var(--tee-muted)' : 'var(--tee-border)');
+    const bar = active ? 'var(--tee-accent)' : (done ? 'rgba(53,150,194,0.45)' : 'rgba(53,150,194,0.12)');
+    const tcol = active ? 'var(--tee-text)' : (done ? 'var(--tee-muted)' : '#8a929c');
     return `<div style="flex:1;text-align:center;min-width:0;">
       <div style="height:5px;border-radius:3px;background:${bar};margin-bottom:3px;"></div>
       <div style="font-size:0.6rem;color:${tcol};font-weight:${active?'600':'400'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${label}</div>
@@ -7480,12 +7480,13 @@ function renderInterviewStages() {
                  : { d: '', t: '' };
       const dtLabel = slot.d ? (fmtD(slot.d) + (slot.t ? ' · ' + slot.t : '')) : '';
       return `<div style="padding:0.5rem 0;border-top:1px solid var(--tee-border);">
-        <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
-          <div style="display:flex;align-items:center;gap:0.75rem;min-width:0;flex-wrap:wrap;">
-            <div style="font-size:0.83rem;color:${reached ? 'var(--tee-text)' : 'var(--tee-muted)'};${reached ? '' : 'opacity:0.6;'}">${candName(r.candidateId)}</div>
-            ${dtLabel ? `<div style="font-size:0.74rem;color:var(--tee-muted);white-space:nowrap;background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:999px;padding:0.1rem 0.55rem;">${dtLabel}</div>` : ''}
-          </div>
-          <div style="display:flex;gap:0.9rem;flex-shrink:0;align-items:center;">
+        <div style="display:flex;align-items:center;gap:1rem;">
+          <div style="flex:1;min-width:0;font-size:0.83rem;color:${reached ? 'var(--tee-text)' : 'var(--tee-muted)'};${reached ? '' : 'opacity:0.6;'}">${candName(r.candidateId)}</div>
+          ${dtLabel ? `<div style="flex-shrink:0;text-align:center;">
+            <div style="font-size:0.6rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--tee-muted);margin-bottom:0.1rem;white-space:nowrap;">Interview Date and Time</div>
+            <div style="font-size:0.9rem;font-weight:700;color:var(--tee-accent);white-space:nowrap;">${dtLabel}</div>
+          </div>` : '<div style="flex-shrink:0;"></div>'}
+          <div style="flex:1;display:flex;justify-content:flex-end;gap:0.9rem;flex-shrink:0;align-items:center;">
             ${feedbackToggle(r, n, 'Client')}
             ${feedbackToggle(r, n, 'Candidate')}
           </div>
