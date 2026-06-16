@@ -6908,20 +6908,27 @@ async function saveACRecord() {
     'Submitted By': document.getElementById('ac-submitted-by').value || null,
   };
   const cvDate = document.getElementById('ac-cv-date').value;
-  if (cvDate) fields['CV Submitted Date'] = cvDate;
-  const _i1 = document.getElementById('ac-int1-date').value; if (_i1) fields['Interview 1 Date'] = _i1;
-  const _i2 = document.getElementById('ac-int2-date').value; if (_i2) fields['Interview 2 Date'] = _i2;
+  const _i1 = document.getElementById('ac-int1-date').value;
+  const _i2 = document.getElementById('ac-int2-date').value;
   const _t1 = document.getElementById('ac-int1-time').value;
   const _t2 = document.getElementById('ac-int2-time').value;
-  const _off = document.getElementById('ac-offer-date').value; if (_off) fields['Offer Date'] = _off;
-  const _st = document.getElementById('ac-start-date').value; if (_st) fields['Start Date'] = _st;
+  const _off = document.getElementById('ac-offer-date').value;
+  const _st = document.getElementById('ac-start-date').value;
+  // Date fields are written explicitly — an empty box sends null so it actually clears
+  // in Airtable rather than being skipped and reverting. They're exempt from the strip below.
+  fields['CV Submitted Date'] = cvDate || null;
+  fields['Interview 1 Date'] = _i1 || null;
+  fields['Interview 2 Date'] = _i2 || null;
+  fields['Offer Date'] = _off || null;
+  fields['Start Date'] = _st || null;
+  const clearableKeys = ['CV Submitted Date','Interview 1 Date','Interview 2 Date','Offer Date','Start Date'];
   if (!editingACId) {
     fields['Candidate'] = [candId];
     fields['Assignment'] = [assignmentId];
     fields['Date Added'] = new Date().toISOString().split('T')[0];
   }
-  // Remove null fields
-  Object.keys(fields).forEach(k => { if (fields[k] === null || fields[k] === '') delete fields[k]; });
+  // Remove blank fields, except the date fields above which use null to clear.
+  Object.keys(fields).forEach(k => { if (!clearableKeys.includes(k) && (fields[k] === null || fields[k] === '')) delete fields[k]; });
   try {
     const resp = await fetch(editingACId ? `${AC_API_URL}/${editingACId}` : AC_API_URL, {
       method: editingACId ? 'PATCH' : 'POST',
@@ -6933,10 +6940,8 @@ async function saveACRecord() {
     // Interview times are saved separately and best-effort, so a Time field that
     // hasn't been added in Airtable yet can never fail the main candidate save.
     const savedAcId = editingACId || data.id;
-    if (savedAcId && (_t1 || _t2)) {
-      const tFields = {};
-      if (_t1) tFields['Interview 1 Time'] = _t1;
-      if (_t2) tFields['Interview 2 Time'] = _t2;
+    if (savedAcId) {
+      const tFields = { 'Interview 1 Time': _t1 || null, 'Interview 2 Time': _t2 || null };
       try {
         const tResp = await fetch(`${AC_API_URL}/${savedAcId}`, {
           method: 'PATCH',
@@ -6944,10 +6949,10 @@ async function saveACRecord() {
           body: JSON.stringify({ fields: tFields })
         });
         if (!tResp.ok) {
-          console.warn('Interview time not saved — the Time field may not exist in Airtable yet');
+          console.warn('Interview time not saved — the Interview Time fields may not exist in Airtable yet');
         } else {
           const rec = acRecords.find(r => r.id === savedAcId);
-          if (rec) { if (_t1) rec.interview1Time = _t1; if (_t2) rec.interview2Time = _t2; }
+          if (rec) { rec.interview1Time = _t1; rec.interview2Time = _t2; }
         }
       } catch(e) { console.warn('Interview time save error:', e); }
     }
@@ -7470,9 +7475,16 @@ function renderInterviewStages() {
     const intvNames = s.interviewers.map(interviewerName).filter(Boolean);
     const candRows = inProcess.map(r => {
       const reached = acRoundReached(r) >= n;
+      const slot = n === 1 ? { d: r.interview1Date, t: r.interview1Time }
+                 : n === 2 ? { d: r.interview2Date, t: r.interview2Time }
+                 : { d: '', t: '' };
+      const dtLabel = slot.d ? (fmtD(slot.d) + (slot.t ? ' · ' + slot.t : '')) : '';
       return `<div style="padding:0.5rem 0;border-top:1px solid var(--tee-border);">
         <div style="display:flex;align-items:center;justify-content:space-between;gap:1rem;">
-          <div style="font-size:0.83rem;color:${reached ? 'var(--tee-text)' : 'var(--tee-muted)'};${reached ? '' : 'opacity:0.6;'}">${candName(r.candidateId)}</div>
+          <div style="display:flex;align-items:center;gap:0.75rem;min-width:0;flex-wrap:wrap;">
+            <div style="font-size:0.83rem;color:${reached ? 'var(--tee-text)' : 'var(--tee-muted)'};${reached ? '' : 'opacity:0.6;'}">${candName(r.candidateId)}</div>
+            ${dtLabel ? `<div style="font-size:0.74rem;color:var(--tee-muted);white-space:nowrap;background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:999px;padding:0.1rem 0.55rem;">${dtLabel}</div>` : ''}
+          </div>
           <div style="display:flex;gap:0.9rem;flex-shrink:0;align-items:center;">
             ${feedbackToggle(r, n, 'Client')}
             ${feedbackToggle(r, n, 'Candidate')}
