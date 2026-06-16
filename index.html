@@ -2084,7 +2084,14 @@ function getContactsForView(view) {
 // FETCH INTERACTIONS FOR A CONTACT
 async function fetchInteractions(contactId) {
   try {
-    const contact = allContacts.find(c => c.id === contactId);
+    // Look across every list, not just the active one — a parked contact
+    // (Do Not Sequence / Unsubscribed / Do Not Contact) lives in its own array,
+    // and falling back to selectedContact covers any in-flight status change.
+    const contact = allContacts.find(c => c.id === contactId)
+      || dnsContacts.find(c => c.id === contactId)
+      || unsubContacts.find(c => c.id === contactId)
+      || dncContacts.find(c => c.id === contactId)
+      || (selectedContact && selectedContact.id === contactId ? selectedContact : null);
     if (!contact) return [];
     
     // If we have linked interaction IDs, fetch those directly
@@ -4304,6 +4311,7 @@ function buildDnsButtons(contact) {
     <div style="font-size:0.75rem;color:var(--tee-muted);margin-top:3px;">In your CRM but not being sequenced.</div>
   </div>
   <div class="btn-primary" style="background:#10b981;" onclick="reinstateContact()">↩ Reinstate to sequence</div>
+  <div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div>
   <div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div>
   <div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`;
 }
@@ -4314,6 +4322,7 @@ function buildUnsubButtons(contact) {
     <div style="font-size:0.75rem;color:var(--tee-muted);margin-top:3px;">Do not send marketing emails. LinkedIn is still fine.</div>
   </div>
   <div class="btn-primary" style="background:#10b981;" onclick="reinstateContact()">↩ Reinstate to sequence</div>
+  <div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div>
   <div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div>
   <div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`;
 }
@@ -4355,10 +4364,28 @@ async function markUnsubscribed() {
 
 async function reinstateContact() {
   if (!selectedContact) return;
-  // Remove from DNS or Unsub arrays if present
+  // Remove from whichever parked list it currently sits in
   if (selectedContact.status === 'Do Not Sequence') dnsContacts = dnsContacts.filter(c => c.id !== selectedContact.id);
   if (selectedContact.status === 'Unsubscribed') unsubContacts = unsubContacts.filter(c => c.id !== selectedContact.id);
-  await updateContact(selectedContact.id, { 'Sequence Status': 'Active', 'Status Reason': null, 'Sequence Step': 1, 'Next Action Due': addDays(0) });
+  if (selectedContact.status === 'Do Not Contact') dncContacts = dncContacts.filter(c => c.id !== selectedContact.id);
+  // Preserve the contact's existing sequence position — do NOT reset to step 1.
+  await updateContact(selectedContact.id, { 'Sequence Status': 'Active', 'Status Reason': null, 'Next Action Due': addDays(0) });
+  // Bring the contact back into the active list and refresh everything on screen
+  const updated = { ...selectedContact, status: 'Active', nextActionDue: addDays(0) };
+  if (allContacts.some(c => c.id === updated.id)) {
+    allContacts = allContacts.map(c => c.id === updated.id ? updated : c);
+  } else {
+    allContacts.push(updated);
+  }
+  selectedContact = updated;
+  updateCounts();
+  renderView();
+  const dnsEl = document.getElementById('count-do-not-sequence'); if (dnsEl) dnsEl.textContent = dnsContacts.length;
+  const unsubEl = document.getElementById('count-unsubscribed'); if (unsubEl) unsubEl.textContent = unsubContacts.length;
+  const dncEl = document.getElementById('count-do-not-contact'); if (dncEl) dncEl.textContent = dncContacts.length;
+  const interactions = await fetchInteractions(selectedContact.id);
+  renderPanel(selectedContact, interactions);
+  showToast(selectedContact.name + ' reinstated to sequence', 'success');
 }
 
 async function markDoNotContact() {
@@ -5327,11 +5354,27 @@ async function saveOngoing() {
       }})
     });
     const idx = allContacts.findIndex(c => c.id === selectedContact.id);
-    if (idx > -1) { allContacts[idx].status = selectedOngoingType; if (startDate) allContacts[idx].nextActionDue = startDate; }
+    if (idx > -1) {
+      allContacts[idx].status = selectedOngoingType;
+      if (startDate) allContacts[idx].nextActionDue = startDate;
+      selectedContact = allContacts[idx];
+    } else {
+      // Contact was parked (Do Not Sequence / Unsubscribed / Do Not Contact) —
+      // relocate it out of the parked list and into the active list.
+      dnsContacts = dnsContacts.filter(c => c.id !== selectedContact.id);
+      unsubContacts = unsubContacts.filter(c => c.id !== selectedContact.id);
+      dncContacts = dncContacts.filter(c => c.id !== selectedContact.id);
+      const moved = { ...selectedContact, status: selectedOngoingType };
+      if (startDate) moved.nextActionDue = startDate;
+      allContacts.push(moved);
+      selectedContact = moved;
+    }
     closeOngoingModal();
     showToast(`${selectedContact.name} moved to ${selectedOngoingType} ✓`, 'success');
     if (getViewUser() === 'John Daly') { switchJohnView(currentJohnView); } else { renderView(); }
     updateCounts();
+    const ongoingInteractions = await fetchInteractions(selectedContact.id);
+    renderPanel(selectedContact, ongoingInteractions);
   } catch(e) { document.getElementById('ongoing-saving').style.display = 'none'; showToast('Failed: ' + e.message, 'error'); }
 }
 
