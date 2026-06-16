@@ -5840,6 +5840,8 @@ function renderCandPanel(c, interactions) {
       <div onclick="openCandReminderModal()" class="btn-secondary" style="cursor:pointer;">⏰ Set a reminder</div>
     </div>
 
+    <div class="cand-assignment-imprint"></div>
+
     <div class="panel-section">
       <div class="panel-section-label">Availability</div>
       <div class="field-row"><span class="field-key">Available</span><span class="field-val">${candFieldStr(c.availability) || '—'}</span></div>
@@ -5874,6 +5876,7 @@ function renderCandPanel(c, interactions) {
       ${interactionsHtml}
     </div>
   `;
+  renderCandidateAssignmentImprint(c);
 }
 
 // TOGGLE CANDIDATE INTERACTION EXPAND
@@ -6992,6 +6995,7 @@ async function saveACRecord() {
     closeACModal();
     await loadACPipeline(assignmentId);
     showToast(editingACId ? 'Updated ✓' : 'Candidate added ✓', 'success');
+    allACCache = [];
   } catch(e) {
     document.getElementById('ac-saving').style.display = 'none';
     showToast('Failed: ' + e.message, 'error');
@@ -7383,6 +7387,49 @@ async function goToAssignmentFromContact(assignmentId) {
   switchWorkspace('assignments');
   if (allAssignments.length === 0) { try { await loadAssignments(); } catch(_) {} }
   selectAssignment(assignmentId);
+}
+
+// Cache of every pipeline record, used to imprint a candidate's assignments + stage
+// onto their card. Refreshed when pipeline records change.
+let allACCache = [];
+async function loadAllAC() {
+  const resp = await fetch(`${AC_API_URL}?pageSize=100`, { headers: { Authorization: `Bearer ${getToken()}` } });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error?.message || 'Failed to load pipeline');
+  allACCache = (data.records || []).map(r => ({
+    id: r.id,
+    candidateId: Array.isArray(r.fields['Candidate']) ? r.fields['Candidate'][0] : '',
+    assignmentRef: Array.isArray(r.fields['Assignment']) ? (r.fields['Assignment'][0] || '') : (r.fields['Assignment'] || ''),
+    stage: r.fields['Stage'] || ''
+  }));
+}
+
+// Show, on a candidate's card, the assignments they're in with their live stage,
+// each linking through to that assignment. Stage reflects whatever it currently is,
+// so it shows Interview, Placed, Rejected, etc. without any manual switching.
+async function renderCandidateAssignmentImprint(c) {
+  const slots = document.querySelectorAll('.cand-assignment-imprint');
+  if (!slots.length || !c) return;
+  try {
+    if (!allACCache.length) await loadAllAC();
+    const mine = allACCache.filter(r => r.candidateId === c.id);
+    if (!mine.length) { slots.forEach(el => el.innerHTML = ''); return; }
+    if (allAssignments.length === 0) { try { await loadAssignments(); } catch(_) {} }
+    const stageCol = stg => (typeof AC_STAGE_TEXT !== 'undefined' && AC_STAGE_TEXT[stg]) ? AC_STAGE_TEXT[stg] : 'var(--tee-accent)';
+    const rows = mine.map(r => {
+      const ref = r.assignmentRef;
+      const asg = allAssignments.find(a => a.id === ref) || allAssignments.find(a => a.name === ref);
+      const asgName = asg ? asg.name : (typeof ref === 'string' && !ref.startsWith('rec') ? ref : 'Assignment');
+      const asgId = asg ? asg.id : (typeof ref === 'string' && ref.startsWith('rec') ? ref : '');
+      const stg = r.stage || '—';
+      return `<div onclick="${asgId ? `goToAssignmentFromContact('${asgId}')` : ''}" style="${asgId ? 'cursor:pointer;' : ''}background:rgba(53,150,194,0.06);border:1px solid rgba(53,150,194,0.2);border-radius:8px;padding:0.5rem 0.65rem;margin-bottom:0.4rem;" ${asgId ? `onmouseover="this.style.background='rgba(53,150,194,0.12)'" onmouseout="this.style.background='rgba(53,150,194,0.06)'"` : ''}>
+        <div style="font-size:0.78rem;color:var(--tee-text);font-weight:500;">${asgName}${asgId ? ' →' : ''}</div>
+        <div style="font-size:0.74rem;color:${stageCol(stg)};margin-top:1px;font-weight:500;">${stg}</div>
+      </div>`;
+    }).join('');
+    const html = `<div class="panel-section"><div class="panel-section-label">Assignments</div>${rows}</div>`;
+    slots.forEach(el => el.innerHTML = html);
+  } catch(e) { /* leave the imprint empty on any error */ }
 }
 
 // Show, on a contact's card, any assignments where they're an interviewer, with the
@@ -8039,6 +8086,7 @@ async function deleteAssignment() {
     closeAssignEditModal();
     selectedAssignment = null;
     showToast('Assignment deleted', 'success');
+    allACCache = []; allInterviewStagesCache = [];
     await loadAssignments();
     const panel = document.getElementById('assign-detail');
     if (panel) panel.innerHTML = '<div style="color:var(--tee-muted);font-size:0.9rem;padding:2rem;text-align:center;">Select an assignment to view details</div>';
