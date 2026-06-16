@@ -1157,12 +1157,14 @@
 
     <div class="edit-row">
       <div class="edit-field-group">
-        <label class="edit-label">Interview 1 date</label>
+        <label class="edit-label">Interview 1 date &amp; time</label>
         <input type="date" id="ac-int1-date" class="edit-input" />
+        <input type="time" id="ac-int1-time" class="edit-input" style="margin-top:0.4rem;" />
       </div>
       <div class="edit-field-group">
-        <label class="edit-label">Interview 2 date</label>
+        <label class="edit-label">Interview 2 date &amp; time</label>
         <input type="date" id="ac-int2-date" class="edit-input" />
+        <input type="time" id="ac-int2-time" class="edit-input" style="margin-top:0.4rem;" />
       </div>
     </div>
 
@@ -6569,6 +6571,8 @@ async function loadACPipeline(assignmentId) {
       coverLink: r.fields['Covering Letter Link'] || '',
       interview1Date: r.fields['Interview 1 Date'] || '',
       interview2Date: r.fields['Interview 2 Date'] || '',
+      interview1Time: r.fields['Interview 1 Time'] || '',
+      interview2Time: r.fields['Interview 2 Time'] || '',
       s1Client: !!r.fields['Stage 1 Client Feedback'],
       s1Cand:   !!r.fields['Stage 1 Candidate Feedback'],
       s2Client: !!r.fields['Stage 2 Client Feedback'],
@@ -6651,8 +6655,8 @@ function renderACPipeline(nameMap) {
       ${pipelineStepperHTML(r.stage)}
       ${(() => {
         const parts = [];
-        if (r.interview1Date) parts.push('Int 1 ' + fmt(r.interview1Date));
-        if (r.interview2Date) parts.push('Int 2 ' + fmt(r.interview2Date));
+        if (r.interview1Date) parts.push('Int 1 ' + fmt(r.interview1Date) + (r.interview1Time ? ' ' + r.interview1Time : ''));
+        if (r.interview2Date) parts.push('Int 2 ' + fmt(r.interview2Date) + (r.interview2Time ? ' ' + r.interview2Time : ''));
         if (r.offerDate) parts.push('Offer ' + fmt(r.offerDate));
         if (r.startDate) parts.push('Start ' + fmt(r.startDate));
         return parts.length ? `<div style="font-size:0.7rem;color:var(--tee-muted);margin-top:0.4rem;">${parts.join('  ·  ')}</div>` : '';
@@ -6685,7 +6689,7 @@ async function openACModal(acId, assignmentId) {
   document.getElementById('ac-cand-id').value = '';
   document.getElementById('ac-stage').value = '';
   document.getElementById('ac-cv-date').value = '';
-  ['ac-int1-date','ac-int2-date','ac-offer-date','ac-start-date'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  ['ac-int1-date','ac-int2-date','ac-int1-time','ac-int2-time','ac-offer-date','ac-start-date'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
   document.getElementById('ac-cv-link').value = '';
   document.getElementById('ac-cover-link').value = '';
   document.getElementById('ac-submitted-by').value = '';
@@ -6708,6 +6712,8 @@ async function openACModal(acId, assignmentId) {
       document.getElementById('ac-cv-date').value = rec.cvDate || '';
       document.getElementById('ac-int1-date').value = rec.interview1Date || '';
       document.getElementById('ac-int2-date').value = rec.interview2Date || '';
+      document.getElementById('ac-int1-time').value = rec.interview1Time || '';
+      document.getElementById('ac-int2-time').value = rec.interview2Time || '';
       document.getElementById('ac-offer-date').value = rec.offerDate || '';
       document.getElementById('ac-start-date').value = rec.startDate || '';
       document.getElementById('ac-cv-link').value = rec.cvLink || '';
@@ -6905,6 +6911,8 @@ async function saveACRecord() {
   if (cvDate) fields['CV Submitted Date'] = cvDate;
   const _i1 = document.getElementById('ac-int1-date').value; if (_i1) fields['Interview 1 Date'] = _i1;
   const _i2 = document.getElementById('ac-int2-date').value; if (_i2) fields['Interview 2 Date'] = _i2;
+  const _t1 = document.getElementById('ac-int1-time').value;
+  const _t2 = document.getElementById('ac-int2-time').value;
   const _off = document.getElementById('ac-offer-date').value; if (_off) fields['Offer Date'] = _off;
   const _st = document.getElementById('ac-start-date').value; if (_st) fields['Start Date'] = _st;
   if (!editingACId) {
@@ -6922,6 +6930,27 @@ async function saveACRecord() {
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.error?.message || 'Save failed');
+    // Interview times are saved separately and best-effort, so a Time field that
+    // hasn't been added in Airtable yet can never fail the main candidate save.
+    const savedAcId = editingACId || data.id;
+    if (savedAcId && (_t1 || _t2)) {
+      const tFields = {};
+      if (_t1) tFields['Interview 1 Time'] = _t1;
+      if (_t2) tFields['Interview 2 Time'] = _t2;
+      try {
+        const tResp = await fetch(`${AC_API_URL}/${savedAcId}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: tFields })
+        });
+        if (!tResp.ok) {
+          console.warn('Interview time not saved — the Time field may not exist in Airtable yet');
+        } else {
+          const rec = acRecords.find(r => r.id === savedAcId);
+          if (rec) { if (_t1) rec.interview1Time = _t1; if (_t2) rec.interview2Time = _t2; }
+        }
+      } catch(e) { console.warn('Interview time save error:', e); }
+    }
     // Auto-log stage change if stage was updated
     const newStage = fields['Stage'];
     if (editingACId && newStage && newStage !== prevStage) {
