@@ -518,7 +518,7 @@
     </div>
   </div>
   <!-- ORG CONTACT LIST -->
-  <div id="org-detail" style="width:260px;flex-shrink:0;border-right:1px solid var(--tee-border);background:var(--tee-mid);overflow-y:auto;">
+  <div id="org-detail" style="width:320px;flex-shrink:0;border-right:1px solid var(--tee-border);background:var(--tee-mid);overflow-y:auto;">
     <div style="text-align:center;padding:2rem;color:var(--tee-muted);">
       <div style="font-size:2rem;margin-bottom:0.5rem;opacity:0.3;">🏢</div>
       <div style="font-size:0.82rem;line-height:1.6;">Select an organisation to see contacts</div>
@@ -3972,7 +3972,8 @@ async function openContactFromOrg(contactId) {
   const savedContent = mainPanel ? mainPanel.innerHTML : '';
   renderPanel(contact, interactions);
   if (mainPanel) {
-    detail.innerHTML = mainPanel.innerHTML;
+    const backLink = `<div onclick="showOrgActivityLog()" style="padding:0.7rem 1.5rem;border-bottom:1px solid var(--tee-border);font-size:0.78rem;color:var(--tee-accent);cursor:pointer;display:flex;align-items:center;gap:0.4rem;" onmouseover="this.style.background='var(--tee-hover)'" onmouseout="this.style.background=''">← Organisation activity</div>`;
+    detail.innerHTML = backLink + mainPanel.innerHTML;
     mainPanel.innerHTML = savedContent;
   }
 }
@@ -4097,14 +4098,97 @@ function renderOrgList(orgs) {
   document.getElementById('org-list').innerHTML = html;
 }
 
+// Organisation-wide activity log. Gathers recent interactions across every contact
+// in the org, newest first, so you can glance whether the org has gone quiet.
+// Cached per org so flipping between a contact and the log doesn't refetch.
+let orgInteractionsCache = {};
+
+function orgActivityHeader(org, count, lastDate, inner) {
+  const last = lastDate ? `Last activity ${timeAgo(lastDate)}` : 'No activity logged yet';
+  return `
+    <div style="padding:1.5rem 1.75rem 1rem;border-bottom:1px solid var(--tee-border);position:sticky;top:0;background:var(--tee-card);z-index:2;">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:1rem;">
+        <div>
+          <div style="font-family:'DM Serif Display',serif;font-size:1.2rem;color:var(--tee-text);">${org.name}</div>
+          <div style="font-size:0.78rem;color:var(--tee-muted);margin-top:2px;">Organisation activity${count != null ? ` · ${count} interaction${count === 1 ? '' : 's'}` : ''}</div>
+        </div>
+        <span onclick="refreshOrgActivityLog()" style="font-size:0.72rem;color:var(--tee-muted);cursor:pointer;white-space:nowrap;padding:3px 10px;border:1px solid var(--tee-border);border-radius:8px;" onmouseover="this.style.color='var(--tee-accent)';this.style.borderColor='var(--tee-accent)'" onmouseout="this.style.color='var(--tee-muted)';this.style.borderColor='var(--tee-border)'">↻ Refresh</span>
+      </div>
+      <div style="font-size:0.74rem;color:${lastDate ? 'var(--tee-accent)' : '#dc2626'};margin-top:0.6rem;font-weight:500;">${last}</div>
+    </div>
+    <div style="padding:0.5rem 0;">${inner}</div>`;
+}
+
+function refreshOrgActivityLog() {
+  if (!selectedOrg) return;
+  delete orgInteractionsCache[selectedOrg.id];
+  renderOrgActivityLog(selectedOrg);
+}
+
+function showOrgActivityLog() {
+  if (selectedOrg) renderOrgActivityLog(selectedOrg);
+}
+
+async function renderOrgActivityLog(org) {
+  const panel = document.getElementById('org-contact-detail');
+  if (!panel || !org) return;
+  document.querySelectorAll('.org-contact-row').forEach(r => { r.style.background = ''; r.style.borderLeft = ''; });
+  selectedContact = null;
+  const contacts = getOrgContacts(org.id);
+  if (!contacts.length) {
+    panel.innerHTML = `<div style="text-align:center;padding:3rem 2rem;color:var(--tee-muted);"><div style="font-size:2rem;margin-bottom:0.5rem;opacity:0.3;">🗒️</div><div style="font-size:0.82rem;line-height:1.6;">No contacts here yet, so there's no activity to show.</div></div>`;
+    return;
+  }
+
+  let items = orgInteractionsCache[org.id];
+  if (!items) {
+    panel.innerHTML = orgActivityHeader(org, null, null, `<div class="loading" style="padding:2rem;"><div class="spinner"></div> Building activity log…</div>`);
+    const results = await Promise.all(contacts.map(async c => {
+      const ints = await fetchInteractions(c.id);
+      return ints.map(i => ({ ...i, contactId: c.id, contactName: c.name, contactRole: c.role, contactLevel: c.relationshipStatus }));
+    }));
+    items = results.flat().filter(i => i.date).sort((a, b) => new Date(b.date) - new Date(a.date));
+    orgInteractionsCache[org.id] = items;
+  }
+
+  // The user may have clicked a contact (or switched org) while this was loading.
+  if (selectedContact || !selectedOrg || selectedOrg.id !== org.id) return;
+
+  if (!items.length) {
+    panel.innerHTML = orgActivityHeader(org, 0, null, `<div style="text-align:center;padding:2.5rem 2rem;color:var(--tee-muted);font-size:0.82rem;line-height:1.6;">No interactions have been logged against anyone at this organisation yet.</div>`);
+    return;
+  }
+
+  const fmtDate = v => v ? new Date(v).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+  const rows = items.map(i => {
+    const initials = (i.contactName || '?').split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
+    const typeStr = i.type ? `<span style="color:var(--tee-muted);">${i.type}${i.subject ? ' · ' : ''}</span>` : '';
+    return `<div onclick="openContactFromOrg('${i.contactId}')" style="display:flex;gap:0.85rem;padding:0.8rem 1.75rem;border-bottom:1px solid var(--tee-border);cursor:pointer;" onmouseover="this.style.background='var(--tee-hover)'" onmouseout="this.style.background=''">
+      <div style="width:30px;height:30px;border-radius:50%;background:rgba(53,150,194,0.1);display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:500;color:var(--tee-accent);flex-shrink:0;">${initials}</div>
+      <div style="flex:1;min-width:0;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.75rem;">
+          <span style="font-size:0.84rem;font-weight:500;color:var(--tee-text);">${i.contactName}</span>
+          <span style="font-size:0.72rem;color:var(--tee-muted);white-space:nowrap;">${fmtDate(i.date)}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin:2px 0 4px;">
+          <span style="font-size:0.72rem;color:var(--tee-muted);">${i.contactRole || '—'}</span>
+          ${formatRelationship(i.contactLevel)}
+        </div>
+        <div style="font-size:0.8rem;color:var(--tee-text);line-height:1.4;">${typeStr}${i.subject || '<span style=\"color:var(--tee-muted);\">No subject</span>'}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  panel.innerHTML = orgActivityHeader(org, items.length, items[0].date, rows);
+}
+
 function selectOrg(id) {
   selectedOrg = allOrgs.find(o => o.id === id);
   if (!selectedOrg) return;
   localStorage.setItem('tee_selected_org', id);
-  const detail = document.getElementById('org-contact-detail');
-  if (detail) detail.innerHTML = '<div style="text-align:center;padding:3rem 2rem;color:var(--tee-muted);"><div style="font-size:2rem;margin-bottom:0.5rem;opacity:0.3;">→</div><div style="font-size:0.82rem;line-height:1.6;">Select a contact to see their details</div></div>';
   selectedContact = null;
   renderOrgDetail(selectedOrg);
+  renderOrgActivityLog(selectedOrg);
   filterOrgs();
 }
 
