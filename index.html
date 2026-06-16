@@ -1868,6 +1868,7 @@ function saveSetup() {
   updateToggleUI(owner);
   loadContacts();
   setTimeout(() => loadAllContactsForCounting(), 500);
+  setTimeout(() => ensureParkedListsLoaded(), 800);
   loadSelectOptions().then(refreshDynamicSelects);
 }
 
@@ -1888,6 +1889,7 @@ window.onload = async function() {
     renderSidebar();
     await loadContacts();
     loadAllContactsForCounting();
+    ensureParkedListsLoaded();
     loadSelectOptions().then(refreshDynamicSelects);
     // Restore last workspace
     const savedWs = localStorage.getItem('tee_workspace');
@@ -2692,7 +2694,7 @@ function renderPanel(contact, interactions) {
         </div>
       </div>` : ''}
       <div class="panel-section">
-        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">▶ Start sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">${markDoneLabel}</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-secondary" onclick="openSetPositionModal()">⇄ Set sequence position</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
+        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (contact.status === 'Warm Ongoing' || contact.status === 'Cold Ongoing') ? buildOngoingButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">▶ Start sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">${markDoneLabel}</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-secondary" onclick="openSetPositionModal()">⇄ Set sequence position</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
       </div>
       <div class="panel-section">
         <div class="panel-section-label">Sequence progress</div>
@@ -2964,7 +2966,21 @@ async function updateContact(id, fields, opts = {}) {
       if ('Sequence Status' in fields) patch.status = fields['Sequence Status'];
       allContacts[idx] = { ...allContacts[idx], ...patch };
     }
-    selectedContact = allContacts.find(c => c.id === id) || null;
+    const inAll = allContacts.find(c => c.id === id);
+    if (inAll) {
+      selectedContact = inAll;
+    } else if (selectedContact && selectedContact.id === id) {
+      // Parked contact — lives in a DNS/Unsub/DNC list, not in allContacts.
+      // Keep it selected and reflect what we just sent, so the panel doesn't blank out.
+      const patch = {};
+      if ('Sequence Status' in fields) patch.status = fields['Sequence Status'];
+      if ('Status Reason' in fields) patch.dncReason = fields['Status Reason'] || '';
+      if ('Next Action Due' in fields) patch.nextActionDue = fields['Next Action Due'] || '';
+      if ('Sequence Step' in fields) patch.step = fields['Sequence Step'];
+      if ('Next Action Notes' in fields) patch.nextActionNotes = fields['Next Action Notes'];
+      selectedContact = { ...selectedContact, ...patch };
+    }
+    // (If neither matches, leave selectedContact untouched rather than nulling it.)
     updateCounts();
     renderView();
     if (!opts.silent) {
@@ -3985,8 +4001,34 @@ async function openContactFromOrg(contactId) {
   }
 }
 
+// Load the parked lists (DNS / Unsub / DNC) once, in the background, so that
+// organisation pages can show every contact. Non-blocking by design — this never
+// delays the initial active-contact load or the first paint.
+let parkedListsLoaded = false;
+async function ensureParkedListsLoaded() {
+  if (parkedListsLoaded) return;
+  parkedListsLoaded = true;
+  try {
+    await Promise.all([
+      dncContacts.length === 0 ? loadDncContacts() : Promise.resolve(),
+      dnsContacts.length === 0 ? loadDnsContacts() : Promise.resolve(),
+      unsubContacts.length === 0 ? loadUnsubContacts() : Promise.resolve()
+    ]);
+  } catch(e) { parkedListsLoaded = false; return; }
+  // If an organisation is open, refresh it now that parked contacts are available.
+  if (selectedOrg) renderOrgDetail(selectedOrg);
+}
+
 function getOrgContacts(orgId) {
-  return allContacts.filter(c => c.org === orgId);
+  // Include parked contacts (Do Not Sequence / Unsubscribed / Do Not Contact),
+  // not just the active list — an organisation should show all its people.
+  const merged = [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts];
+  const seen = new Set();
+  const out = [];
+  for (const c of merged) {
+    if (c.org === orgId && !seen.has(c.id)) { seen.add(c.id); out.push(c); }
+  }
+  return out;
 }
 
 function updateOrgCounts() {
@@ -4222,8 +4264,9 @@ function addContactToOrg() {
 
 function renderOrgDetail(org) {
   const contacts = getOrgContacts(org.id);
-  const active = contacts.filter(c => c.status !== 'Do Not Contact' && c.status !== 'Responded');
+  const active = contacts.filter(c => c.status !== 'Do Not Contact' && c.status !== 'Responded' && c.status !== 'Do Not Sequence' && c.status !== 'Unsubscribed');
   const responded = contacts.filter(c => c.status === 'Responded');
+  const offSeq = contacts.filter(c => c.status === 'Do Not Sequence' || c.status === 'Unsubscribed');
   const dnc = contacts.filter(c => c.status === 'Do Not Contact');
   const stepNames = ['Not started','LI request sent','Email 1 sent','Email 2 sent','Email 3 sent','LI message sent','Follow-up done'];
   function contactRow(c) {
@@ -4269,6 +4312,7 @@ function renderOrgDetail(org) {
       </div>
       ${responded.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Responded</div>${responded.map(contactRow).join('')}</div>` : ''}
       ${active.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Active (${active.length})</div>${active.map(contactRow).join('')}</div>` : ''}
+      ${offSeq.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Off sequence (${offSeq.length})</div>${offSeq.map(contactRow).join('')}</div>` : ''}
       ${dnc.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Do not contact (${dnc.length})</div>${dnc.map(contactRow).join('')}</div>` : ''}
       ${contacts.length === 0 ? `<div style="font-size:0.82rem;color:var(--tee-muted);text-align:center;padding:1.5rem 1rem;line-height:1.6;">No contacts here yet.<br>Use <span style="color:var(--tee-accent);font-weight:500;">+ Add contact</span> above to add the people you know.</div>` : ''}
       ${org.notes ? `<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--tee-border);font-size:0.78rem;color:var(--tee-muted);line-height:1.6;">${org.notes}</div>` : ''}
@@ -4298,6 +4342,23 @@ async function startSequence() {
 }
 
 // DNC HELPERS
+function buildOngoingButtons(contact) {
+  const isWarm = contact.status === 'Warm Ongoing';
+  const color = isWarm ? '#f59e0b' : '#94a3b8';
+  const bg = isWarm ? 'rgba(245,158,11,0.08)' : 'rgba(148,163,184,0.12)';
+  const border = isWarm ? 'rgba(245,158,11,0.25)' : 'rgba(148,163,184,0.3)';
+  const label = isWarm ? '🟡 Warm ongoing' : '🔵 Cold ongoing';
+  return `<div style="background:${bg};border:1px solid ${border};border-radius:10px;padding:0.75rem 1rem;margin-bottom:0.75rem;">
+    <div style="font-size:0.82rem;color:${color};font-weight:600;">${label}</div>
+    <div style="font-size:0.75rem;color:var(--tee-muted);margin-top:3px;">Off the sequence — nurture on your own schedule. Set the next send date above.</div>
+  </div>
+  <div class="btn-primary" style="background:#10b981;" onclick="openLogModal()">Log an action / set a reminder</div>
+  <div class="btn-secondary" onclick="markResponded()">✓ Mark as responded</div>
+  <div class="btn-secondary" onclick="openOngoingModal()">↗ Change warm / cold</div>
+  <div class="btn-subtle" onclick="reinstateContact()">↩ Return to sequence</div>
+  <div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`;
+}
+
 function buildDncButtons(contact) {
   const reason = contact.dncReason || '';
   return `<div style="background:rgba(220,38,38,0.06);border:1px solid rgba(220,38,38,0.2);border-radius:10px;padding:0.75rem 1rem;margin-bottom:0.75rem;"><div style="font-size:0.82rem;color:#dc2626;font-weight:600;">⊘ Do not contact${reason ? ' — ' + reason : ''}</div></div>
