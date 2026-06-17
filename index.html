@@ -1038,7 +1038,7 @@
 </div>
 
 <!-- ASSIGNMENTS WORKSPACE -->
-<div id="dashboard-workspace" style="display:none;padding:1.5rem 2rem;max-width:1100px;margin:0 auto;width:100%;box-sizing:border-box;"></div>
+<div id="dashboard-workspace" style="display:none;position:fixed;top:65px;left:0;right:0;bottom:0;overflow-y:auto;padding:1.5rem 2rem;box-sizing:border-box;z-index:10;"></div>
 <div id="assignments-workspace">
 
   <!-- ASSIGNMENTS SIDEBAR -->
@@ -4241,11 +4241,11 @@ async function renderDashboard() {
   ensureParkedListsLoaded();
   if (dashInteractions === null && !dashLoading) {
     dashLoading = true;
-    el.innerHTML = dashChrome() + '<div style="padding:3rem;text-align:center;color:var(--tee-muted);">Loading activity…</div>';
+    el.innerHTML = '<div style="max-width:1100px;margin:0 auto;">' + dashChrome() + '<div style="padding:3rem;text-align:center;color:var(--tee-muted);">Loading activity…</div></div>';
     await loadDashboardInteractions();
     dashLoading = false;
   }
-  el.innerHTML = dashChrome() + dashRenderBody();
+  el.innerHTML = '<div style="max-width:1100px;margin:0 auto;">' + dashChrome() + dashRenderBody() + '</div>';
 }
 
 function getOrgContacts(orgId) {
