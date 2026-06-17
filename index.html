@@ -4124,14 +4124,29 @@ function dashPool() {
 }
 
 function dashPipeline() {
+  const today = new Date().toISOString().split('T')[0];
   const active = dashPool().filter(c => !['Do Not Contact','Do Not Sequence','Unsubscribed'].includes(c.status));
-  const seq = s => active.filter(c => (c.status === 'Active' || !c.status) && (c.step || 0) === s).length;
+  const ov = c => c.nextActionDue && c.nextActionDue < today;
+  const stage = pred => { const list = active.filter(pred); return { count: list.length, overdue: list.filter(ov).length }; };
+  const seq = s => stage(c => (c.status === 'Active' || !c.status) && (c.step || 0) === s);
   return {
-    start: active.filter(c => (c.status === 'Active' || !c.status) && (!c.step || c.step === 0)).length,
+    start: stage(c => (c.status === 'Active' || !c.status) && (!c.step || c.step === 0)),
     li: seq(1), e1: seq(2), e2: seq(3), e3: seq(4), lim: seq(5), call: seq(6),
-    warm: active.filter(c => c.status === 'Warm Ongoing' || c.status === 'Cold Ongoing').length,
-    responded: active.filter(c => c.status === 'Responded').length
+    warm: stage(c => c.status === 'Warm Ongoing' || c.status === 'Cold Ongoing'),
+    responded: stage(c => c.status === 'Responded')
   };
+}
+
+function dashGoToStage(view) {
+  switchWorkspace('bd');
+  switchView(view);
+  currentFilter = 'overdue';
+  const chips = document.querySelectorAll('.filter-chip');
+  chips.forEach(c => c.classList.remove('active'));
+  const overdueChip = Array.from(chips).find(c => /overdue/i.test(c.textContent));
+  if (overdueChip) overdueChip.classList.add('active');
+  renderView();
+  window.scrollTo(0, 0);
 }
 
 function dashEngagement() {
@@ -4173,14 +4188,15 @@ function dashCard(label, value, sub) {
 }
 function dashGrid(cards, min) { return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(${min||130}px,1fr));gap:12px;">${cards.join('')}</div>`; }
 function dashSection(label) { return `<div style="font-size:0.95rem;font-weight:600;color:var(--tee-text);margin:1.6rem 0 0.7rem;">${label}</div>`; }
-function dashBar(label, value, max, color) {
+function dashBar(label, stageObj, max, color, viewKey) {
+  const value = stageObj.count, overdue = stageObj.overdue;
   const pct = max > 0 ? Math.round(value / max * 100) : 0;
-  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;">
-    <div style="width:110px;font-size:0.78rem;color:var(--tee-muted);text-align:right;flex-shrink:0;">${label}</div>
-    <div style="flex:1;background:var(--tee-hover);border-radius:5px;height:18px;">
-      <div style="width:${pct}%;background:${color};height:100%;border-radius:5px;min-width:${value > 0 ? '3px' : '0'};"></div>
-    </div>
-    <div style="width:32px;font-size:0.82rem;font-weight:600;color:var(--tee-text);">${value}</div>
+  const ovBadge = overdue > 0 ? `<span style="font-size:0.7rem;font-weight:600;color:var(--overdue);background:rgba(220,38,38,0.1);border-radius:10px;padding:1px 7px;white-space:nowrap;">${overdue} overdue</span>` : '';
+  return `<div onclick="dashGoToStage('${viewKey}')" title="View ${label} — overdue first" style="display:flex;align-items:center;gap:10px;margin-bottom:5px;cursor:pointer;border-radius:6px;padding:3px 4px;" onmouseover="this.style.background='var(--tee-hover)'" onmouseout="this.style.background='transparent'">
+    <div style="width:108px;font-size:0.78rem;color:var(--tee-muted);text-align:right;flex-shrink:0;">${label}</div>
+    <div style="flex:1;background:var(--tee-hover);border-radius:5px;height:18px;"><div style="width:${pct}%;background:${color};height:100%;border-radius:5px;min-width:${value > 0 ? '3px' : '0'};"></div></div>
+    <div style="width:26px;text-align:right;font-size:0.82rem;font-weight:600;color:var(--tee-text);flex-shrink:0;">${value}</div>
+    <div style="width:80px;text-align:left;flex-shrink:0;">${ovBadge}</div>
   </div>`;
 }
 function dashTrend(weeks) {
@@ -4209,7 +4225,7 @@ function dashRenderBody() {
   const a = dashActivity(), eng = dashEngagement(), pipe = dashPipeline(), out = dashOutcomes(), weeks = dashWeeklyTrend();
   const periodLabel = dashPeriod === 'week' ? 'last 7 days' : dashPeriod === '90d' ? 'last 90 days' : 'last 30 days';
   const gbp = n => '£' + Math.round(n).toLocaleString();
-  const pmax = Math.max(pipe.start,pipe.li,pipe.e1,pipe.e2,pipe.e3,pipe.lim,pipe.call,pipe.warm,pipe.responded,1);
+  const pmax = Math.max(pipe.start.count,pipe.li.count,pipe.e1.count,pipe.e2.count,pipe.e3.count,pipe.lim.count,pipe.call.count,pipe.warm.count,pipe.responded.count,1);
   const today = new Date().toISOString().split('T')[0];
   const overdue = dashPool().filter(c => c.nextActionDue && c.nextActionDue < today && !['Do Not Contact','Do Not Sequence','Unsubscribed'].includes(c.status)).length;
   return dashSection('Activity · ' + periodLabel)
@@ -4219,16 +4235,17 @@ function dashRenderBody() {
     + dashGrid([dashCard('Connection acceptance', eng.acceptance + '%', eng.connected + ' of ' + eng.approached + ' approached'), dashCard('Response rate', eng.respRate + '%', eng.responded + ' of ' + eng.contacted + ' contacted'), dashCard('Warm relationships', eng.warm, 'being nurtured')], 150)
     + dashSection('Pipeline health · live snapshot')
     + `<div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1.1rem 1.25rem;">
-        ${dashBar('Start sequence', pipe.start, pmax, 'var(--tee-accent2)')}
-        ${dashBar('LI request', pipe.li, pmax, 'var(--tee-accent)')}
-        ${dashBar('Email 1', pipe.e1, pmax, 'var(--tee-accent)')}
-        ${dashBar('Email 2', pipe.e2, pmax, 'var(--tee-accent)')}
-        ${dashBar('Email 3', pipe.e3, pmax, 'var(--tee-accent)')}
-        ${dashBar('LI message', pipe.lim, pmax, 'var(--tee-accent)')}
-        ${dashBar('Follow-up call', pipe.call, pmax, 'var(--tee-accent)')}
-        ${dashBar('Warm / ongoing', pipe.warm, pmax, '#f59e0b')}
-        ${dashBar('Responded', pipe.responded, pmax, '#16a34a')}
-        <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--tee-border);padding-top:10px;margin-top:8px;font-size:0.8rem;color:${overdue > 0 ? 'var(--overdue)' : 'var(--tee-muted)'};">${overdue > 0 ? '⏰ ' + overdue + ' follow-up' + (overdue !== 1 ? 's' : '') + ' overdue' : '✓ No overdue follow-ups'}</div>
+        <div style="font-size:0.72rem;color:var(--tee-muted);margin-bottom:8px;">Click any stage to action its overdue list</div>
+        ${dashBar('Start sequence', pipe.start, pmax, 'var(--tee-accent2)', 'not-started')}
+        ${dashBar('LI request', pipe.li, pmax, 'var(--tee-accent)', 'li-connect')}
+        ${dashBar('Email 1', pipe.e1, pmax, 'var(--tee-accent)', 'email-1')}
+        ${dashBar('Email 2', pipe.e2, pmax, 'var(--tee-accent)', 'email-2')}
+        ${dashBar('Email 3', pipe.e3, pmax, 'var(--tee-accent)', 'email-3')}
+        ${dashBar('LI message', pipe.lim, pmax, 'var(--tee-accent)', 'li-message')}
+        ${dashBar('Follow-up call', pipe.call, pmax, 'var(--tee-accent)', 'follow-up')}
+        ${dashBar('Warm / ongoing', pipe.warm, pmax, '#f59e0b', 'warm-ongoing')}
+        ${dashBar('Responded', pipe.responded, pmax, '#16a34a', 'responded')}
+        <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--tee-border);padding-top:10px;margin-top:8px;font-size:0.8rem;color:${overdue > 0 ? 'var(--overdue)' : 'var(--tee-muted)'};">${overdue > 0 ? '⏰ ' + overdue + ' follow-up' + (overdue !== 1 ? 's' : '') + ' overdue across all stages' : '✓ No overdue follow-ups'}</div>
       </div>`
     + dashSection('Outcomes · all assignments')
     + dashGrid([dashCard('Live assignments', out.live), dashCard('Placements YTD', out.placedYtd), dashCard('Placed (all time)', out.placed), dashCard('Fees in pipeline', gbp(out.feePipeline), 'sum of open fee amounts')], 120);
