@@ -440,15 +440,29 @@
         <div class="action-subtitle" id="view-subtitle">Loading...</div>
       </div>
       <div class="filter-row">
-        <button class="filter-chip active" onclick="setFilter('all', this)">All contacts</button>
-        <button class="filter-chip" onclick="setFilter('overdue', this)">Overdue first</button>
-        <button class="filter-chip" onclick="setFilter('clevel', this)">C-Level / Board</button>
-        <button class="filter-chip" onclick="setFilter('director', this)">Director / Head of</button>
-        <button class="filter-chip" onclick="setFilter('management', this)">Management</button>
-        <button class="filter-chip" onclick="setFilter('li-connected', this)" style="border-color: rgba(0,119,181,0.4); color: #4da6d6;">LI connected</button>
-        <button class="filter-chip" onclick="setFilter('li-not-connected', this)" style="border-color: rgba(15,13,46,0.15);">Not connected</button>
-        <button class="filter-chip" onclick="setFilter('very-warm', this)" style="border-color: rgba(245,158,11,0.4); color: #f59e0b;">⭐ Very warm (1–1.5)</button>
-        <button class="filter-chip" onclick="setFilter('warm', this)" style="border-color: rgba(251,146,60,0.4); color: #fb923c;">🔥 Warm (2)</button>
+        <span style="font-size:0.68rem;font-weight:600;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;align-self:center;margin-right:2px;">Level</span>
+        <button class="filter-chip active" data-val="all" onclick="setRowFilter('level','all',this)">All</button>
+        <button class="filter-chip" data-val="clevel" onclick="setRowFilter('level','clevel',this)">C-Level / Board</button>
+        <button class="filter-chip" data-val="director" onclick="setRowFilter('level','director',this)">Director</button>
+        <button class="filter-chip" data-val="headof" onclick="setRowFilter('level','headof',this)">Head of</button>
+        <button class="filter-chip" data-val="management" onclick="setRowFilter('level','management',this)">Management</button>
+      </div>
+      <div class="filter-row">
+        <span style="font-size:0.68rem;font-weight:600;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;align-self:center;margin-right:2px;">Speciality</span>
+        <button class="filter-chip active" data-val="all" onclick="setRowFilter('spec','all',this)">All</button>
+        <button class="filter-chip" data-val="ceo" onclick="setRowFilter('spec','ceo',this)">CEO</button>
+        <button class="filter-chip" data-val="transformation" onclick="setRowFilter('spec','transformation',this)">Transformation &amp; Change</button>
+        <button class="filter-chip" data-val="hr" onclick="setRowFilter('spec','hr',this)">HR</button>
+        <button class="filter-chip" data-val="governance" onclick="setRowFilter('spec','governance',this)">Governance &amp; Compliance</button>
+        <button class="filter-chip" data-val="other" onclick="setRowFilter('spec','other',this)" style="border-color: rgba(107,114,153,0.4); color: #6b7899;">Other / not categorised</button>
+      </div>
+      <div class="filter-row">
+        <span style="font-size:0.68rem;font-weight:600;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;align-self:center;margin-right:2px;">Refine</span>
+        <button class="filter-chip active" data-val="all" onclick="setRowFilter('refine','all',this)">All</button>
+        <button class="filter-chip" data-val="li-connected" onclick="setRowFilter('refine','li-connected',this)" style="border-color: rgba(0,119,181,0.4); color: #4da6d6;">LI connected</button>
+        <button class="filter-chip" data-val="li-not-connected" onclick="setRowFilter('refine','li-not-connected',this)" style="border-color: rgba(15,13,46,0.15);">Not connected</button>
+        <button class="filter-chip" data-val="very-warm" onclick="setRowFilter('refine','very-warm',this)" style="border-color: rgba(245,158,11,0.4); color: #f59e0b;">⭐ Very warm (1–1.5)</button>
+        <button class="filter-chip" data-val="warm" onclick="setRowFilter('refine','warm',this)" style="border-color: rgba(251,146,60,0.4); color: #fb923c;">🔥 Warm (2)</button>
       </div>
       <div class="contact-list" id="contact-list">
         <div class="loading"><div class="spinner"></div> Loading contacts...</div>
@@ -1728,7 +1742,9 @@ const VIEW_CONFIG = {
 let allContacts = [];
 let allContactsUnfiltered = []; // All contacts regardless of owner filter - used for org counts
 let currentView = 'li-connect';
-let currentFilter = 'all';
+let levelFilter = 'all';
+let specFilter = 'all';
+let refineFilter = 'all';
 let selectedContact = null;
 let pendingAdvance = null;
 
@@ -2468,63 +2484,94 @@ async function loadUnsubContacts() {
 function switchView(view, opts = {}) {
   localStorage.setItem('tee_view', view);
   currentView = view;
-  currentFilter = 'all';
+  levelFilter = 'all';
+  specFilter = 'all';
+  refineFilter = 'all';
   selectedContact = null;
   if (!opts.keepSelection) localStorage.removeItem('tee_selected_contact');
   // Reset warm filter chips when leaving warm-contacts view
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-  document.querySelectorAll('.filter-chip')[0]?.classList.add('active');
+  document.querySelectorAll('.filter-row .filter-chip[data-val="all"]').forEach(c => c.classList.add('active'));
   if (view === 'do-not-contact' && dncContacts.length === 0) { loadDncContacts(); }
   if (view === 'do-not-sequence') { loadDnsContacts(); }
   if (view === 'unsubscribed' && unsubContacts.length === 0) { loadUnsubContacts(); }
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(`nav-${view}`)?.classList.add('active');
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-  document.querySelectorAll('.filter-chip')[0]?.classList.add('active');
+  document.querySelectorAll('.filter-row .filter-chip[data-val="all"]').forEach(c => c.classList.add('active'));
   document.getElementById('view-title').textContent = VIEW_CONFIG[view]?.title || view;
   renderView();
   renderPanel(null);
 }
 
-function setFilter(filter, el) {
-  currentFilter = filter;
-  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-  el.classList.add('active');
-  renderView();
+const SPEC_HR = ['HR Generalist','HRBP','HR Operations','HR projects','Employee Engagement','Culture','Learning and Development','Organisational Development','Organisational Design','Transformation & Change','Talent Acquisition','Talent','Reward','Payroll','HRIS','ED&I','CPO/HRD','Troubleshooting','System Implementation','Project Management'];
+const SPEC_GOV = ['Governance','Legal','Mergers and Acquisitions','Compliance','Due Diligence'];
+
+function contactSpecs(contact) {
+  return (contact.specialism || '').split(',').map(s => s.trim()).filter(Boolean);
+}
+function isCeoContact(contact) {
+  const level = (contact.contactLevel || '').toLowerCase();
+  return level.includes('ceo') || level.includes('/md') || level === 'md';
+}
+function specInCohort(contact, cohort) {
+  const specs = contactSpecs(contact);
+  if (cohort === 'ceo') return isCeoContact(contact);
+  if (cohort === 'transformation') return specs.includes('Transformation & Change');
+  if (cohort === 'hr') return specs.some(s => SPEC_HR.includes(s));
+  if (cohort === 'governance') return specs.some(s => SPEC_GOV.includes(s));
+  return false;
 }
 
-function matchesFilter(contact) {
-  if (currentFilter === 'all' || currentFilter === 'overdue') return true;
+function matchesLevel(contact) {
+  if (levelFilter === 'all') return true;
   const level = (contact.contactLevel || '').toLowerCase();
-  if (currentFilter === 'clevel') return level.includes('c-level') || level.includes('board') || level.includes('ceo') || level.includes('cfo') || level.includes('coo') || level.includes('chro');
-  if (currentFilter === 'director') return level.includes('director') || level.includes('head of');
-  if (currentFilter === 'management') return level.includes('management') || level.includes('junior');
-  if (currentFilter === 'li-connected') return ownerLiConnected(contact) === true;
-  if (currentFilter === 'li-not-connected') return !ownerLiConnected(contact);
-  if (currentFilter === 'very-warm') { const r = contact.relationshipStatus || ''; return r.startsWith('1'); }
-  if (currentFilter === 'warm') { const r = contact.relationshipStatus || ''; return r.startsWith('2'); }
+  if (levelFilter === 'clevel') return level.includes('c-level') || level.includes('c-suite') || level.includes('board') || level.includes('ceo') || level.includes('/md') || level.includes('cfo') || level.includes('coo') || level.includes('chro');
+  if (levelFilter === 'director') return level.includes('director');
+  if (levelFilter === 'headof') return level.includes('head of');
+  if (levelFilter === 'management') return level.includes('management') || level.includes('junior');
   return true;
+}
+function matchesSpec(contact) {
+  if (specFilter === 'all') return true;
+  if (specFilter === 'other') return !(specInCohort(contact,'ceo') || specInCohort(contact,'transformation') || specInCohort(contact,'hr') || specInCohort(contact,'governance'));
+  return specInCohort(contact, specFilter);
+}
+function matchesRefine(contact) {
+  if (refineFilter === 'all') return true;
+  if (refineFilter === 'li-connected') return ownerLiConnected(contact) === true;
+  if (refineFilter === 'li-not-connected') return !ownerLiConnected(contact);
+  if (refineFilter === 'very-warm') { const r = contact.relationshipStatus || ''; return r.startsWith('1'); }
+  if (refineFilter === 'warm') { const r = contact.relationshipStatus || ''; return r.startsWith('2'); }
+  return true;
+}
+function matchesFilter(contact) {
+  return matchesLevel(contact) && matchesSpec(contact) && matchesRefine(contact);
+}
+
+function setRowFilter(axis, val, el) {
+  if (axis === 'level') levelFilter = (levelFilter === val) ? 'all' : val;
+  else if (axis === 'spec') specFilter = (specFilter === val) ? 'all' : val;
+  else if (axis === 'refine') refineFilter = (refineFilter === val) ? 'all' : val;
+  const row = el.closest('.filter-row');
+  if (row) {
+    const active = axis === 'level' ? levelFilter : axis === 'spec' ? specFilter : refineFilter;
+    row.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    const sel = row.querySelector(`.filter-chip[data-val="${active}"]`);
+    if (sel) sel.classList.add('active');
+  }
+  renderView();
 }
 
 // RENDER CONTACT LIST
 function renderView() {
   let contacts = getContactsForView(currentView);
-  if (currentFilter !== 'all' && currentFilter !== 'overdue') {
-    contacts = contacts.filter(c => matchesFilter(c));
-  }
-  if (currentFilter === 'overdue') {
-    contacts = contacts.sort((a, b) => {
-      const da = dueDiff(a.nextActionDue) ?? 999;
-      const db = dueDiff(b.nextActionDue) ?? 999;
-      return da - db;
-    });
-  } else {
-    contacts = contacts.sort((a, b) => {
-      const da = dueDiff(a.nextActionDue) ?? 999;
-      const db = dueDiff(b.nextActionDue) ?? 999;
-      return da - db;
-    });
-  }
+  contacts = contacts.filter(c => matchesFilter(c));
+  contacts = contacts.sort((a, b) => {
+    const da = dueDiff(a.nextActionDue) ?? 999;
+    const db = dueDiff(b.nextActionDue) ?? 999;
+    return da - db;
+  });
 
   const subtitle = `${contacts.length} contact${contacts.length !== 1 ? 's' : ''}${contacts.filter(c => (dueDiff(c.nextActionDue) ?? 1) < 0).length > 0 ? ` — ${contacts.filter(c => (dueDiff(c.nextActionDue) ?? 1) < 0).length} overdue` : ''}`;
   document.getElementById('view-subtitle').textContent = subtitle;
@@ -4140,12 +4187,6 @@ function dashPipeline() {
 function dashGoToStage(view) {
   switchWorkspace('bd');
   switchView(view);
-  currentFilter = 'overdue';
-  const chips = document.querySelectorAll('.filter-chip');
-  chips.forEach(c => c.classList.remove('active'));
-  const overdueChip = Array.from(chips).find(c => /overdue/i.test(c.textContent));
-  if (overdueChip) overdueChip.classList.add('active');
-  renderView();
   window.scrollTo(0, 0);
 }
 
