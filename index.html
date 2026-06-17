@@ -920,6 +920,12 @@
       </select>
     </div>
 
+    <div class="edit-field-group">
+      <label class="edit-label">Specialism</label>
+      <div id="ef-specialism-picker" style="background:rgba(255,255,255,0.03);border:1px solid var(--tee-border);border-radius:10px;padding:0.75rem;"></div>
+      <input type="hidden" id="ef-specialism" />
+    </div>
+
     <!-- ADD MODE ONLY: routing -->
     <div id="ef-routing-wrap" style="display:none;background:rgba(53,150,194,0.04);border:1px solid rgba(53,150,194,0.2);border-radius:10px;padding:0.875rem 1rem;margin-bottom:1rem;">
       <div style="font-size:0.78rem;font-weight:500;color:var(--tee-accent);margin-bottom:0.75rem;">Where should this contact go?</div>
@@ -2504,7 +2510,7 @@ function switchView(view, opts = {}) {
   renderPanel(null);
 }
 
-const SPEC_HR = ['HR Generalist','HRBP','HR Operations','HR projects','Employee Engagement','Culture','Learning and Development','Organisational Development','Organisational Design','Transformation & Change','Talent Acquisition','Talent','Reward','Payroll','HRIS','ED&I','CPO/HRD','Troubleshooting','System Implementation','Project Management'];
+const SPEC_HR = ['HR Generalist','HRBP','HR Operations','HR projects','Employee Engagement','Culture','Learning and Development','Organisational Development','Organisational Design','Talent Acquisition','Talent','Reward','Payroll','HRIS','ED&I','CPO/HRD','Troubleshooting','System Implementation','Project Management'];
 const SPEC_GOV = ['Governance','Legal','Mergers and Acquisitions','Compliance','Due Diligence'];
 
 function contactSpecs(contact) {
@@ -5308,6 +5314,8 @@ function openEditModal() {
   document.getElementById('edit-delete-btn').style.display = 'inline-flex';
   document.getElementById('ef-routing-wrap').style.display = 'none';
   document.getElementById('ef-relationship').value = c.relationshipStatus || '';
+  const efSpecVals = (c.specialism || '').split(',').map(s => s.trim()).filter(Boolean);
+  buildGroupedSpecialismPicker('ef-specialism-picker', 'ef-specialism', efSpecVals, CONTACT_SPECIALISM_GROUPS);
   initContactPrevEmpPicker(c.previousEmployerIds || [], c.previousEmployerNames || []);
   document.getElementById('edit-modal').classList.add('show');
   ensureOrgsLoaded();
@@ -5410,6 +5418,7 @@ function openAddContactModal() {
   document.getElementById('ef-routing-wrap').style.display = 'block';
   document.getElementById('ef-routing-sequence').checked = true;
   document.getElementById('ef-relationship').value = '';
+  buildGroupedSpecialismPicker('ef-specialism-picker', 'ef-specialism', [], CONTACT_SPECIALISM_GROUPS);
   initContactPrevEmpPicker([], []);
   document.getElementById('edit-modal').classList.add('show');
   ensureOrgsLoaded();
@@ -5460,6 +5469,7 @@ async function saveEditContact() {
   const orgId = document.getElementById('ef-org-id').value;
   const changeNote = document.getElementById('ef-change-note').value.trim();
   const relationshipStatus = document.getElementById('ef-relationship').value;
+  const specialisms = getTagPickerValues('ef-specialism-picker');
   const routing = document.querySelector('input[name="ef-routing"]:checked')?.value || 'sequence';
 
   if (!firstName) { showToast('First name is required', 'error'); return; }
@@ -5487,6 +5497,7 @@ async function saveEditContact() {
   fields['Previous Employers'] = contactPrevEmpIds;
 
   if (relationshipStatus) fields['Relationship Status'] = relationshipStatus;
+  fields['Specialism'] = specialisms;
 
   if (editMode === 'add') {
     fields['Owner'] = getOwner();
@@ -5507,7 +5518,7 @@ async function saveEditContact() {
       resp = await fetch(`${API_URL}/${selectedContact.id}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields })
+        body: JSON.stringify({ fields, typecast: true })
       });
       data = await resp.json();
       if (!resp.ok) throw new Error(data.error?.message || 'Update failed');
@@ -5530,7 +5541,7 @@ async function saveEditContact() {
       const idx = allContacts.findIndex(c => c.id === selectedContact.id);
       if (idx > -1) {
         const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || allContacts[idx].orgName) : allContacts[idx].orgName;
-        allContacts[idx] = { ...allContacts[idx], name: fullName, firstName, role, email, phone, linkedin, contactLevel, tier, org: orgId || allContacts[idx].org, orgName, previousEmployerIds: contactPrevEmpIds, previousEmployerNames: contactPrevEmpSelected.map(e => e.name) };
+        allContacts[idx] = { ...allContacts[idx], name: fullName, firstName, role, email, phone, linkedin, contactLevel, tier, org: orgId || allContacts[idx].org, orgName, specialism: specialisms.join(', '), previousEmployerIds: contactPrevEmpIds, previousEmployerNames: contactPrevEmpSelected.map(e => e.name) };
         selectedContact = allContacts[idx];
       }
       closeEditModal();
@@ -5544,7 +5555,7 @@ async function saveEditContact() {
       resp = await fetch(API_URL, {
         method: 'POST',
         headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields })
+        body: JSON.stringify({ fields, typecast: true })
       });
       data = await resp.json();
       if (!resp.ok) throw new Error(data.error?.message || 'Create failed');
@@ -5557,6 +5568,7 @@ async function saveEditContact() {
         step: routing === 'sequence' ? 1 : 0,
         status: routing === 'warm' ? 'Ongoing Programme' : 'Active',
         relationshipStatus: relationshipStatus || '',
+        specialism: specialisms.join(', '),
         liConnected: false,
         liConnectedJohn: false,
         nextActionDue: routing === 'sequence' ? new Date().toISOString().split('T')[0] : '',
@@ -5972,6 +5984,14 @@ const SPECIALISM_GROUPS = {
   'Housing': ['Housing']
 };
 
+// Contact specialism picker groups. Transformation & Change stands as its own
+// bucket, deliberately NOT inside HR. HR list below excludes it.
+const CONTACT_SPECIALISM_GROUPS = {
+  'Transformation': ['Transformation & Change'],
+  'HR': ['HR Generalist', 'HRBP', 'HR Operations', 'HR projects', 'Employee Engagement', 'Culture', 'Learning and Development', 'Organisational Development', 'Organisational Design', 'Talent Acquisition', 'Talent', 'Reward', 'Payroll', 'HRIS', 'ED&I', 'CPO/HRD', 'Troubleshooting', 'System Implementation', 'Project Management'],
+  'Governance & Compliance': ['Governance', 'Legal', 'Mergers and Acquisitions', 'Compliance', 'Due Diligence']
+};
+
 const QUALIFICATIONS_OPTIONS = ['CIPD Level 3', 'CIPD Level 5', 'CIPD Level 7', 'CiH Level 4', 'CiH Level 5', 'CiH Level 7', 'Prince2', 'Other Project Management Quals'];
 
 function buildQualificationsPicker(pickerId, hiddenId, selectedValues) {
@@ -5998,14 +6018,15 @@ function getQualPickerValues(pickerId) {
   return [...picker.querySelectorAll('.tag-option.selected')].map(e => e.getAttribute('data-val'));
 }
 
-function buildGroupedSpecialismPicker(pickerId, hiddenId, selectedValues) {
+function buildGroupedSpecialismPicker(pickerId, hiddenId, selectedValues, groupsObj) {
   const picker = document.getElementById(pickerId);
   const hidden = document.getElementById(hiddenId);
   if (!picker) return;
+  const groups = groupsObj || SPECIALISM_GROUPS;
   let selected = Array.isArray(selectedValues) ? [...selectedValues] : (selectedValues ? [selectedValues] : []);
 
   function render() {
-    picker.innerHTML = Object.entries(SPECIALISM_GROUPS).map(([group, items]) => `
+    picker.innerHTML = Object.entries(groups).map(([group, items]) => `
       <div style="margin-bottom:0.75rem;">
         <div style="font-size:0.68rem;font-weight:600;text-transform:uppercase;letter-spacing:0.08em;color:var(--tee-muted);margin-bottom:0.4rem;padding-left:2px;">${group}</div>
         <div style="display:flex;flex-wrap:wrap;gap:0.35rem;">
