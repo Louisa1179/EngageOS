@@ -395,6 +395,7 @@
       <button class="workspace-tab" id="tab-orgs" onclick="switchWorkspace('orgs')">Organisations</button>
       <button class="workspace-tab" id="tab-candidates" onclick="switchWorkspace('candidates')">Candidates</button>
       <button class="workspace-tab" id="tab-assignments" onclick="switchWorkspace('assignments')">Assignments</button>
+      <button class="workspace-tab" id="tab-dashboard" onclick="switchWorkspace('dashboard')">Dashboard</button>
     </div>
     <div class="header-right">
       <div style="position:relative;">
@@ -1037,6 +1038,7 @@
 </div>
 
 <!-- ASSIGNMENTS WORKSPACE -->
+<div id="dashboard-workspace" style="display:none;padding:1.5rem 2rem;max-width:1100px;margin:0 auto;width:100%;box-sizing:border-box;"></div>
 <div id="assignments-workspace">
 
   <!-- ASSIGNMENTS SIDEBAR -->
@@ -3617,15 +3619,18 @@ function switchWorkspace(ws) {
   const orgsBody = document.getElementById('orgs-workspace');
   const candsBody = document.getElementById('candidates-workspace');
   const assignBody = document.getElementById('assignments-workspace');
+  const dashBody = document.getElementById('dashboard-workspace');
   const tabBd = document.getElementById('tab-bd');
   const tabOrgs = document.getElementById('tab-orgs');
   const tabCands = document.getElementById('tab-candidates');
   const tabAssign = document.getElementById('tab-assignments');
+  const tabDash = document.getElementById('tab-dashboard');
   bdBody.style.display = 'none';
   orgsBody.style.display = 'none';
   candsBody.style.display = 'none';
   if (assignBody) assignBody.style.display = 'none';
-  [tabBd, tabOrgs, tabCands, tabAssign].forEach(t => t && t.classList.remove('active'));
+  if (dashBody) dashBody.style.display = 'none';
+  [tabBd, tabOrgs, tabCands, tabAssign, tabDash].forEach(t => t && t.classList.remove('active'));
   const deskBar = document.querySelector('.desk-bar');
   if (ws === 'bd') {
     bdBody.style.display = 'flex';
@@ -3653,6 +3658,11 @@ function switchWorkspace(ws) {
     if (allAssignments.length === 0) loadAssignments();
     else { updateAssignCounts(); filterAssignments(); }
     if (allOrgs.length === 0) ensureOrgsLoaded();
+  } else if (ws === 'dashboard') {
+    if (deskBar) deskBar.style.display = 'none';
+    if (dashBody) dashBody.style.display = 'block';
+    if (tabDash) tabDash.classList.add('active');
+    renderDashboard();
   }
   // Force scroll to top
   window.scrollTo(0, 0);
@@ -4017,6 +4027,225 @@ async function ensureParkedListsLoaded() {
   } catch(e) { parkedListsLoaded = false; return; }
   // If an organisation is open, refresh it now that parked contacts are available.
   if (selectedOrg) renderOrgDetail(selectedOrg);
+}
+
+// ===== KPI DASHBOARD =====
+let dashPeriod = 'month';      // 'week' | 'month' | '90d'
+let dashOwner = 'All';         // 'Louisa Daly' | 'John Daly' | 'All'
+let dashInteractions = null;   // cached interaction records for the last 90 days
+let dashLoading = false;
+
+function dashPeriodStart(period) {
+  const d = new Date();
+  if (period === 'week') d.setDate(d.getDate() - 7);
+  else if (period === '90d') d.setDate(d.getDate() - 90);
+  else d.setDate(d.getDate() - 30);
+  return d.toISOString().split('T')[0];
+}
+
+async function loadDashboardInteractions() {
+  try {
+    const since = dashPeriodStart('90d');
+    const formula = encodeURIComponent(`IS_AFTER({Date}, "${since}")`);
+    let records = [], offset = null, guard = 0;
+    do {
+      let url = `https://api.airtable.com/v0/${BASE_ID}/Interactions?pageSize=100&filterByFormula=${formula}&sort[0][field]=Date&sort[0][direction]=desc`;
+      if (offset) url += `&offset=${offset}`;
+      const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error?.message || 'Load failed');
+      records = records.concat(data.records || []);
+      offset = data.offset;
+    } while (offset && ++guard < 30);
+    dashInteractions = records.map(r => ({
+      type: r.fields['Type'] || 'Note',
+      date: r.fields['Date'] || '',
+      loggedBy: r.fields['Logged by'] || '',
+      contactId: Array.isArray(r.fields['Related Contact']) ? r.fields['Related Contact'][0] : null
+    }));
+  } catch(e) {
+    dashInteractions = [];
+    console.log('Dashboard interactions error:', e);
+  }
+}
+
+function dashSetPeriod(p) { dashPeriod = p; renderDashboard(); }
+function dashSetOwner(o) { dashOwner = o; renderDashboard(); }
+
+function dashOwnerMatch(loggedBy, contactId) {
+  if (dashOwner === 'All') return true;
+  if (loggedBy) return loggedBy === dashOwner;
+  const c = (allContactsUnfiltered || []).find(x => x.id === contactId) || allContacts.find(x => x.id === contactId);
+  if (c) return (c.owner || 'Louisa Daly') === dashOwner;
+  return dashOwner === 'Louisa Daly';
+}
+
+function dashIsOutreach(type) {
+  const t = (type || '').toLowerCase();
+  return t.includes('linkedin') || t.includes('inmail') || t.includes('email') || t.includes('phone') || t.includes('call') || t.includes('meeting');
+}
+
+function dashActivity() {
+  const since = dashPeriodStart(dashPeriod);
+  const out = { total: 0, linkedin: 0, email: 0, call: 0, meeting: 0 };
+  (dashInteractions || []).forEach(i => {
+    if (!i.date || i.date < since) return;
+    if (!dashOwnerMatch(i.loggedBy, i.contactId)) return;
+    const t = (i.type || '').toLowerCase();
+    let b = null;
+    if (t.includes('linkedin') || t.includes('inmail')) b = 'linkedin';
+    else if (t.includes('email')) b = 'email';
+    else if (t.includes('phone') || t.includes('call')) b = 'call';
+    else if (t.includes('meeting')) b = 'meeting';
+    if (!b) return;
+    out[b]++; out.total++;
+  });
+  return out;
+}
+
+function dashWeeklyTrend() {
+  const ints = (dashInteractions || []).filter(i => dashOwnerMatch(i.loggedBy, i.contactId) && dashIsOutreach(i.type));
+  const weeks = [];
+  for (let w = 7; w >= 0; w--) {
+    const start = new Date(); start.setDate(start.getDate() - w*7 - 6);
+    const end = new Date(); end.setDate(end.getDate() - w*7);
+    const s = start.toISOString().split('T')[0], e = end.toISOString().split('T')[0];
+    const count = ints.filter(i => i.date >= s && i.date <= e).length;
+    weeks.push({ label: `${start.getDate()}/${start.getMonth()+1}`, count });
+  }
+  return weeks;
+}
+
+function dashPool() {
+  const merged = [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts];
+  const seen = new Set(); const all = [];
+  merged.forEach(c => { if (!seen.has(c.id)) { seen.add(c.id); all.push(c); } });
+  return all.filter(c => dashOwner === 'All' || (c.owner || 'Louisa Daly') === dashOwner);
+}
+
+function dashPipeline() {
+  const active = dashPool().filter(c => !['Do Not Contact','Do Not Sequence','Unsubscribed'].includes(c.status));
+  const seq = s => active.filter(c => (c.status === 'Active' || !c.status) && (c.step || 0) === s).length;
+  return {
+    start: active.filter(c => (c.status === 'Active' || !c.status) && (!c.step || c.step === 0)).length,
+    li: seq(1), e1: seq(2), e2: seq(3), e3: seq(4), lim: seq(5), call: seq(6),
+    warm: active.filter(c => c.status === 'Warm Ongoing' || c.status === 'Cold Ongoing').length,
+    responded: active.filter(c => c.status === 'Responded').length
+  };
+}
+
+function dashEngagement() {
+  const pool = dashPool().filter(c => !['Do Not Contact','Do Not Sequence','Unsubscribed'].includes(c.status));
+  const approached = pool.filter(c => (c.step || 0) >= 1);
+  const isConn = c => c.owner === 'John Daly' ? !!c.liConnectedJohn : !!c.liConnected;
+  const connected = approached.filter(isConn).length;
+  const responded = pool.filter(c => c.status === 'Responded').length;
+  const contacted = pool.filter(c => (c.step || 0) >= 1).length;
+  return {
+    acceptance: approached.length ? Math.round(connected / approached.length * 100) : 0,
+    connected, approached: approached.length,
+    respRate: contacted ? Math.round(responded / contacted * 100) : 0,
+    responded, contacted,
+    warm: pool.filter(c => c.status === 'Warm Ongoing').length
+  };
+}
+
+function dashOutcomes() {
+  const open = ['Active','Shortlisting','Interviewing','Offer'];
+  const num = v => { const n = parseFloat(String(v).replace(/[^0-9.]/g,'')); return isNaN(n) ? 0 : n; };
+  const live = allAssignments.filter(a => open.includes(a.status));
+  const placed = allAssignments.filter(a => a.status === 'Closed');
+  const yr = new Date().getFullYear();
+  return {
+    live: live.length,
+    placed: placed.length,
+    placedYtd: placed.filter(a => a.startDate && new Date(a.startDate).getFullYear() === yr).length,
+    feePipeline: live.reduce((s,a) => s + num(a.feeAmount), 0)
+  };
+}
+
+function dashCard(label, value, sub) {
+  return `<div style="background:var(--tee-card);border:1px solid var(--tee-border);border-radius:10px;padding:0.9rem 1rem;">
+    <div style="font-size:0.74rem;color:var(--tee-muted);margin-bottom:6px;">${label}</div>
+    <div style="font-size:1.5rem;font-weight:600;color:var(--tee-text);line-height:1;">${value}</div>
+    ${sub ? `<div style="font-size:0.72rem;color:var(--tee-muted);margin-top:6px;">${sub}</div>` : ''}
+  </div>`;
+}
+function dashGrid(cards, min) { return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(${min||130}px,1fr));gap:12px;">${cards.join('')}</div>`; }
+function dashSection(label) { return `<div style="font-size:0.95rem;font-weight:600;color:var(--tee-text);margin:1.6rem 0 0.7rem;">${label}</div>`; }
+function dashBar(label, value, max, color) {
+  const pct = max > 0 ? Math.round(value / max * 100) : 0;
+  return `<div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;">
+    <div style="width:110px;font-size:0.78rem;color:var(--tee-muted);text-align:right;flex-shrink:0;">${label}</div>
+    <div style="flex:1;background:var(--tee-hover);border-radius:5px;height:18px;">
+      <div style="width:${pct}%;background:${color};height:100%;border-radius:5px;min-width:${value > 0 ? '3px' : '0'};"></div>
+    </div>
+    <div style="width:32px;font-size:0.82rem;font-weight:600;color:var(--tee-text);">${value}</div>
+  </div>`;
+}
+function dashTrend(weeks) {
+  const max = Math.max(1, ...weeks.map(w => w.count));
+  return `<div style="display:flex;align-items:flex-end;gap:6px;height:120px;padding-top:10px;">
+    ${weeks.map(w => `<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;height:100%;justify-content:flex-end;">
+      <div style="font-size:0.7rem;color:var(--tee-muted);">${w.count}</div>
+      <div style="width:100%;background:var(--tee-accent);border-radius:4px 4px 0 0;height:${Math.round(w.count / max * 90)}%;min-height:${w.count > 0 ? '3px' : '0'};"></div>
+      <div style="font-size:0.65rem;color:var(--tee-muted);">${w.label}</div>
+    </div>`).join('')}
+  </div>`;
+}
+
+function dashChrome() {
+  const seg = (val, cur, fn, txt) => `<span onclick="${fn}('${val}')" style="cursor:pointer;font-size:0.8rem;padding:6px 12px;${cur === val ? 'background:var(--tee-accent);color:#fff;' : 'color:var(--tee-muted);'}">${txt}</span>`;
+  return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:0.5rem;">
+    <div style="font-size:1.2rem;font-weight:600;color:var(--tee-text);">BD performance</div>
+    <div style="display:flex;gap:8px;">
+      <div style="display:inline-flex;border:1px solid var(--tee-border);border-radius:8px;overflow:hidden;">${seg('Louisa Daly',dashOwner,'dashSetOwner','Louisa')}${seg('John Daly',dashOwner,'dashSetOwner','John')}${seg('All',dashOwner,'dashSetOwner','All')}</div>
+      <div style="display:inline-flex;border:1px solid var(--tee-border);border-radius:8px;overflow:hidden;">${seg('week',dashPeriod,'dashSetPeriod','Week')}${seg('month',dashPeriod,'dashSetPeriod','Month')}${seg('90d',dashPeriod,'dashSetPeriod','90 days')}</div>
+    </div>
+  </div>`;
+}
+
+function dashRenderBody() {
+  const a = dashActivity(), eng = dashEngagement(), pipe = dashPipeline(), out = dashOutcomes(), weeks = dashWeeklyTrend();
+  const periodLabel = dashPeriod === 'week' ? 'last 7 days' : dashPeriod === '90d' ? 'last 90 days' : 'last 30 days';
+  const gbp = n => '£' + Math.round(n).toLocaleString();
+  const pmax = Math.max(pipe.start,pipe.li,pipe.e1,pipe.e2,pipe.e3,pipe.lim,pipe.call,pipe.warm,pipe.responded,1);
+  const today = new Date().toISOString().split('T')[0];
+  const overdue = dashPool().filter(c => c.nextActionDue && c.nextActionDue < today && !['Do Not Contact','Do Not Sequence','Unsubscribed'].includes(c.status)).length;
+  return dashSection('Activity · ' + periodLabel)
+    + dashGrid([dashCard('Total touches', a.total), dashCard('LinkedIn', a.linkedin), dashCard('Emails', a.email), dashCard('Calls / meetings', a.call + a.meeting)], 120)
+    + `<div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1rem 1.25rem;margin-top:12px;"><div style="font-size:0.78rem;color:var(--tee-muted);margin-bottom:6px;">Weekly outreach, last 8 weeks</div>${dashTrend(weeks)}</div>`
+    + dashSection('Engagement')
+    + dashGrid([dashCard('Connection acceptance', eng.acceptance + '%', eng.connected + ' of ' + eng.approached + ' approached'), dashCard('Response rate', eng.respRate + '%', eng.responded + ' of ' + eng.contacted + ' contacted'), dashCard('Warm relationships', eng.warm, 'being nurtured')], 150)
+    + dashSection('Pipeline health · live snapshot')
+    + `<div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1.1rem 1.25rem;">
+        ${dashBar('Start sequence', pipe.start, pmax, 'var(--tee-accent2)')}
+        ${dashBar('LI request', pipe.li, pmax, 'var(--tee-accent)')}
+        ${dashBar('Email 1', pipe.e1, pmax, 'var(--tee-accent)')}
+        ${dashBar('Email 2', pipe.e2, pmax, 'var(--tee-accent)')}
+        ${dashBar('Email 3', pipe.e3, pmax, 'var(--tee-accent)')}
+        ${dashBar('LI message', pipe.lim, pmax, 'var(--tee-accent)')}
+        ${dashBar('Follow-up call', pipe.call, pmax, 'var(--tee-accent)')}
+        ${dashBar('Warm / ongoing', pipe.warm, pmax, '#f59e0b')}
+        ${dashBar('Responded', pipe.responded, pmax, '#16a34a')}
+        <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--tee-border);padding-top:10px;margin-top:8px;font-size:0.8rem;color:${overdue > 0 ? 'var(--overdue)' : 'var(--tee-muted)'};">${overdue > 0 ? '⏰ ' + overdue + ' follow-up' + (overdue !== 1 ? 's' : '') + ' overdue' : '✓ No overdue follow-ups'}</div>
+      </div>`
+    + dashSection('Outcomes · all assignments')
+    + dashGrid([dashCard('Live assignments', out.live), dashCard('Placements YTD', out.placedYtd), dashCard('Placed (all time)', out.placed), dashCard('Fees in pipeline', gbp(out.feePipeline), 'sum of open fee amounts')], 120);
+}
+
+async function renderDashboard() {
+  const el = document.getElementById('dashboard-workspace');
+  if (!el) return;
+  if (allAssignments.length === 0) { try { await loadAssignments(); } catch(_) {} }
+  ensureParkedListsLoaded();
+  if (dashInteractions === null && !dashLoading) {
+    dashLoading = true;
+    el.innerHTML = dashChrome() + '<div style="padding:3rem;text-align:center;color:var(--tee-muted);">Loading activity…</div>';
+    await loadDashboardInteractions();
+    dashLoading = false;
+  }
+  el.innerHTML = dashChrome() + dashRenderBody();
 }
 
 function getOrgContacts(orgId) {
