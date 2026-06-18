@@ -451,6 +451,7 @@
         <span style="font-size:0.68rem;font-weight:600;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.06em;align-self:center;margin-right:2px;">Speciality</span>
         <button class="filter-chip active" data-val="all" onclick="setRowFilter('spec','all',this)">All</button>
         <button class="filter-chip" data-val="ceo" onclick="setRowFilter('spec','ceo',this)">CEO</button>
+        <button class="filter-chip" data-val="resources" onclick="setRowFilter('spec','resources',this)">Director of Resources</button>
         <button class="filter-chip" data-val="transformation" onclick="setRowFilter('spec','transformation',this)">Transformation &amp; Change</button>
         <button class="filter-chip" data-val="hr" onclick="setRowFilter('spec','hr',this)">HR</button>
         <button class="filter-chip" data-val="governance" onclick="setRowFilter('spec','governance',this)">Governance &amp; Compliance</button>
@@ -2523,10 +2524,23 @@ function isCeoContact(contact) {
 function specInCohort(contact, cohort) {
   const specs = contactSpecs(contact);
   if (cohort === 'ceo') return isCeoContact(contact);
+  if (cohort === 'resources') return specs.includes('Director of Resources');
   if (cohort === 'transformation') return specs.includes('Transformation & Change');
   if (cohort === 'hr') return specs.some(s => SPEC_HR.includes(s));
   if (cohort === 'governance') return specs.some(s => SPEC_GOV.includes(s));
   return false;
+}
+
+// One-off helper: list contacts whose role title looks like Director of Resources
+// but who aren't yet tagged with the specialism. Run scanResourceDirectors() in the
+// browser console. Safe to leave in place; does nothing unless called.
+function scanResourceDirectors() {
+  const re = /(director|head|executive director)\s+(of\s+)?resources|resources\s+director/i;
+  const matches = (allContacts || []).filter(c => re.test(c.role || '') && !contactSpecs(c).includes('Director of Resources'));
+  if (!matches.length) { console.log('No untagged Director of Resources titles found.'); return []; }
+  console.log(`Found ${matches.length} contact(s) to consider tagging as Director of Resources:`);
+  matches.forEach(c => console.log(`• ${c.name} — ${c.role || 'no title'}${c.orgName ? ' (' + c.orgName + ')' : ''}`));
+  return matches.map(c => ({ name: c.name, role: c.role, org: c.orgName }));
 }
 
 function matchesLevel(contact) {
@@ -2540,7 +2554,7 @@ function matchesLevel(contact) {
 }
 function matchesSpec(contact) {
   if (specFilter === 'all') return true;
-  if (specFilter === 'other') return !(specInCohort(contact,'ceo') || specInCohort(contact,'transformation') || specInCohort(contact,'hr') || specInCohort(contact,'governance'));
+  if (specFilter === 'other') return !(specInCohort(contact,'ceo') || specInCohort(contact,'resources') || specInCohort(contact,'transformation') || specInCohort(contact,'hr') || specInCohort(contact,'governance'));
   return specInCohort(contact, specFilter);
 }
 function matchesRefine(contact) {
@@ -5491,7 +5505,7 @@ async function saveEditContact() {
   if (phone) fields['Phone'] = phone;
   if (mobile) fields['Mobile'] = mobile;
   if (linkedin) fields['LinkedIn'] = linkedin;
-  // Contact Level not sent — Airtable field has AI generation enabled which blocks API writes
+  if (contactLevel) fields['Contact Level'] = contactLevel;
   if (orgId) fields['Organisation'] = [orgId];
   const contactPrevEmpIds = contactPrevEmpSelected.map(e => e.id);
   fields['Previous Employers'] = contactPrevEmpIds;
@@ -5987,6 +6001,7 @@ const SPECIALISM_GROUPS = {
 // Contact specialism picker groups. Transformation & Change stands as its own
 // bucket, deliberately NOT inside HR. HR list below excludes it.
 const CONTACT_SPECIALISM_GROUPS = {
+  'Resources': ['Director of Resources'],
   'Transformation': ['Transformation & Change'],
   'HR': ['HR Generalist', 'HRBP', 'HR Operations', 'HR projects', 'Employee Engagement', 'Culture', 'Learning and Development', 'Organisational Development', 'Organisational Design', 'Talent Acquisition', 'Talent', 'Reward', 'Payroll', 'HRIS', 'ED&I', 'CPO/HRD', 'Troubleshooting', 'System Implementation', 'Project Management'],
   'Governance & Compliance': ['Governance', 'Legal', 'Mergers and Acquisitions', 'Compliance', 'Due Diligence']
