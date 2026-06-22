@@ -4067,7 +4067,10 @@ function looksLikeDuplicate(aName, bName, useBase){
 }
 function findContactDuplicates(name, email){
   const e = (email||'').toLowerCase().trim();
-  return allContacts.filter(c => looksLikeDuplicate(name, c.name, false) || (e && c.email && e === c.email.toLowerCase().trim())).slice(0,5);
+  // Search the full cross-owner book so a contact the other person owns is still
+  // caught. Falls back to the loaded view if the full book isn't ready yet.
+  const pool = allContactsAll.length > 0 ? allContactsAll : allContacts;
+  return pool.filter(c => looksLikeDuplicate(name, c.name, false) || (e && c.email && e === c.email.toLowerCase().trim())).slice(0,5);
 }
 function findOrgDuplicates(name){
   return allOrgs.filter(o => looksLikeDuplicate(name, o.name, true)).slice(0,5);
@@ -4251,7 +4254,12 @@ async function bulkAssignOrg(owner) {
 }
 
 async function openContactFromOrg(contactId) {
-  const contact = allContacts.find(c => c.id === contactId);
+  const contact = allContacts.find(c => c.id === contactId)
+    || dncContacts.find(c => c.id === contactId)
+    || dnsContacts.find(c => c.id === contactId)
+    || unsubContacts.find(c => c.id === contactId)
+    || uncatContacts.find(c => c.id === contactId)
+    || allContactsAll.find(c => c.id === contactId);
   if (!contact) return;
   // Highlight selected row
   document.querySelectorAll('.org-contact-row').forEach(r => { r.style.background = ''; r.style.borderLeft = ''; });
@@ -4285,11 +4293,67 @@ async function ensureParkedListsLoaded() {
       dncContacts.length === 0 ? loadDncContacts() : Promise.resolve(),
       dnsContacts.length === 0 ? loadDnsContacts() : Promise.resolve(),
       unsubContacts.length === 0 ? loadUnsubContacts() : Promise.resolve(),
-      uncatContacts.length === 0 ? loadUncatContacts() : Promise.resolve()
+      uncatContacts.length === 0 ? loadUncatContacts() : Promise.resolve(),
+      allContactsAll.length === 0 ? loadAllContactsFull() : Promise.resolve()
     ]);
   } catch(e) { parkedListsLoaded = false; return; }
   // If an organisation is open, refresh it now that parked contacts are available.
   if (selectedOrg) renderOrgDetail(selectedOrg);
+}
+
+// FULL CONTACT BOOK — every contact across both owners, loaded once in the
+// background. This is the cross-owner source so an organisation shows ALL its
+// people (not just the logged-in person's) and the duplicate check can see a
+// contact one of you added even though the other person owns it. The per-user
+// desk views still use allContacts; this never changes what's on your desk.
+let allContactsAll = [];
+async function loadAllContactsFull() {
+  try {
+    let records = [], offset = null;
+    do {
+      let url = `${API_URL}?pageSize=100&fields[]=Full Name&fields[]=First Name&fields[]=Email&fields[]=Phone&fields[]=Mobile&fields[]=LinkedIn&fields[]=Role / Title&fields[]=Organisation&fields[]=Owner&fields[]=Sequence Status&fields[]=Sequence Step&fields[]=Contact Level&fields[]=Relationship Status&fields[]=Next Action Due&fields[]=Next Action Notes&fields[]=Specialism&fields[]=Tier&fields[]=Interactions`;
+      if (offset) url += `&offset=${offset}`;
+      const resp = await airtableFetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const data = await resp.json();
+      records = records.concat(data.records);
+      offset = data.offset;
+    } while (offset);
+    function getField(r, name, fallback='') {
+      const v = r.fields[name];
+      if (v === undefined || v === null) return fallback;
+      if (Array.isArray(v)) return v.length > 0 ? String(v[0]) : fallback;
+      if (typeof v === 'object') return fallback;
+      return v;
+    }
+    allContactsAll = records.map(r => ({
+      id: r.id,
+      name: getField(r, 'Full Name'),
+      firstName: String(getField(r, 'First Name') || '').replace('[object Object]',''),
+      org: r.fields['Organisation'] ? (Array.isArray(r.fields['Organisation']) ? r.fields['Organisation'][0] : r.fields['Organisation']) : '',
+      orgName: '',
+      role: getField(r, 'Role / Title'),
+      email: getField(r, 'Email'),
+      phone: getField(r, 'Phone') || getField(r, 'Mobile'),
+      linkedin: getField(r, 'LinkedIn'),
+      tier: String(getField(r, 'Tier')),
+      step: parseInt(getField(r, 'Sequence Step', 0)) || 0,
+      interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
+      liConnected: r.fields['LinkedIn Connected'] || false, liConnectedJohn: r.fields['LinkedIn Connected John'] || false,
+      status: getField(r, 'Sequence Status', 'Active'),
+      nextActionNotes: getField(r, 'Next Action Notes'),
+      nextActionDue: getField(r, 'Next Action Due'),
+      relationshipStatus: Array.isArray(r.fields['Relationship Status']) ? (r.fields['Relationship Status'][0] || '') : (r.fields['Relationship Status'] || ''),
+      specialism: Array.isArray(r.fields['Specialism']) ? r.fields['Specialism'].join(', ') : getField(r, 'Specialism'),
+      contactLevel: getField(r, 'Contact Level'),
+      owner: getField(r, 'Owner')
+    }));
+    // Resolve org names from already-loaded orgs where possible
+    if (allOrgs && allOrgs.length) {
+      const omap = {}; allOrgs.forEach(o => { omap[o.id] = o.name; });
+      allContactsAll = allContactsAll.map(c => ({ ...c, orgName: c.org && omap[c.org] ? omap[c.org] : c.orgName }));
+    }
+    if (selectedOrg) renderOrgDetail(selectedOrg);
+  } catch(e) { console.log('Full contact book load error:', e); }
 }
 
 // ===== KPI DASHBOARD =====
@@ -4523,9 +4587,11 @@ async function renderDashboard() {
 }
 
 function getOrgContacts(orgId) {
-  // Include parked contacts (Do Not Sequence / Unsubscribed / Do Not Contact),
-  // not just the active list — an organisation should show all its people.
-  const merged = [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts];
+  // Show ALL people in an organisation regardless of who owns them. Uses the full
+  // cross-owner book when it's loaded; falls back to the per-user lists otherwise.
+  const merged = allContactsAll.length > 0
+    ? allContactsAll
+    : [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts];
   const seen = new Set();
   const out = [];
   for (const c of merged) {
@@ -5653,6 +5719,8 @@ async function confirmDeleteContact() {
     if (!resp.ok) throw new Error(data.error?.message || 'Delete failed');
     // Remove from local list
     allContacts = allContacts.filter(c => c.id !== id);
+    allContactsAll = allContactsAll.filter(c => c.id !== id);
+    uncatContacts = uncatContacts.filter(c => c.id !== id);
     selectedContact = null;
     closeEditModal();
     updateCounts();
@@ -5793,6 +5861,8 @@ async function saveEditContact() {
         previousEmployerIds: contactPrevEmpIds, previousEmployerNames: contactPrevEmpSelected.map(e => e.name)
       };
       allContacts.push(newContact);
+      allContactsAll.push(newContact);
+      if (!resolvedOwner) uncatContacts.push(newContact);
       // If created from a candidate, write the link back to both records
       if (window._pendingCandidateLinkId) {
         const candId = window._pendingCandidateLinkId;
@@ -5865,6 +5935,8 @@ async function reassignContact(newOwner) {
     // If reassigning from the Uncategorised bucket, drop it from that view and update the count
     const ui = uncatContacts.findIndex(c => c.id === selectedContact.id);
     if (ui > -1) uncatContacts[ui].owner = newOwner;
+    const ai = allContactsAll.findIndex(c => c.id === selectedContact.id);
+    if (ai > -1) allContactsAll[ai].owner = newOwner;
     const uncEl = document.getElementById('count-uncategorised');
     if (uncEl) uncEl.textContent = uncatContacts.filter(c => !c.owner).length;
     if (currentView === 'uncategorised') { renderView(); renderPanel(null); }
