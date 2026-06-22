@@ -2161,6 +2161,7 @@ async function fetchInteractions(contactId) {
       || unsubContacts.find(c => c.id === contactId)
       || dncContacts.find(c => c.id === contactId)
       || uncatContacts.find(c => c.id === contactId)
+      || allContactsAll.find(c => c.id === contactId)
       || (selectedContact && selectedContact.id === contactId ? selectedContact : null);
     if (!contact) return [];
     
@@ -2900,7 +2901,7 @@ function renderPanel(contact, interactions) {
       <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.5rem;position:relative;">
         <span style="font-size:0.72rem;color:var(--tee-muted);">Owner:</span>
         <span id="contact-owner-display" style="font-size:0.72rem;padding:2px 8px;border-radius:10px;background:rgba(53,150,194,0.1);color:var(--tee-accent);font-weight:500;">${contact.owner || 'Unassigned'}</span>
-        <span onclick="openReassignMenu()" style="font-size:0.7rem;color:var(--tee-muted);cursor:pointer;text-decoration:underline;" onmouseover="this.style.color='var(--tee-accent)'" onmouseout="this.style.color='var(--tee-muted)'">reassign</span>
+        <span onclick="openReassignMenu(this)" style="font-size:0.7rem;color:var(--tee-muted);cursor:pointer;text-decoration:underline;" onmouseover="this.style.color='var(--tee-accent)'" onmouseout="this.style.color='var(--tee-muted)'">reassign</span>
         <div id="reassign-menu" style="display:none;position:absolute;left:0;top:100%;z-index:200;background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.1);padding:0.25rem 0;min-width:140px;">
           <div onclick="reassignContact('Louisa Daly')" style="padding:0.5rem 1rem;font-size:0.82rem;cursor:pointer;" onmouseover="this.style.background='var(--tee-hover)'" onmouseout="this.style.background=''">Louisa Daly</div>
           <div onclick="reassignContact('John Daly')" style="padding:0.5rem 1rem;font-size:0.82rem;cursor:pointer;" onmouseover="this.style.background='var(--tee-hover)'" onmouseout="this.style.background=''">John Daly</div>
@@ -4347,7 +4348,15 @@ async function loadAllContactsFull() {
       const omap = {}; allOrgs.forEach(o => { omap[o.id] = o.name; });
       allContactsAll = allContactsAll.map(c => ({ ...c, orgName: c.org && omap[c.org] ? omap[c.org] : c.orgName }));
     }
-    if (selectedOrg) renderOrgDetail(selectedOrg);
+    if (selectedOrg) {
+      renderOrgDetail(selectedOrg);
+      // If the activity log is showing (no contact selected), rebuild it now that
+      // the cross-owner contacts are available so the other person's history appears.
+      if (!selectedContact && typeof renderOrgActivityLog === 'function') {
+        delete orgInteractionsCache[selectedOrg.id];
+        renderOrgActivityLog(selectedOrg);
+      }
+    }
   } catch(e) { console.log('Full contact book load error:', e); }
 }
 
@@ -4772,7 +4781,7 @@ async function renderOrgActivityLog(org) {
       <div style="flex:1;min-width:0;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.75rem;">
           <span style="font-size:0.84rem;font-weight:500;color:var(--tee-text);">${i.contactName}</span>
-          <span style="font-size:0.72rem;color:var(--tee-muted);white-space:nowrap;">${fmtDate(i.date)}</span>
+          <span style="font-size:0.72rem;color:var(--tee-muted);white-space:nowrap;">${i.loggedBy ? `<span style="color:var(--tee-accent);font-weight:500;">${i.loggedBy.split(' ')[0]}</span> · ` : ''}${fmtDate(i.date)}</span>
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin:2px 0 4px;">
           <span style="font-size:0.72rem;color:var(--tee-muted);">${i.contactRole || '—'}</span>
@@ -4852,12 +4861,6 @@ function renderOrgDetail(org) {
         ${org.size ? `<span style="font-size:0.72rem;padding:2px 8px;border-radius:20px;background:var(--tee-card);color:var(--tee-muted);">${org.size} employees</span>` : ''}
         ${org.country ? `<span style="font-size:0.72rem;padding:2px 8px;border-radius:20px;background:var(--tee-card);color:var(--tee-muted);">${org.country}</span>` : ''}
         ${org.website ? `<a href="${org.website}" target="_blank" style="font-size:0.72rem;padding:2px 8px;border-radius:20px;background:rgba(53,150,194,0.1);color:var(--tee-accent);text-decoration:none;">↗ Website</a>` : ''}
-      </div>
-      <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;">
-        <span style="font-size:0.72rem;color:var(--tee-muted);">BD Owner:</span>
-        <span id="org-owner-display" style="font-size:0.72rem;padding:2px 8px;border-radius:10px;background:rgba(53,150,194,0.1);color:var(--tee-accent);font-weight:500;">${org.owner || 'Unassigned'}</span>
-        <span onclick="bulkAssignOrg('Louisa Daly')" style="font-size:0.7rem;padding:2px 8px;border-radius:8px;border:1px solid var(--tee-border);cursor:pointer;color:var(--tee-muted);" onmouseover="this.style.borderColor='var(--tee-accent)';this.style.color='var(--tee-accent)'" onmouseout="this.style.borderColor='var(--tee-border)';this.style.color='var(--tee-muted)'">→ Louisa</span>
-        <span onclick="bulkAssignOrg('John Daly')" style="font-size:0.7rem;padding:2px 8px;border-radius:8px;border:1px solid var(--tee-border);cursor:pointer;color:var(--tee-muted);" onmouseover="this.style.borderColor='var(--tee-accent)';this.style.color='var(--tee-accent)'" onmouseout="this.style.borderColor='var(--tee-border)';this.style.color='var(--tee-muted)'">→ John</span>
       </div>
     </div>
     <div style="padding:1rem 1.5rem;">
@@ -5907,22 +5910,25 @@ async function setNextActionDate(dateValue) {
   await updateContact(selectedContact.id, { 'Next Action Due': dateValue });
 }
 
-function openReassignMenu() {
-  const menu = document.getElementById('reassign-menu');
+function openReassignMenu(el) {
+  // Toggle the menu next to the clicked link. The org panel holds a cloned copy of
+  // the contact card, so two #reassign-menu elements can exist; scoping to the
+  // clicked link (its next sibling) targets the right one. Falls back to id lookup.
+  const menu = (el && el.nextElementSibling && el.nextElementSibling.id === 'reassign-menu')
+    ? el.nextElementSibling
+    : document.getElementById('reassign-menu');
   if (menu) menu.style.display = menu.style.display === 'none' ? 'block' : 'none';
 }
 
 async function reassignContact(newOwner) {
-  const menu = document.getElementById('reassign-menu');
-  if (menu) menu.style.display = 'none';
+  document.querySelectorAll('#reassign-menu').forEach(m => m.style.display = 'none');
   if (!selectedContact) return;
   try {
     await updateContact(selectedContact.id, { 'Owner': newOwner });
     selectedContact.owner = newOwner;
     const idx = allContacts.findIndex(c => c.id === selectedContact.id);
     if (idx > -1) allContacts[idx].owner = newOwner;
-    const display = document.getElementById('contact-owner-display');
-    if (display) display.textContent = newOwner;
+    document.querySelectorAll('#contact-owner-display').forEach(d => d.textContent = newOwner);
     // If reassigning from the Uncategorised bucket, drop it from that view and update the count
     const ui = uncatContacts.findIndex(c => c.id === selectedContact.id);
     if (ui > -1) uncatContacts[ui].owner = newOwner;
@@ -5931,16 +5937,18 @@ async function reassignContact(newOwner) {
     const uncEl = document.getElementById('count-uncategorised');
     if (uncEl) uncEl.textContent = uncatContacts.filter(c => !c.owner).length;
     if (currentView === 'uncategorised') { renderView(); renderPanel(null); }
+    // If reassigning from inside an organisation, refresh its contact list so the badge updates
+    if (selectedOrg && typeof renderOrgDetail === 'function') renderOrgDetail(selectedOrg);
     showToast('Reassigned to ' + newOwner.split(' ')[0] + ' ✓', 'success');
   } catch(e) { showToast('Reassign failed: ' + e.message, 'error'); }
 }
 
 // Close reassign menu when clicking outside
 document.addEventListener('click', function(e) {
-  const menu = document.getElementById('reassign-menu');
-  if (menu && !menu.contains(e.target) && !e.target.closest('[onclick="openReassignMenu()"]')) {
-    menu.style.display = 'none';
-  }
+  if (e.target.closest('[onclick^="openReassignMenu"]')) return;
+  document.querySelectorAll('#reassign-menu').forEach(menu => {
+    if (!menu.contains(e.target)) menu.style.display = 'none';
+  });
 });
 
 // ONGOING PROGRAMME
