@@ -1753,6 +1753,7 @@ const VIEW_CONFIG = {
   'do-not-sequence':   { title: 'Do not sequence', dns: true },
   'unsubscribed':      { title: 'Unsubscribed', unsub: true },
   'do-not-contact':    { title: 'Do not contact', dnc: true },
+  'uncategorised':     { title: 'Uncategorised — to sort', uncat: true },
   'reminders':         { title: 'Reminders', reminders: true }
 };
 
@@ -1879,6 +1880,11 @@ function renderSidebar() {
       <div class="nav-item" onclick="switchView('do-not-contact')" id="nav-do-not-contact">
         <div class="nav-left"><div class="nav-dot" style="background: #dc2626;"></div><span class="nav-label">Do not contact</span></div>
         <span class="nav-count count-red" id="count-do-not-contact">–</span>
+      </div>
+      <div class="sidebar-section" style="margin-top: 1rem;">To sort</div>
+      <div class="nav-item" onclick="switchView('uncategorised')" id="nav-uncategorised">
+        <div class="nav-left"><div class="nav-dot" style="background: #8b5cf6;"></div><span class="nav-label">Uncategorised</span></div>
+        <span class="nav-count count-yellow" id="count-uncategorised">–</span>
       </div>`;
   }
 }
@@ -2135,6 +2141,9 @@ function getContactsForView(view) {
   if (cfg.dnc) {
     return dncContacts;
   }
+  if (cfg.uncat) {
+    return uncatContacts.filter(c => !c.owner);
+  }
   return allContacts.filter(c => {
     if (!deskFilter(c)) return false;
     if (c.status === 'Do Not Contact' && view !== 'do-not-contact') return false;
@@ -2159,6 +2168,7 @@ async function fetchInteractions(contactId) {
       || dnsContacts.find(c => c.id === contactId)
       || unsubContacts.find(c => c.id === contactId)
       || dncContacts.find(c => c.id === contactId)
+      || uncatContacts.find(c => c.id === contactId)
       || (selectedContact && selectedContact.id === contactId ? selectedContact : null);
     if (!contact) return [];
     
@@ -2423,6 +2433,73 @@ async function loadDncContacts() {
   } catch(e) { console.log('DNC load error:', e); }
 }
 
+// UNCATEGORISED CONTACTS — shared bucket of everyone with no owner (dual-topic or
+// untagged). Loaded across all users so Louisa and John see the identical list and
+// either can reassign from it. Excludes parked statuses (DNC / DNS / Unsubscribed).
+let uncatContacts = [];
+async function loadUncatContacts() {
+  try {
+    let records = [], offset = null;
+    do {
+      let url = `${API_URL}?pageSize=100&filterByFormula=AND({Owner}="",{Sequence Status}!="Do Not Contact",{Sequence Status}!="Do Not Sequence",{Sequence Status}!="Unsubscribed")`;
+      if (offset) url += `&offset=${offset}`;
+      const resp = await airtableFetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const data = await resp.json();
+      records = records.concat(data.records);
+      offset = data.offset;
+    } while (offset);
+    function getField(r, name, fallback='') {
+      const v = r.fields[name];
+      if (v === undefined || v === null) return fallback;
+      if (Array.isArray(v)) return v.length > 0 ? String(v[0]) : fallback;
+      if (typeof v === 'object') return fallback;
+      return v;
+    }
+    uncatContacts = records.map(r => ({
+      id: r.id,
+      name: getField(r, 'Full Name'),
+      firstName: String(getField(r, 'First Name') || '').replace('[object Object]',''),
+      org: r.fields['Organisation'] ? (Array.isArray(r.fields['Organisation']) ? r.fields['Organisation'][0] : r.fields['Organisation']) : '',
+      orgName: '',
+      role: getField(r, 'Role / Title'),
+      email: getField(r, 'Email'),
+      phone: getField(r, 'Phone') || getField(r, 'Mobile'),
+      linkedin: getField(r, 'LinkedIn'),
+      tier: String(getField(r, 'Tier')),
+      step: parseInt(getField(r, 'Sequence Step', 0)) || 0,
+      interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
+      liConnected: r.fields['LinkedIn Connected'] || false, liConnectedJohn: r.fields['LinkedIn Connected John'] || false,
+      status: getField(r, 'Sequence Status', 'Active'),
+      nextActionNotes: getField(r, 'Next Action Notes'),
+      nextActionDue: getField(r, 'Next Action Due'),
+      relationshipStatus: Array.isArray(r.fields['Relationship Status']) ? (r.fields['Relationship Status'][0] || '') : (r.fields['Relationship Status'] || ''),
+      specialism: Array.isArray(r.fields['Specialism']) ? r.fields['Specialism'].join(', ') : getField(r, 'Specialism'),
+      contactLevel: getField(r, 'Contact Level'),
+      notes: getField(r, 'Notes'),
+      followUpDate: getField(r, 'Follow-up Date'),
+      nextSendDate: getField(r, 'Next Send Date'),
+      dncReason: getField(r, 'Status Reason'),
+      owner: getField(r, 'Owner')
+    }));
+    // Resolve org names
+    const orgIds = [...new Set(uncatContacts.map(c => c.org).filter(id => id && id.startsWith('rec')))];
+    if (orgIds.length > 0) {
+      for (let i = 0; i < orgIds.length; i += 10) {
+        const batch = orgIds.slice(i, i+10);
+        const formula = 'OR(' + batch.map(id => `RECORD_ID()="${id}"`).join(',') + ')';
+        const resp = await airtableFetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations?filterByFormula=${encodeURIComponent(formula)}&fields[]=Organisation Name`, { headers: { Authorization: `Bearer ${getToken()}` } });
+        const data = await resp.json();
+        const map = {};
+        data.records.forEach(r => { map[r.id] = r.fields['Organisation Name'] || ''; });
+        uncatContacts = uncatContacts.map(c => ({ ...c, orgName: c.org && map[c.org] ? map[c.org] : c.orgName }));
+      }
+    }
+    const el = document.getElementById('count-uncategorised');
+    if (el) el.textContent = uncatContacts.filter(c => !c.owner).length;
+    if (currentView === 'uncategorised') renderView();
+  } catch(e) { console.log('Uncategorised load error:', e); }
+}
+
 // DNS CONTACTS (loaded separately on demand)
 let dnsContacts = [];
 async function loadDnsContacts() {
@@ -2543,6 +2620,7 @@ function switchView(view, opts = {}) {
   if (view === 'do-not-contact' && dncContacts.length === 0) { loadDncContacts(); }
   if (view === 'do-not-sequence') { loadDnsContacts(); }
   if (view === 'unsubscribed' && unsubContacts.length === 0) { loadUnsubContacts(); }
+  if (view === 'uncategorised') { loadUncatContacts(); }
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(`nav-${view}`)?.classList.add('active');
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
@@ -2760,6 +2838,7 @@ async function selectContact(id) {
     || dncContacts.find(c => c.id === id)
     || dnsContacts.find(c => c.id === id)
     || unsubContacts.find(c => c.id === id)
+    || uncatContacts.find(c => c.id === id)
     || null;
   localStorage.setItem('tee_selected_contact', id);
   document.querySelectorAll('.contact-card').forEach(el => el.classList.remove('selected'));
@@ -4205,7 +4284,8 @@ async function ensureParkedListsLoaded() {
     await Promise.all([
       dncContacts.length === 0 ? loadDncContacts() : Promise.resolve(),
       dnsContacts.length === 0 ? loadDnsContacts() : Promise.resolve(),
-      unsubContacts.length === 0 ? loadUnsubContacts() : Promise.resolve()
+      unsubContacts.length === 0 ? loadUnsubContacts() : Promise.resolve(),
+      uncatContacts.length === 0 ? loadUncatContacts() : Promise.resolve()
     ]);
   } catch(e) { parkedListsLoaded = false; return; }
   // If an organisation is open, refresh it now that parked contacts are available.
@@ -4862,6 +4942,7 @@ async function reinstateContact() {
   const dnsEl = document.getElementById('count-do-not-sequence'); if (dnsEl) dnsEl.textContent = dnsContacts.length;
   const unsubEl = document.getElementById('count-unsubscribed'); if (unsubEl) unsubEl.textContent = unsubContacts.length;
   const dncEl = document.getElementById('count-do-not-contact'); if (dncEl) dncEl.textContent = dncContacts.length;
+  const uncEl = document.getElementById('count-uncategorised'); if (uncEl) uncEl.textContent = uncatContacts.filter(c => !c.owner).length;
   const interactions = await fetchInteractions(selectedContact.id);
   renderPanel(selectedContact, interactions);
   showToast(selectedContact.name + ' reinstated to sequence', 'success');
@@ -5781,6 +5862,12 @@ async function reassignContact(newOwner) {
     if (idx > -1) allContacts[idx].owner = newOwner;
     const display = document.getElementById('contact-owner-display');
     if (display) display.textContent = newOwner;
+    // If reassigning from the Uncategorised bucket, drop it from that view and update the count
+    const ui = uncatContacts.findIndex(c => c.id === selectedContact.id);
+    if (ui > -1) uncatContacts[ui].owner = newOwner;
+    const uncEl = document.getElementById('count-uncategorised');
+    if (uncEl) uncEl.textContent = uncatContacts.filter(c => !c.owner).length;
+    if (currentView === 'uncategorised') { renderView(); renderPanel(null); }
     showToast('Reassigned to ' + newOwner.split(' ')[0] + ' ✓', 'success');
   } catch(e) { showToast('Reassign failed: ' + e.message, 'error'); }
 }
