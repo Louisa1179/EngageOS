@@ -927,6 +927,16 @@
       <input type="hidden" id="ef-specialism" />
     </div>
 
+    <div class="edit-field-group">
+      <label class="edit-label">Owner</label>
+      <select class="edit-input" id="ef-owner">
+        <option value="">Auto (by specialism)</option>
+        <option value="Louisa Daly">Louisa Daly</option>
+        <option value="John Daly">John Daly</option>
+      </select>
+      <div style="font-size:0.72rem;color:var(--tee-muted);margin-top:0.3rem;">Auto routes Governance and CEO to Louisa, HR, Transformation and Director of Resources to John. Pick a name to override; the choice sticks.</div>
+    </div>
+
     <!-- ADD MODE ONLY: routing -->
     <div id="ef-routing-wrap" style="display:none;background:rgba(53,150,194,0.04);border:1px solid rgba(53,150,194,0.2);border-radius:10px;padding:0.875rem 1rem;margin-bottom:1rem;">
       <div style="font-size:0.78rem;font-weight:500;color:var(--tee-accent);margin-bottom:0.75rem;">Where should this contact go?</div>
@@ -1758,6 +1768,37 @@ let pendingAdvance = null;
 // TOKEN MANAGEMENT
 function getToken() { return localStorage.getItem('tee_token'); }
 function getOwner() { return localStorage.getItem('tee_owner') || ''; }
+
+// Pause helper
+function teeSleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// Airtable request wrapper with retry + exponential backoff.
+// Drop-in for `await fetch(...)`: returns the Response after retrying transient
+// failures (network "Failed to fetch", 429 rate limit, 5xx). Only the persistent
+// failure is thrown/returned, so existing resp.ok handling still works.
+async function airtableFetch(url, options = {}, opts = {}) {
+  const retries = opts.retries != null ? opts.retries : 4;
+  const baseDelay = opts.baseDelay != null ? opts.baseDelay : 600;
+  let lastErr;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const resp = await fetch(url, options);
+      if ((resp.status === 429 || resp.status >= 500) && attempt < retries) {
+        await teeSleep(baseDelay * Math.pow(2, attempt) + Math.floor(Math.random() * 250));
+        continue;
+      }
+      return resp;
+    } catch (e) {
+      lastErr = e;
+      if (attempt < retries) {
+        await teeSleep(baseDelay * Math.pow(2, attempt) + Math.floor(Math.random() * 250));
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr || new Error('Request failed');
+}
 function getViewUser() { return localStorage.getItem('tee_view_user') || getOwner(); }
 // LinkedIn connection is per-person. The relevant status for sequence timing is
 // the contact owner's (the person actually sending). Unassigned defaults to Louisa.
@@ -2327,7 +2368,7 @@ async function loadDncContacts() {
     do {
       let url = `${API_URL}?pageSize=100&filterByFormula=AND({Sequence Status}="Do Not Contact"${ownerFilter})`;
       if (offset) url += `&offset=${offset}`;
-      const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const resp = await airtableFetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
       const data = await resp.json();
       records = records.concat(data.records);
       offset = data.offset;
@@ -2392,7 +2433,7 @@ async function loadDnsContacts() {
     do {
       let url = `${API_URL}?pageSize=100&filterByFormula=AND({Sequence Status}="Do Not Sequence"${ownerFilter})`;
       if (offset) url += `&offset=${offset}`;
-      const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const resp = await airtableFetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
       const data = await resp.json();
       records = records.concat(data.records);
       offset = data.offset;
@@ -2445,7 +2486,7 @@ async function loadUnsubContacts() {
     do {
       let url = `${API_URL}?pageSize=100&filterByFormula=AND({Sequence Status}="Unsubscribed"${ownerFilter})`;
       if (offset) url += `&offset=${offset}`;
-      const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const resp = await airtableFetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
       const data = await resp.json();
       records = records.concat(data.records);
       offset = data.offset;
@@ -2529,6 +2570,81 @@ function specInCohort(contact, cohort) {
   if (cohort === 'hr') return specs.some(s => SPEC_HR.includes(s));
   if (cohort === 'governance') return specs.some(s => SPEC_GOV.includes(s));
   return false;
+}
+
+// TOPIC SPLIT: who owns a contact based on specialism + level.
+// John: HR, Transformation & Change, Director of Resources.
+// Louisa: Governance & Compliance, CEO.
+// Dual-topic or no qualifying topic returns '' (uncategorised — left for manual sort).
+function ownerFromSpecialism(contact) {
+  const johnSide = specInCohort(contact, 'hr') || specInCohort(contact, 'transformation') || specInCohort(contact, 'resources');
+  const louisaSide = specInCohort(contact, 'governance') || specInCohort(contact, 'ceo');
+  if (johnSide && !louisaSide) return 'John Daly';
+  if (louisaSide && !johnSide) return 'Louisa Daly';
+  return '';
+}
+
+// HISTORIC REASSIGNMENT — PREVIEW ONLY (writes nothing).
+// Run scanReassignment() in the browser console. Lists every contact that would
+// change owner under the topic split, grouped by who they move to, plus the
+// uncategorised pile (dual-topic or untagged) that stays put for manual sorting.
+function scanReassignment() {
+  const toJohn = [], toLouisa = [], manual = [], unchanged = [];
+  (allContacts || []).forEach(c => {
+    const target = ownerFromSpecialism(c);
+    const cur = c.owner || '';
+    if (!target) { manual.push(c); return; }
+    if (target === cur) { unchanged.push(c); return; }
+    (target === 'John Daly' ? toJohn : toLouisa).push(c);
+  });
+  const line = c => `  • ${c.name}${c.orgName ? ' (' + c.orgName + ')' : ''} — ${c.specialism || 'no specialism'}${c.contactLevel ? ' / ' + c.contactLevel : ''}${c.owner ? ' [now: ' + c.owner.split(' ')[0] + ']' : ' [now: unassigned]'}`;
+  console.log(`REASSIGNMENT PREVIEW — nothing written.`);
+  console.log(`\nMoving to JOHN (${toJohn.length}):`); toJohn.forEach(c => console.log(line(c)));
+  console.log(`\nMoving to LOUISA (${toLouisa.length}):`); toLouisa.forEach(c => console.log(line(c)));
+  console.log(`\nUNCATEGORISED — left for manual sort, dual-topic or untagged (${manual.length}):`); manual.forEach(c => console.log(line(c)));
+  console.log(`\nAlready correct, unchanged (${unchanged.length}).`);
+  console.log(`\nTo apply the JOHN + LOUISA moves, run: commitReassignment()`);
+  return { toJohn, toLouisa, manual, unchanged };
+}
+
+// HISTORIC REASSIGNMENT — COMMIT. Writes the Owner changes from scanReassignment()
+// in small staggered batches with retry/backoff so it stays under Airtable's rate
+// limit and survives the occasional dropped request. Uncategorised contacts are
+// never touched. Run commitReassignment() in the console after reviewing the scan.
+async function commitReassignment() {
+  const { toJohn, toLouisa } = scanReassignment();
+  const moves = [
+    ...toJohn.map(c => ({ id: c.id, name: c.name, owner: 'John Daly' })),
+    ...toLouisa.map(c => ({ id: c.id, name: c.name, owner: 'Louisa Daly' }))
+  ];
+  if (!moves.length) { console.log('Nothing to move.'); return; }
+  console.log(`Committing ${moves.length} owner change(s) in staggered batches...`);
+  const BATCH = 3, PAUSE = 350;
+  let done = 0, failed = [];
+  for (let i = 0; i < moves.length; i += BATCH) {
+    const slice = moves.slice(i, i + BATCH);
+    await Promise.all(slice.map(async m => {
+      try {
+        const resp = await airtableFetch(`${API_URL}/${m.id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'Owner': m.owner } })
+        });
+        if (!resp.ok) { const e = await resp.json(); throw new Error(e.error?.message || 'write failed'); }
+        const idx = allContacts.findIndex(c => c.id === m.id);
+        if (idx > -1) allContacts[idx].owner = m.owner;
+        done++;
+      } catch (e) { failed.push({ name: m.name, error: e.message }); }
+    }));
+    if (i + BATCH < moves.length) await teeSleep(PAUSE);
+    console.log(`  ${Math.min(i + BATCH, moves.length)} / ${moves.length} processed`);
+  }
+  console.log(`\nDone. ${done} reassigned, ${failed.length} failed.`);
+  if (failed.length) { console.log('Failed (safe to re-run commitReassignment() to retry just these):'); failed.forEach(f => console.log(`  • ${f.name}: ${f.error}`)); }
+  if (typeof updateCounts === 'function') updateCounts();
+  if (typeof updateOrgCounts === 'function') updateOrgCounts();
+  if (typeof renderView === 'function') renderView();
+  return { done, failed };
 }
 
 // One-off helper: list contacts whose role title looks like Director of Resources
@@ -3754,7 +3870,7 @@ async function loadAllContactsForCounting() {
     do {
       let url = `${API_URL}?pageSize=100&fields[]=Organisation&fields[]=Owner&fields[]=Sequence Status&filterByFormula=AND({Sequence Status}!="Do Not Contact")`;
       if (offset) url += `&offset=${offset}`;
-      const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const resp = await airtableFetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
       if (!resp.ok) return;
       const data = await resp.json();
       records = records.concat(data.records);
@@ -4350,7 +4466,7 @@ function updateOrgCounts() {
   });
   document.getElementById('org-count-all').textContent = deskOrgs.length;
   const louisa = allOrgs.filter(o => orgHasContact(o.id, c => !c.owner || c.owner === 'Louisa Daly'));
-  const john = allOrgs.filter(o => o.owner === 'John Daly' || orgHasContact(o.id, c => c.owner === 'John Daly'));
+  const john = allOrgs.filter(o => orgHasContact(o.id, c => c.owner === 'John Daly'));
   const lEl = document.getElementById('org-count-louisa'); if (lEl) lEl.textContent = louisa.length;
   const jEl = document.getElementById('org-count-john'); if (jEl) jEl.textContent = john.length;
   const eEl = document.getElementById('org-count-england'); if (eEl) eEl.textContent = allOrgs.filter(o => o.country === 'England').length;
@@ -4405,16 +4521,11 @@ function filterOrgs() {
     return o.sector === currentSectorForOrgs;
   });
   if (currentOrgFilter === 'louisa') {
-    orgs = orgs.filter(o => {
-      const orgContacts = cts.filter(c => c.org === o.id);
-      if (orgContacts.length === 0) return false;
-      // Exclude if majority of contacts belong to John
-      const johnCount = orgContacts.filter(c => c.owner === 'John Daly').length;
-      const louisaCount = orgContacts.filter(c => !c.owner || c.owner === 'Louisa Daly').length;
-      return louisaCount >= johnCount;
-    });
+    // Symmetric with John: show an org wherever you own at least one contact in it.
+    // Unowned (uncategorised) contacts default to Louisa.
+    orgs = orgs.filter(o => cts.some(c => c.org === o.id && (!c.owner || c.owner === 'Louisa Daly')));
   } else if (currentOrgFilter === 'john') {
-    orgs = orgs.filter(o => o.owner === 'John Daly' || cts.some(c => c.org === o.id && c.owner === 'John Daly'));
+    orgs = orgs.filter(o => cts.some(c => c.org === o.id && c.owner === 'John Daly'));
   } else if (currentOrgFilter === 'england') orgs = orgs.filter(o => o.country === 'England');
   else if (currentOrgFilter === 'scotland') orgs = orgs.filter(o => o.country === 'Scotland');
   else if (currentOrgFilter === 'wales') orgs = orgs.filter(o => o.country === 'Wales');
@@ -5328,6 +5439,7 @@ function openEditModal() {
   document.getElementById('edit-delete-btn').style.display = 'inline-flex';
   document.getElementById('ef-routing-wrap').style.display = 'none';
   document.getElementById('ef-relationship').value = c.relationshipStatus || '';
+  { const ownerSel = document.getElementById('ef-owner'); if (ownerSel) ownerSel.value = c.owner || ''; }
   const efSpecVals = (c.specialism || '').split(',').map(s => s.trim()).filter(Boolean);
   buildGroupedSpecialismPicker('ef-specialism-picker', 'ef-specialism', efSpecVals, CONTACT_SPECIALISM_GROUPS);
   initContactPrevEmpPicker(c.previousEmployerIds || [], c.previousEmployerNames || []);
@@ -5432,6 +5544,7 @@ function openAddContactModal() {
   document.getElementById('ef-routing-wrap').style.display = 'block';
   document.getElementById('ef-routing-sequence').checked = true;
   document.getElementById('ef-relationship').value = '';
+  { const ownerSel = document.getElementById('ef-owner'); if (ownerSel) ownerSel.value = ''; }
   buildGroupedSpecialismPicker('ef-specialism-picker', 'ef-specialism', [], CONTACT_SPECIALISM_GROUPS);
   initContactPrevEmpPicker([], []);
   document.getElementById('edit-modal').classList.add('show');
@@ -5485,6 +5598,9 @@ async function saveEditContact() {
   const relationshipStatus = document.getElementById('ef-relationship').value;
   const specialisms = getTagPickerValues('ef-specialism-picker');
   const routing = document.querySelector('input[name="ef-routing"]:checked')?.value || 'sequence';
+  const ownerPick = document.getElementById('ef-owner') ? document.getElementById('ef-owner').value : '';
+  // Manual pick wins; otherwise auto-route by specialism; blank means uncategorised.
+  const resolvedOwner = ownerPick || ownerFromSpecialism({ specialism: specialisms.join(', '), contactLevel });
 
   if (!firstName) { showToast('First name is required', 'error'); return; }
 
@@ -5514,7 +5630,7 @@ async function saveEditContact() {
   fields['Specialism'] = specialisms;
 
   if (editMode === 'add') {
-    fields['Owner'] = getOwner();
+    if (resolvedOwner) fields['Owner'] = resolvedOwner; // blank = uncategorised, leave unset
     if (routing === 'warm') {
       fields['Sequence Status'] = 'Ongoing Programme';
       fields['Sequence Step'] = 0;
@@ -5524,6 +5640,10 @@ async function saveEditContact() {
       fields['Next Action Notes'] = ['Send LI connection request'];
       fields['Next Action Due'] = new Date().toISOString().split('T')[0];
     }
+  } else {
+    // Edit: write the owner picker through so a manual reassignment persists.
+    // Picker is pre-set to the current owner, so ordinary edits preserve it.
+    fields['Owner'] = ownerPick || null;
   }
 
   try {
@@ -5555,7 +5675,7 @@ async function saveEditContact() {
       const idx = allContacts.findIndex(c => c.id === selectedContact.id);
       if (idx > -1) {
         const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || allContacts[idx].orgName) : allContacts[idx].orgName;
-        allContacts[idx] = { ...allContacts[idx], name: fullName, firstName, role, email, phone, linkedin, contactLevel, tier, org: orgId || allContacts[idx].org, orgName, specialism: specialisms.join(', '), previousEmployerIds: contactPrevEmpIds, previousEmployerNames: contactPrevEmpSelected.map(e => e.name) };
+        allContacts[idx] = { ...allContacts[idx], name: fullName, firstName, role, email, phone, linkedin, contactLevel, tier, org: orgId || allContacts[idx].org, orgName, specialism: specialisms.join(', '), owner: (ownerPick || ''), previousEmployerIds: contactPrevEmpIds, previousEmployerNames: contactPrevEmpSelected.map(e => e.name) };
         selectedContact = allContacts[idx];
       }
       closeEditModal();
@@ -5579,6 +5699,7 @@ async function saveEditContact() {
       const newContact = {
         id: data.id, name: fullName, firstName, role, email, phone, linkedin,
         contactLevel, tier, org: orgId, orgName,
+        owner: resolvedOwner,
         step: routing === 'sequence' ? 1 : 0,
         status: routing === 'warm' ? 'Ongoing Programme' : 'Active',
         relationshipStatus: relationshipStatus || '',
