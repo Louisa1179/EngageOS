@@ -5932,6 +5932,7 @@ async function loadCandidates() {
       cvUrl: cf(r, 'CV URL'),
       nextActionDate: cf(r, 'Next action date'),
       nextActionNotes: cf(r, 'Next action notes'),
+      nextActionBy: cf(r, 'Next action by'),
       firstCallCompleted: r.fields['First call completed'] || r.fields['First Call Completed'] || false,
       linkedContacts: Array.isArray(r.fields['Linked Contacts']) ? r.fields['Linked Contacts'] : [],
       interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
@@ -6337,12 +6338,15 @@ function renderCandPanel(c, interactions) {
     </div>
 
     <div class="panel-section">
-      <div class="panel-section-label">Next action</div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
+        <div class="panel-section-label">Next action</div>
+        ${(c.nextActionDate || c.nextActionNotes) ? `<span onclick="clearCandNextAction()" title="Mark done and clear" style="font-size:0.72rem;color:var(--tee-muted);cursor:pointer;display:inline-flex;align-items:center;gap:0.25rem;" onmouseover="this.style.color='#10b981'" onmouseout="this.style.color='var(--tee-muted)'">\u2713 Done / clear</span>` : ''}
+      </div>
       <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.4rem;">
         ${dueBadge || '<span style="font-size:0.78rem;color:var(--tee-muted);">No date set</span>'}
         <input type="date" onchange="saveCandNextActionDate(this.value)" value="${c.nextActionDate||''}" style="background:#f5f7fa;border:1px solid var(--tee-border);border-radius:6px;padding:0.3rem 0.5rem;font-size:0.78rem;color:var(--tee-text);" />
       </div>
-      ${c.nextActionNotes ? `<div style="font-size:0.78rem;color:var(--tee-muted);margin-top:0.25rem;">${c.nextActionNotes}</div>` : ''}
+      ${c.nextActionNotes ? `<div style="font-size:0.78rem;color:var(--tee-muted);margin-top:0.25rem;">${Array.isArray(c.nextActionNotes) ? c.nextActionNotes.join(', ') : c.nextActionNotes}${c.nextActionBy ? ` <span style="color:var(--tee-accent);font-weight:500;">\u00b7 ${(Array.isArray(c.nextActionBy)?c.nextActionBy[0]:c.nextActionBy).split(' ')[0]}</span>` : ''}</div>` : (c.nextActionBy ? `<div style="font-size:0.72rem;color:var(--tee-accent);font-weight:500;margin-top:0.25rem;">Set by ${(Array.isArray(c.nextActionBy)?c.nextActionBy[0]:c.nextActionBy).split(' ')[0]}</div>` : '')}
     </div>
 
     <div class="panel-section">
@@ -6401,24 +6405,49 @@ function toggleCandInt(uid) {
 }
 
 // SAVE NEXT ACTION DATE
+function candActionUser() {
+  const v = getViewUser();
+  return (v && v !== 'All') ? v : getOwner();
+}
 async function saveCandNextActionDate(date) {
   if (!selectedCandidate) return;
+  const by = candActionUser();
   try {
     const resp = await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields: { 'Next action date': date || null } })
+      body: JSON.stringify({ fields: { 'Next action date': date || null, 'Next action by': date ? by : null } })
     });
     if (resp.ok) {
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
-      if (idx > -1) { allCandidates[idx].nextActionDate = date; selectedCandidate = allCandidates[idx]; }
+      if (idx > -1) { allCandidates[idx].nextActionDate = date; allCandidates[idx].nextActionBy = date ? by : ''; selectedCandidate = allCandidates[idx]; }
       updateCandCounts();
       renderCandList(filteredCandidates);
+      renderCandPanel(selectedCandidate, await fetchCandInteractions(selectedCandidate.id));
       showToast('Next action date saved ✓', 'success');
     } else {
       const err = await resp.json();
       showToast('Failed: ' + (err.error?.message || 'unknown'), 'error');
     }
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+// MARK NEXT ACTION DONE — clears date, note and owner in one go
+async function clearCandNextAction() {
+  if (!selectedCandidate) return;
+  try {
+    const resp = await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Next action date': null, 'Next action notes': null, 'Next action by': null } })
+    });
+    if (!resp.ok) { const err = await resp.json(); throw new Error(err.error?.message || 'unknown'); }
+    const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
+    if (idx > -1) { allCandidates[idx].nextActionDate = ''; allCandidates[idx].nextActionNotes = ''; allCandidates[idx].nextActionBy = ''; selectedCandidate = allCandidates[idx]; }
+    updateCandCounts();
+    renderCandList(filteredCandidates);
+    renderCandPanel(selectedCandidate, await fetchCandInteractions(selectedCandidate.id));
+    showToast('Next action cleared ✓', 'success');
   } catch(e) { showToast('Failed: ' + e.message, 'error'); }
 }
 
@@ -6800,7 +6829,7 @@ async function saveCandidateEdit() {
       data = await resp.json();
       if (!resp.ok) throw new Error(data.error?.message || 'Create failed');
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || '') : '';
-      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', region: fields['Region']||'', county: fields['County']||'', cityTown: fields['City / Town']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [], previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
+      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', region: fields['Region']||'', county: fields['County']||'', cityTown: fields['City / Town']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', nextActionBy: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [], previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
       allCandidates.push(newCand);
       // If created from an assignment, create AC record linking them
       if (window._pendingACAssignmentId) {
@@ -6910,8 +6939,9 @@ async function saveCandReminder() {
   const note = document.getElementById('cand-reminder-note').value.trim();
   if (!date) { showToast('Please set a reminder date', 'error'); return; }
   document.getElementById('cand-reminder-saving').style.display = 'block';
+  const by = candActionUser();
   try {
-    const r1 = await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': date } }) });
+    const r1 = await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': date, 'Next action by': by } }) });
     if (!r1.ok) { const e = await r1.json(); throw new Error(e.error?.message || 'Save failed'); }
     // Next action notes saved separately, matching saveCandidateLog
     await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action notes': note } }) });
@@ -6919,6 +6949,7 @@ async function saveCandReminder() {
     if (idx > -1) {
       allCandidates[idx].nextActionDate = date;
       allCandidates[idx].nextActionNotes = note ? [note] : [];
+      allCandidates[idx].nextActionBy = by;
       selectedCandidate = allCandidates[idx];
     }
     document.getElementById('cand-reminder-modal').classList.remove('show');
@@ -6966,14 +6997,14 @@ async function saveCandidateLog() {
     }
     // Save reminder date and next action notes
     if (setReminder && reminderDate) {
-      // Save date first
-      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': reminderDate } }) });
+      // Save date and owner first
+      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': reminderDate, 'Next action by': loggedBy } }) });
       // Save next action notes separately (multiple select field)
       if (nextActionNotes) {
         await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action notes': nextActionNotes } }) });
       }
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
-      if (idx > -1) { allCandidates[idx].nextActionDate = reminderDate; if(nextActionNotes) allCandidates[idx].nextActionNotes = [nextActionNotes]; selectedCandidate = allCandidates[idx]; }
+      if (idx > -1) { allCandidates[idx].nextActionDate = reminderDate; if(nextActionNotes) allCandidates[idx].nextActionNotes = [nextActionNotes]; allCandidates[idx].nextActionBy = loggedBy; selectedCandidate = allCandidates[idx]; }
     }
     closeCandidateLogModal();
     updateCandCounts();
