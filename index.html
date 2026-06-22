@@ -489,14 +489,6 @@
       <div class="nav-left"><div class="nav-dot" style="background:var(--tee-accent);"></div><span class="nav-label">All organisations</span></div>
       <span class="nav-count count-gray" id="org-count-all">–</span>
     </div>
-    <div class="nav-item" id="org-filter-louisa" onclick="setOrgFilter('louisa',this)">
-      <div class="nav-left"><div class="nav-dot" style="background:#10b981;"></div><span class="nav-label">Louisa's</span></div>
-      <span class="nav-count count-gray" id="org-count-louisa">–</span>
-    </div>
-    <div class="nav-item" id="org-filter-john" onclick="setOrgFilter('john',this)">
-      <div class="nav-left"><div class="nav-dot" style="background:#f59e0b;"></div><span class="nav-label">John's</span></div>
-      <span class="nav-count count-yellow" id="org-count-john">–</span>
-    </div>
     <div class="sidebar-section" style="margin-top:1rem;margin-bottom:0.5rem;">Country</div>
     <div class="nav-item" id="org-filter-england" onclick="setOrgFilter('england',this)">
       <div class="nav-left"><div class="nav-dot" style="background:#a78bfa;"></div><span class="nav-label">England</span></div>
@@ -1905,11 +1897,11 @@ function switchUser(name) {
   localStorage.setItem('tee_view_user', name);
   updateToggleUI(name);
   renderSidebar();
-  // Sync org filter with the selected user
-  const orgFilter = name === 'Louisa Daly' ? 'louisa' : name === 'John Daly' ? 'john' : 'all';
-  currentOrgFilter = orgFilter;
+  // Organisations are a shared view — the Louisa/John toggle no longer filters the
+  // org list. Keep it on 'all' and just refresh.
+  currentOrgFilter = 'all';
   document.querySelectorAll('#orgs-workspace .nav-item').forEach(n => n.classList.remove('active'));
-  const btn = document.getElementById('org-filter-' + orgFilter);
+  const btn = document.getElementById('org-filter-all');
   if (btn) btn.classList.add('active');
   filterOrgs();
   loadContacts();
@@ -4651,10 +4643,6 @@ function setOrgFilter(filter, el) {
   currentOrgFilter = filter;
   document.querySelectorAll('#orgs-workspace .nav-item').forEach(n => n.classList.remove('active'));
   el.classList.add('active');
-  // Sync header toggle when clicking Louisa/John/All filters
-  if (filter === 'louisa') { localStorage.setItem('tee_owner', 'Louisa Daly'); localStorage.setItem('tee_view_user', 'Louisa Daly'); updateToggleUI('Louisa Daly'); renderSidebar(); }
-  else if (filter === 'john') { localStorage.setItem('tee_owner', 'John Daly'); localStorage.setItem('tee_view_user', 'John Daly'); updateToggleUI('John Daly'); renderSidebar(); }
-  else if (filter === 'all') { localStorage.setItem('tee_view_user', 'All'); updateToggleUI('All'); renderSidebar(); }
   filterOrgs();
 }
 
