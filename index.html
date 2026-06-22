@@ -4311,7 +4311,10 @@ async function loadAllContactsFull() {
   try {
     let records = [], offset = null;
     do {
-      let url = `${API_URL}?pageSize=100&fields[]=Full Name&fields[]=First Name&fields[]=Email&fields[]=Phone&fields[]=Mobile&fields[]=LinkedIn&fields[]=Role / Title&fields[]=Organisation&fields[]=Owner&fields[]=Sequence Status&fields[]=Sequence Step&fields[]=Contact Level&fields[]=Relationship Status&fields[]=Next Action Due&fields[]=Next Action Notes&fields[]=Specialism&fields[]=Tier&fields[]=Interactions`;
+      // No fields[] list on purpose: requesting a field name that doesn't exist
+      // makes Airtable reject the whole request, which would leave the book empty
+      // and the org panel falling back to per-user. Fetch all fields instead.
+      let url = `${API_URL}?pageSize=100`;
       if (offset) url += `&offset=${offset}`;
       const resp = await airtableFetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
       const data = await resp.json();
