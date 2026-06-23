@@ -1746,6 +1746,8 @@ const VIEW_CONFIG = {
   'unsubscribed':      { title: 'Unsubscribed', unsub: true },
   'do-not-contact':    { title: 'Do not contact', dnc: true },
   'uncategorised':     { title: 'Uncategorised — to sort', uncat: true },
+  'no-level':          { title: 'No level set — to categorise', noLevel: true },
+  'no-speciality':     { title: 'No speciality set — to categorise', noSpec: true },
   'reminders':         { title: 'Reminders', reminders: true }
 };
 
@@ -1875,8 +1877,16 @@ function renderSidebar() {
       </div>
       <div class="sidebar-section" style="margin-top: 1rem;">To sort</div>
       <div class="nav-item" onclick="switchView('uncategorised')" id="nav-uncategorised">
-        <div class="nav-left"><div class="nav-dot" style="background: #8b5cf6;"></div><span class="nav-label">Uncategorised</span></div>
+        <div class="nav-left"><div class="nav-dot" style="background: #8b5cf6;"></div><span class="nav-label">No owner</span></div>
         <span class="nav-count count-yellow" id="count-uncategorised">–</span>
+      </div>
+      <div class="nav-item" onclick="switchView('no-level')" id="nav-no-level">
+        <div class="nav-left"><div class="nav-dot" style="background: #8b5cf6;"></div><span class="nav-label">No level</span></div>
+        <span class="nav-count count-yellow" id="count-no-level">–</span>
+      </div>
+      <div class="nav-item" onclick="switchView('no-speciality')" id="nav-no-speciality">
+        <div class="nav-left"><div class="nav-dot" style="background: #8b5cf6;"></div><span class="nav-label">No speciality</span></div>
+        <span class="nav-count count-yellow" id="count-no-speciality">–</span>
       </div>`;
   }
 }
@@ -2135,6 +2145,14 @@ function getContactsForView(view) {
   }
   if (cfg.uncat) {
     return uncatContacts.filter(c => !c.owner);
+  }
+  if (cfg.noLevel || cfg.noSpec) {
+    const parked = c => c.status === 'Do Not Contact' || c.status === 'Do Not Sequence' || c.status === 'Unsubscribed';
+    if (cfg.noLevel) {
+      return allContacts.filter(c => deskFilter(c) && !parked(c) && !(c.contactLevel || '').trim());
+    }
+    // No speciality — CEO/MD level contacts are exempt (they cover everything).
+    return allContacts.filter(c => deskFilter(c) && !parked(c) && !(c.specialism || '').trim() && !isCeoContact(c));
   }
   return allContacts.filter(c => {
     if (!deskFilter(c)) return false;
