@@ -318,7 +318,7 @@
   #cf-contract-picker .tag-option:hover { border-color:#a78bfa !important; color:#a78bfa !important; background:rgba(167,139,250,0.06) !important; }
   #cf-dayrate-picker .tag-option.selected { background:rgba(16,185,129,0.12) !important; border-color:#10b981 !important; color:#10b981 !important; font-weight:500; }
   #cf-dayrate-picker .tag-option:hover { border-color:#10b981 !important; color:#10b981 !important; background:rgba(16,185,129,0.06) !important; }
-  #cf-specialism-picker .tag-option.selected { background:rgba(53,150,194,0.12) !important; border-color:var(--tee-accent) !important; color:var(--tee-accent) !important; font-weight:500; }
+  #cf-specialism-picker .tag-option.selected { background:rgba(53,150,194,0.22) !important; border-color:var(--tee-accent) !important; color:var(--tee-accent) !important; font-weight:600; }
   #cf-specialism-picker .tag-option:hover { border-color:var(--tee-accent) !important; color:var(--tee-accent) !important; background:rgba(53,150,194,0.06) !important; }
   #cf-sector-picker .tag-option.selected { background:rgba(245,158,11,0.12) !important; border-color:#f59e0b !important; color:#f59e0b !important; font-weight:500; }
   #cf-sector-picker .tag-option:hover { border-color:#f59e0b !important; color:#f59e0b !important; background:rgba(245,158,11,0.06) !important; }
@@ -1481,7 +1481,8 @@
       <label class="edit-label">Current employer</label>
       <div class="org-typeahead-wrap">
         <input type="text" class="edit-input" id="cf-org-search" placeholder="Search organisations..." autocomplete="off"
-          oninput="searchCandOrgs(this.value)" onfocus="searchCandOrgs(this.value)" />
+          oninput="searchCandOrgs(this.value)" onfocus="searchCandOrgs(this.value)"
+          onblur="setTimeout(function(){var d=document.getElementById('cand-org-dropdown'); if(d) d.style.display='none';},200)" />
         <div class="org-dropdown" id="cand-org-dropdown"></div>
       </div>
       <div id="cand-org-selected-display" style="display:none;">
@@ -1496,7 +1497,8 @@
       <label class="edit-label">Previous employers</label>
       <div class="org-typeahead-wrap">
         <input type="text" class="edit-input" id="cf-prev-emp-search" placeholder="Search organisations..." autocomplete="off"
-          oninput="searchPrevEmpOrgs(this.value)" onfocus="searchPrevEmpOrgs(this.value)" />
+          oninput="searchPrevEmpOrgs(this.value)" onfocus="searchPrevEmpOrgs(this.value)"
+          onblur="setTimeout(function(){var d=document.getElementById('prev-emp-dropdown'); if(d) d.style.display='none';},200)" />
         <div class="org-dropdown" id="prev-emp-dropdown"></div>
       </div>
       <div id="cf-prev-emp-tags" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.4rem;"></div>
