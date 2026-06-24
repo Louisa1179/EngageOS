@@ -4968,8 +4968,19 @@ async function renderOrgActivityLog(org) {
   if (!panel || !org) return;
   document.querySelectorAll('.org-contact-row').forEach(r => { r.style.background = ''; r.style.borderLeft = ''; });
   selectedContact = null;
-  const contacts = getOrgContacts(org.id);
-  if (!contacts.length) {
+  const current = getOrgContacts(org.id);
+  // Include people now filed under "Previously here" so the org keeps the history
+  // built with them while they were here. Their rows are tagged as former below.
+  const formerPool = allContactsAll.length > 0 ? allContactsAll : [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts];
+  const _seen = new Set(current.map(c => c.id));
+  const former = [];
+  for (const fc of formerPool) {
+    if (fc && fc.id && fc.org !== org.id && Array.isArray(fc.previousEmployerIds) && fc.previousEmployerIds.includes(org.id) && !_seen.has(fc.id)) {
+      _seen.add(fc.id); former.push(fc);
+    }
+  }
+  const feedContacts = [...current.map(c => ({ c, isFormer: false })), ...former.map(c => ({ c, isFormer: true }))];
+  if (!feedContacts.length) {
     panel.innerHTML = `<div style="text-align:center;padding:3rem 2rem;color:var(--tee-muted);"><div style="font-size:2rem;margin-bottom:0.5rem;opacity:0.3;">🗒️</div><div style="font-size:0.82rem;line-height:1.6;">No contacts here yet, so there's no activity to show.</div></div>`;
     return;
   }
@@ -4977,9 +4988,9 @@ async function renderOrgActivityLog(org) {
   let items = orgInteractionsCache[org.id];
   if (!items) {
     panel.innerHTML = orgActivityHeader(org, null, null, `<div class="loading" style="padding:2rem;"><div class="spinner"></div> Building activity log…</div>`);
-    const results = await Promise.all(contacts.map(async c => {
+    const results = await Promise.all(feedContacts.map(async ({ c, isFormer }) => {
       const ints = await fetchInteractions(c.id);
-      return ints.map(i => ({ ...i, contactId: c.id, contactName: c.name, contactRole: c.role, contactLevel: c.relationshipStatus }));
+      return ints.map(i => ({ ...i, contactId: c.id, contactName: c.name, contactRole: c.role, contactLevel: c.relationshipStatus, isFormer }));
     }));
     items = results.flat().filter(i => i.date).sort((a, b) => new Date(b.date) - new Date(a.date));
     orgInteractionsCache[org.id] = items;
@@ -5001,7 +5012,7 @@ async function renderOrgActivityLog(org) {
       <div style="width:30px;height:30px;border-radius:50%;background:rgba(53,150,194,0.1);display:flex;align-items:center;justify-content:center;font-size:0.7rem;font-weight:500;color:var(--tee-accent);flex-shrink:0;">${initials}</div>
       <div style="flex:1;min-width:0;">
         <div style="display:flex;justify-content:space-between;align-items:baseline;gap:0.75rem;">
-          <span style="font-size:0.84rem;font-weight:500;color:var(--tee-text);">${i.contactName}</span>
+          <span style="font-size:0.84rem;font-weight:500;color:var(--tee-text);">${i.contactName}${i.isFormer ? ` <span style="font-size:0.62rem;font-weight:500;text-transform:uppercase;letter-spacing:0.05em;color:var(--tee-muted);background:var(--tee-card);border:1px solid var(--tee-border);border-radius:6px;padding:1px 6px;margin-left:5px;">former</span>` : ''}</span>
           <span style="font-size:0.72rem;color:var(--tee-muted);white-space:nowrap;">${i.loggedBy ? `<span style="color:var(--tee-accent);font-weight:500;">${i.loggedBy.split(' ')[0]}</span> · ` : ''}${fmtDate(i.date)}</span>
         </div>
         <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;margin:2px 0 4px;">
@@ -6102,6 +6113,7 @@ async function saveEditContact() {
       renderView();
       // Refresh the org panel in place if it's open, so the contact moves out of the
       // current list immediately (into "Previously here" when filed as a past employer).
+      orgInteractionsCache = {}; // org changed for this contact — rebuild activity feeds
       if (selectedOrg && typeof renderOrgDetail === 'function') renderOrgDetail(selectedOrg);
       const interactions = await fetchInteractions(selectedContact.id);
       renderPanel(selectedContact, interactions);
