@@ -705,6 +705,31 @@
   </div>
 </div>
 
+<!-- MERGE ORGANISATIONS MODAL -->
+<div class="modal-overlay" id="org-merge-modal">
+  <div class="modal" style="max-width:480px;">
+    <div class="modal-title">Merge another organisation in</div>
+    <div class="modal-sub" style="margin-bottom:1rem;line-height:1.5;">Keeping <strong id="org-merge-target-name" style="color:var(--tee-text);"></strong>. Pick the organisation to absorb into it. Its contacts, previous-employer links and interaction history move across, then it is deleted.</div>
+    <div style="margin-bottom:1rem;">
+      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.4rem;">Organisation to merge in (will be deleted)</label>
+      <select class="edit-input" id="org-merge-source" style="width:100%;" onchange="onMergeSourcePick()"><option value="">— select —</option></select>
+    </div>
+    <div id="org-merge-preview" style="display:none;font-size:0.82rem;color:var(--tee-muted);line-height:1.6;background:var(--tee-card);border-radius:10px;padding:0.75rem 0.9rem;margin-bottom:0.9rem;"></div>
+    <div id="org-merge-status" style="display:none;font-size:0.82rem;color:var(--tee-muted);margin-bottom:0.75rem;"></div>
+    <div id="org-merge-confirm" style="display:none;background:rgba(220,38,38,0.08);border:1px solid rgba(220,38,38,0.3);border-radius:10px;padding:0.75rem;margin-bottom:0.75rem;">
+      <div style="font-size:0.82rem;color:#dc2626;margin-bottom:0.5rem;" id="org-merge-confirm-text">This permanently deletes the source organisation. This cannot be undone.</div>
+      <div style="display:flex;gap:0.5rem;">
+        <button type="button" class="modal-btn modal-btn-yes" id="org-merge-go" style="flex:1;padding:0.6rem;background:#dc2626;border-color:#dc2626;" onclick="executeOrgMerge()">Yes, merge and delete</button>
+        <button type="button" class="modal-btn modal-btn-no" style="flex:1;padding:0.6rem;" onclick="document.getElementById('org-merge-confirm').style.display='none'">Cancel</button>
+      </div>
+    </div>
+    <div class="modal-btns">
+      <button type="button" class="modal-btn modal-btn-yes" id="org-merge-start" style="opacity:0.5;pointer-events:none;" onclick="document.getElementById('org-merge-confirm').style.display='block'">Merge</button>
+      <button type="button" class="modal-btn modal-btn-no" onclick="closeOrgMergeModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <!-- MOVE TO ONGOING MODAL -->
 <div class="modal-overlay" id="ongoing-modal">
   <div class="modal" style="max-width:420px;">
@@ -4063,6 +4088,178 @@ async function confirmDeleteOrg() {
   }
 }
 
+// MERGE ORGANISATIONS ------------------------------------------------------
+// Absorb a source org into the currently-selected (surviving) org: repoint every
+// current contact, rewrite previous-employer links, then delete the source.
+// Interactions are keyed to the contact, not the org, so history rides along.
+let _mergeSourceId = null;
+let _mergeInProgress = false;
+
+function mergeAffected(sourceId) {
+  // Scan the full cross-owner book so parked / other-owner contacts are caught.
+  const pool = allContactsAll.length > 0
+    ? allContactsAll
+    : [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts, ...uncatContacts];
+  const seen = new Set();
+  const current = [], previous = [];
+  for (const c of pool) {
+    if (!c || !c.id || seen.has(c.id)) continue;
+    const isCurrent = c.org === sourceId;
+    const isPrev = Array.isArray(c.previousEmployerIds) && c.previousEmployerIds.includes(sourceId);
+    if (!isCurrent && !isPrev) continue;
+    seen.add(c.id);
+    if (isCurrent) current.push(c); else previous.push(c);
+  }
+  return { current, previous };
+}
+
+async function openOrgMergeModal() {
+  if (!selectedOrg) return;
+  _mergeSourceId = null;
+  _mergeInProgress = false;
+  document.getElementById('org-merge-target-name').textContent = selectedOrg.name || 'this organisation';
+  document.getElementById('org-merge-preview').style.display = 'none';
+  document.getElementById('org-merge-preview').innerHTML = '';
+  document.getElementById('org-merge-confirm').style.display = 'none';
+  document.getElementById('org-merge-status').style.display = 'none';
+  const startBtn = document.getElementById('org-merge-start');
+  startBtn.style.opacity = '0.5'; startBtn.style.pointerEvents = 'none'; startBtn.textContent = 'Merge';
+  // Populate the source dropdown with every other org, sorted by name.
+  const sel = document.getElementById('org-merge-source');
+  const others = allOrgs.filter(o => o.id !== selectedOrg.id).slice().sort((a,b) => (a.name||'').localeCompare(b.name||''));
+  sel.innerHTML = '<option value="">— select —</option>' + others.map(o => `<option value="${o.id}">${(o.name||'').replace(/"/g,'&quot;')}</option>`).join('');
+  document.getElementById('org-merge-modal').classList.add('show');
+  // Make sure the full book is loaded so the preview counts are accurate.
+  if (allContactsAll.length === 0) {
+    sel.disabled = true;
+    const note = document.getElementById('org-merge-status');
+    note.style.display = 'block'; note.textContent = 'Loading the full contact book for an accurate preview...';
+    try { await loadAllContactsFull(); } catch(e) {}
+    note.style.display = 'none';
+    sel.disabled = false;
+  }
+}
+
+function closeOrgMergeModal() {
+  if (_mergeInProgress) return; // don't allow closing mid-merge
+  document.getElementById('org-merge-modal').classList.remove('show');
+}
+
+function onMergeSourcePick() {
+  const sourceId = document.getElementById('org-merge-source').value;
+  _mergeSourceId = sourceId || null;
+  const preview = document.getElementById('org-merge-preview');
+  const startBtn = document.getElementById('org-merge-start');
+  document.getElementById('org-merge-confirm').style.display = 'none';
+  if (!sourceId) {
+    preview.style.display = 'none';
+    startBtn.style.opacity = '0.5'; startBtn.style.pointerEvents = 'none';
+    return;
+  }
+  const source = allOrgs.find(o => o.id === sourceId);
+  const { current, previous } = mergeAffected(sourceId);
+  const targetName = selectedOrg.name || 'this organisation';
+  const srcName = source ? source.name : 'the source organisation';
+  preview.style.display = 'block';
+  preview.innerHTML =
+    `<div style="margin-bottom:0.35rem;"><strong style="color:var(--tee-text);">${current.length}</strong> current contact${current.length===1?'':'s'} will move into <strong style="color:var(--tee-text);">${targetName}</strong>.</div>` +
+    `<div style="margin-bottom:0.35rem;"><strong style="color:var(--tee-text);">${previous.length}</strong> previous-employer link${previous.length===1?'':'s'} will be rewritten to <strong style="color:var(--tee-text);">${targetName}</strong>.</div>` +
+    `<div style="color:#dc2626;">${srcName} will then be deleted.</div>` +
+    `<div style="margin-top:0.4rem;font-size:0.76rem;">Interaction history stays with each contact.</div>`;
+  startBtn.style.opacity = '1'; startBtn.style.pointerEvents = 'auto';
+}
+
+async function executeOrgMerge() {
+  if (_mergeInProgress) return;
+  const survivingId = selectedOrg && selectedOrg.id;
+  const sourceId = _mergeSourceId;
+  if (!survivingId || !sourceId || survivingId === sourceId) return;
+  const survivingName = selectedOrg.name || 'the surviving organisation';
+  const source = allOrgs.find(o => o.id === sourceId);
+  const srcName = source ? source.name : 'the source organisation';
+  const dedupe = arr => [...new Set(arr)];
+
+  const { current, previous } = mergeAffected(sourceId);
+
+  // Build the write jobs.
+  const jobs = [];
+  for (const c of current) {
+    let prev = (c.previousEmployerIds || [])
+      .map(id => id === sourceId ? survivingId : id)
+      .filter(id => id !== survivingId); // surviving is now the current org, not a former one
+    jobs.push({ id: c.id, fields: { 'Organisation': [survivingId], 'Previous Employers': dedupe(prev) } });
+  }
+  for (const c of previous) {
+    let prev = dedupe((c.previousEmployerIds || []).map(id => id === sourceId ? survivingId : id));
+    if (c.org === survivingId) prev = prev.filter(id => id !== survivingId); // already current there
+    jobs.push({ id: c.id, fields: { 'Previous Employers': prev } });
+  }
+
+  _mergeInProgress = true;
+  const goBtn = document.getElementById('org-merge-go');
+  const status = document.getElementById('org-merge-status');
+  goBtn.disabled = true; goBtn.textContent = 'Merging...';
+  status.style.display = 'block';
+
+  const failures = [];
+  let done = 0;
+  const batchSize = 3, pause = 350;
+  for (let i = 0; i < jobs.length; i += batchSize) {
+    const batch = jobs.slice(i, i + batchSize);
+    await Promise.all(batch.map(async job => {
+      try {
+        const resp = await airtableFetch(`${API_URL}/${job.id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: job.fields })
+        });
+        if (!resp.ok) {
+          const e = await resp.json().catch(() => ({}));
+          failures.push({ id: job.id, msg: (e.error && e.error.message) || resp.status });
+        } else { done++; }
+      } catch(e) { failures.push({ id: job.id, msg: e.message }); }
+    }));
+    status.textContent = `Moving contacts... ${Math.min(i + batchSize, jobs.length)} of ${jobs.length}`;
+    if (i + batchSize < jobs.length) await teeSleep(pause);
+  }
+
+  // Abort before deleting if any write failed — never orphan references.
+  if (failures.length > 0) {
+    console.error('Merge write failures:', failures);
+    _mergeInProgress = false;
+    goBtn.disabled = false; goBtn.textContent = 'Yes, merge and delete';
+    status.textContent = `${failures.length} of ${jobs.length} updates failed. ${srcName} was NOT deleted. Fix the errors and run the merge again to retry.`;
+    showToast(`Merge stopped: ${failures.length} update${failures.length===1?'':'s'} failed. Source org not deleted.`, 'error');
+    return;
+  }
+
+  // All references rewritten — safe to delete the source org.
+  let deletedOk = true;
+  try {
+    const del = await airtableFetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations/${sourceId}`, {
+      method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    if (!del.ok) deletedOk = false;
+  } catch(e) { deletedOk = false; }
+
+  // Refresh everything from Airtable and reselect the surviving org.
+  status.textContent = 'Refreshing...';
+  allContactsAll = [];
+  try { await loadContacts(); } catch(e) {}
+  try { await loadAllContactsFull(); } catch(e) {}
+  try { await loadOrganisations(); } catch(e) {}
+
+  _mergeInProgress = false;
+  document.getElementById('org-merge-modal').classList.remove('show');
+  if (allOrgs.find(o => o.id === survivingId)) selectOrg(survivingId);
+
+  if (deletedOk) {
+    showToast(`Merged into ${survivingName}. ${jobs.length} contact${jobs.length===1?'':'s'} moved, ${srcName} deleted.`, 'success');
+  } else {
+    showToast(`Contacts moved into ${survivingName}, but deleting ${srcName} failed — delete it manually from its Edit panel.`, 'error');
+  }
+}
+
 // DUPLICATE DETECTION — soft, non-blocking. Flags likely matches on add so a near
 // twin can be caught before it's created. Never blocks; just asks you to confirm.
 function dupNorm(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim(); }
@@ -4885,7 +5082,10 @@ function renderOrgDetail(org) {
     <div style="padding:1.5rem 1.5rem 1rem;border-bottom:1px solid var(--tee-border);">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.5rem;">
         <div style="font-size:1.5rem;">🏢</div>
-        <span onclick="openOrgEditModal()" style="font-size:0.75rem;color:var(--tee-muted);cursor:pointer;display:inline-flex;align-items:center;gap:0.3rem;" onmouseover="this.style.color='var(--tee-accent)'" onmouseout="this.style.color='var(--tee-muted)'">✎ Edit organisation</span>
+        <div style="display:inline-flex;align-items:center;gap:0.9rem;">
+          <span onclick="openOrgMergeModal()" style="font-size:0.75rem;color:var(--tee-muted);cursor:pointer;display:inline-flex;align-items:center;gap:0.3rem;" onmouseover="this.style.color='var(--tee-accent)'" onmouseout="this.style.color='var(--tee-muted)'">⇄ Merge in another org</span>
+          <span onclick="openOrgEditModal()" style="font-size:0.75rem;color:var(--tee-muted);cursor:pointer;display:inline-flex;align-items:center;gap:0.3rem;" onmouseover="this.style.color='var(--tee-accent)'" onmouseout="this.style.color='var(--tee-muted)'">✎ Edit organisation</span>
+        </div>
       </div>
       <div style="font-family:'DM Serif Display',serif;font-size:1.1rem;color:var(--tee-text);margin-bottom:0.2rem;">${org.name}</div>
       <div style="font-size:0.78rem;color:var(--tee-muted);margin-bottom:0.75rem;">${org.subsector || org.sector}${org.region ? ' · ' + org.region : ''}</div>
