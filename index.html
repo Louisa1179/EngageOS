@@ -6031,7 +6031,9 @@ async function saveEditContact() {
   if (mobile) fields['Mobile'] = mobile;
   if (linkedin) fields['LinkedIn'] = linkedin;
   if (contactLevel) fields['Contact Level'] = contactLevel;
-  if (orgId) fields['Organisation'] = [orgId];
+  // Always send Organisation: when cleared, send [] so Airtable actually removes
+  // the current org. Omitting it (the old `if (orgId)`) left the previous value in place.
+  fields['Organisation'] = orgId ? [orgId] : [];
   const contactPrevEmpIds = contactPrevEmpSelected.map(e => e.id);
   fields['Previous Employers'] = contactPrevEmpIds;
 
