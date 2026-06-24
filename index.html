@@ -6082,15 +6082,27 @@ async function saveEditContact() {
         });
       }
 
-      // Update local contact record
+      // Update local contact record. When the org is cleared, org and orgName must
+      // also go empty — the old `orgId || ...` fallback kept the removed org, which
+      // is why a cleared organisation kept reappearing as current after saving.
       const idx = allContacts.findIndex(c => c.id === selectedContact.id);
+      const prevOrgName = idx > -1 ? allContacts[idx].orgName : (selectedContact.orgName || '');
+      const newOrgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || prevOrgName || '') : '';
+      const localPatch = { name: fullName, firstName, role, email, phone, linkedin, contactLevel, tier, org: orgId, orgName: newOrgName, specialism: specialisms.join(', '), owner: (ownerPick || ''), previousEmployerIds: contactPrevEmpIds, previousEmployerNames: contactPrevEmpSelected.map(e => e.name) };
       if (idx > -1) {
-        const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || allContacts[idx].orgName) : allContacts[idx].orgName;
-        allContacts[idx] = { ...allContacts[idx], name: fullName, firstName, role, email, phone, linkedin, contactLevel, tier, org: orgId || allContacts[idx].org, orgName, specialism: specialisms.join(', '), owner: (ownerPick || ''), previousEmployerIds: contactPrevEmpIds, previousEmployerNames: contactPrevEmpSelected.map(e => e.name) };
+        allContacts[idx] = { ...allContacts[idx], ...localPatch };
         selectedContact = allContacts[idx];
+      } else {
+        selectedContact = { ...selectedContact, ...localPatch };
       }
+      // Keep the cross-owner book in sync so the Organisations tab reflects the change too.
+      const aidx = allContactsAll.findIndex(c => c.id === selectedContact.id);
+      if (aidx > -1) allContactsAll[aidx] = { ...allContactsAll[aidx], ...localPatch };
       closeEditModal();
       renderView();
+      // Refresh the org panel in place if it's open, so the contact moves out of the
+      // current list immediately (into "Previously here" when filed as a past employer).
+      if (selectedOrg && typeof renderOrgDetail === 'function') renderOrgDetail(selectedOrg);
       const interactions = await fetchInteractions(selectedContact.id);
       renderPanel(selectedContact, interactions);
       showToast(fullName + ' updated ✓', 'success');
