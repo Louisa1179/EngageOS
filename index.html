@@ -2973,7 +2973,7 @@ function renderPanel(contact, interactions) {
         </div>
       </div>` : ''}
       <div class="panel-section">
-        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (contact.status === 'Warm Ongoing' || contact.status === 'Cold Ongoing') ? buildOngoingButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">▶ Start sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">${markDoneLabel}</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-secondary" onclick="openSetPositionModal()">⇄ Set sequence position</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
+        ${contact.status === 'Do Not Contact' ? buildDncButtons(contact) : contact.status === 'Do Not Sequence' ? buildDnsButtons(contact) : contact.status === 'Unsubscribed' ? buildUnsubButtons(contact) : (contact.status === 'Warm Ongoing' || contact.status === 'Cold Ongoing') ? buildOngoingButtons(contact) : (!contact.step || contact.step === 0) ? `<div class="btn-primary" style="background:#10b981;" onclick="startSequence()">▶ Start sequence</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markMovedOn()">↪ Moved on (off-sector)</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>` : `<div class="btn-primary" onclick="handleMarkDone()">${markDoneLabel}</div><div class="btn-secondary" onclick="openLogModal()">Log an action / set a reminder</div><div class="btn-secondary" onclick="skipStep()">Skip this step</div><div class="btn-secondary" onclick="openSetPositionModal()">⇄ Set sequence position</div><div class="btn-warning" onclick="openOngoingModal()">↗ Move to ongoing programme</div><div class="btn-subtle" onclick="markMovedOn()">↪ Moved on (off-sector)</div><div class="btn-subtle" onclick="markDoNotSequence()">⏸ Do not sequence</div><div class="btn-subtle" onclick="markUnsubscribed()">✉ Unsubscribe</div><div class="btn-danger" onclick="markDoNotContact()">⊘ Do not contact</div>`}
       </div>
       <div class="panel-section">
         <div class="panel-section-label">Sequence progress</div>
@@ -4363,6 +4363,8 @@ async function loadAllContactsFull() {
       relationshipStatus: Array.isArray(r.fields['Relationship Status']) ? (r.fields['Relationship Status'][0] || '') : (r.fields['Relationship Status'] || ''),
       specialism: Array.isArray(r.fields['Specialism']) ? r.fields['Specialism'].join(', ') : getField(r, 'Specialism'),
       contactLevel: getField(r, 'Contact Level'),
+      previousEmployerIds: Array.isArray(r.fields['Previous Employers']) ? r.fields['Previous Employers'] : [],
+      dncReason: getField(r, 'Status Reason'),
       owner: getField(r, 'Owner')
     }));
     // Resolve org names from already-loaded orgs where possible
@@ -4854,6 +4856,14 @@ function renderOrgDetail(org) {
   const responded = contacts.filter(c => c.status === 'Responded');
   const offSeq = contacts.filter(c => c.status === 'Do Not Sequence' || c.status === 'Unsubscribed');
   const dnc = contacts.filter(c => c.status === 'Do Not Contact');
+  const formerPool = allContactsAll.length > 0 ? allContactsAll : [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts];
+  const _formerSeen = new Set();
+  const former = [];
+  for (const fc of formerPool) {
+    if (fc && fc.id && fc.org !== org.id && Array.isArray(fc.previousEmployerIds) && fc.previousEmployerIds.includes(org.id) && !_formerSeen.has(fc.id)) {
+      _formerSeen.add(fc.id); former.push(fc);
+    }
+  }
   const stepNames = ['Not started','LI request sent','Email 1 sent','Email 2 sent','Email 3 sent','LI message sent','Follow-up done'];
   function contactRow(c) {
     const step = stepNames[c.step] || 'Not started';
@@ -4894,7 +4904,8 @@ function renderOrgDetail(org) {
       ${active.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Active (${active.length})</div>${active.map(contactRow).join('')}</div>` : ''}
       ${offSeq.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Off sequence (${offSeq.length})</div>${offSeq.map(contactRow).join('')}</div>` : ''}
       ${dnc.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Do not contact (${dnc.length})</div>${dnc.map(contactRow).join('')}</div>` : ''}
-      ${contacts.length === 0 ? `<div style="font-size:0.82rem;color:var(--tee-muted);text-align:center;padding:1.5rem 1rem;line-height:1.6;">No contacts here yet.<br>Use <span style="color:var(--tee-accent);font-weight:500;">+ Add contact</span> above to add the people you know.</div>` : ''}
+      ${former.length > 0 ? `<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--tee-border);"><div style="font-size:0.68rem;font-weight:600;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Previously here (${former.length})</div>${former.map(contactRow).join('')}</div>` : ''}
+      ${(contacts.length === 0 && former.length === 0) ? `<div style="font-size:0.82rem;color:var(--tee-muted);text-align:center;padding:1.5rem 1rem;line-height:1.6;">No contacts here yet.<br>Use <span style="color:var(--tee-accent);font-weight:500;">+ Add contact</span> above to add the people you know.</div>` : ''}
       ${org.notes ? `<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--tee-border);font-size:0.78rem;color:var(--tee-muted);line-height:1.6;">${org.notes}</div>` : ''}
     </div>`;
 }
@@ -4984,6 +4995,39 @@ async function markDoNotSequence() {
   const interactions = await fetchInteractions(selectedContact.id);
   renderPanel(selectedContact, interactions);
   showToast(selectedContact.name + ' moved to Do Not Sequence', 'success');
+}
+
+async function markMovedOn() {
+  if (!selectedContact) return;
+  const c = selectedContact;
+  const curOrgId = c.org || '';
+  const curOrgName = c.orgName || '';
+  const msg = curOrgName
+    ? `Mark ${c.name} as moved on? ${curOrgName} will be filed as a previous employer, the current organisation cleared, and they will be parked in Do Not Sequence. Reinstate them later if they join a relevant organisation.`
+    : `Mark ${c.name} as moved on (off-sector)? They will be parked in Do Not Sequence and kept for history.`;
+  if (!confirm(msg)) return;
+  const prevIds = Array.isArray(c.previousEmployerIds) ? [...c.previousEmployerIds] : [];
+  if (curOrgId && !prevIds.includes(curOrgId)) prevIds.push(curOrgId);
+  await updateContact(c.id, {
+    'Sequence Status': 'Do Not Sequence',
+    'Status Reason': 'Moved off-sector',
+    'Organisation': [],
+    'Previous Employers': prevIds
+  });
+  const prevNames = Array.isArray(c.previousEmployerNames) ? [...c.previousEmployerNames] : [];
+  if (curOrgName && !prevNames.includes(curOrgName)) prevNames.push(curOrgName);
+  const updated = { ...c, status: 'Do Not Sequence', dncReason: 'Moved off-sector', org: '', orgName: '', previousEmployerIds: prevIds, previousEmployerNames: prevNames };
+  allContacts = allContacts.filter(x => x.id !== c.id);
+  if (!dnsContacts.find(x => x.id === c.id)) dnsContacts.push(updated);
+  const ai = allContactsAll.findIndex(x => x.id === c.id);
+  if (ai > -1) allContactsAll[ai] = { ...allContactsAll[ai], status: 'Do Not Sequence', dncReason: 'Moved off-sector', org: '', orgName: '', previousEmployerIds: prevIds };
+  selectedContact = updated;
+  updateCounts();
+  renderView();
+  const el = document.getElementById('count-do-not-sequence');
+  if (el) el.textContent = dnsContacts.length;
+  try { const interactions = await fetchInteractions(c.id); renderPanel(selectedContact, interactions); } catch(e) { renderPanel(selectedContact, null); }
+  showToast(c.name + ' moved on — filed under previous employer and parked', 'success');
 }
 
 async function markUnsubscribed() {
