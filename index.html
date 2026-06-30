@@ -157,6 +157,7 @@
     transition: all 0.15s; display: flex; align-items: center; gap: 0.75rem;
   }
   .contact-card:hover { background: var(--tee-hover); border-color: rgba(15,13,46,0.15); }
+  .refine-chip:hover { filter: brightness(0.97); border-color: var(--tee-accent) !important; }
   .contact-card.selected { border-color: var(--tee-accent); background: rgba(53,150,194,0.06); }
   .contact-avatar { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8rem; font-weight: 500; flex-shrink: 0; }
   .contact-info { flex: 1; min-width: 0; }
@@ -1074,6 +1075,14 @@
         <div style="font-size:0.72rem;color:var(--tee-muted);" id="cand-list-sub">Loading...</div>
       </div>
       <button onclick="openAddCandidateModal()" style="background:rgba(53,150,194,0.1);border:1px solid rgba(53,150,194,0.3);color:var(--tee-accent);border-radius:8px;padding:0.35rem 0.75rem;font-size:0.75rem;font-weight:500;cursor:pointer;">+ Add</button>
+    </div>
+    <!-- REFINE BAR -->
+    <div style="border-bottom:1px solid var(--tee-border);background:var(--tee-light);">
+      <div onclick="toggleCandRefine()" style="padding:0.5rem 1.25rem;display:flex;align-items:center;justify-content:space-between;cursor:pointer;font-size:0.75rem;color:var(--tee-muted);user-select:none;">
+        <span><span id="cand-refine-caret" style="display:inline-block;width:0.8rem;">▸</span> Refine <span id="cand-refine-active-count"></span></span>
+        <span id="cand-refine-clear" onclick="event.stopPropagation();clearCandRefine();" style="display:none;color:var(--tee-accent);font-weight:500;">Clear all</span>
+      </div>
+      <div id="cand-refine-panel" style="display:none;padding:0 1.25rem 0.75rem;max-height:42vh;overflow-y:auto;"></div>
     </div>
     <div id="cand-list"></div>
   </div>
@@ -6443,6 +6452,24 @@ function refreshDynamicSelects() {
 
 let allCandidates = [];
 let filteredCandidates = [];
+// Refine search: facet key -> array of selected values (within-facet OR, across-facet AND)
+let candRefine = {};
+const CAND_REFINE_FACETS = [
+  { key:'specialisms',        label:'Specialism',        type:'arr' },
+  { key:'sectors',            label:'Sector expertise',  type:'arr' },
+  { key:'subsectorExpertise', label:'Subsector',         type:'arr' },
+  { key:'workedSectors',      label:'Worked sectors',    type:'arr' },
+  { key:'region',             label:'Region',            type:'str' },
+  { key:'county',             label:'County',            type:'str' },
+  { key:'willTravel',         label:'Will travel',       type:'str' },
+  { key:'availability',       label:'Availability',      type:'str' },
+  { key:'notice',             label:'Notice period',     type:'str' },
+  { key:'contractType',       label:'Contract type',     type:'str' },
+  { key:'dayRate',            label:'Day rate',          type:'str' },
+  { key:'salary',             label:'Salary objective',  type:'arr' },
+  { key:'status',             label:'Status',            type:'str' },
+  { key:'owner',              label:'Desk owner',        type:'str' }
+];
 let selectedCandidate = null;
 let currentCandFilter = 'all';
 let candFieldOptions = {};
@@ -6536,6 +6563,10 @@ async function loadCandidates() {
     }
 
     updateCandCounts();
+    // Fresh candidate data: rebuild refine options on next open (or now if open).
+    const _rp = document.getElementById('cand-refine-panel');
+    if (_rp) { _rp.dataset.built = ''; if (_rp.style.display !== 'none') buildCandRefinePanel(); }
+    updateCandRefineHeader();
     filterCandidates();
     await loadCandFieldOptions();
   } catch(e) {
@@ -6741,8 +6772,97 @@ function filterCandidates() {
     (c.sectors||[]).join(' ').toLowerCase().includes(query) ||
     c.location.toLowerCase().includes(query)
   );
+  candidates = applyCandRefine(candidates);
   filteredCandidates = candidates;
   renderCandList(candidates);
+}
+
+// ---- REFINE SEARCH (faceted, wide-to-narrow) ----
+// Normalise a candidate's value(s) for a facet into a trimmed string array.
+function candFacetVals(c, f) {
+  const v = c[f.key];
+  if (f.type === 'arr') return (Array.isArray(v) ? v : (v ? [v] : [])).map(x => String(x).trim()).filter(Boolean);
+  return v ? [String(v).trim()].filter(Boolean) : [];
+}
+
+// Distinct, sorted option list for a facet, derived from the loaded candidates
+// so the choices always reflect real data (no dead options that match nobody).
+function candFacetOptions(f) {
+  const set = new Set();
+  allCandidates.forEach(c => candFacetVals(c, f).forEach(x => set.add(x)));
+  return [...set].sort((a, b) => a.localeCompare(b));
+}
+
+// Narrow a list by the active refine selections: OR within a facet, AND across facets.
+function applyCandRefine(list) {
+  CAND_REFINE_FACETS.forEach(f => {
+    const sel = candRefine[f.key];
+    if (sel && sel.length) {
+      list = list.filter(c => {
+        const vals = candFacetVals(c, f);
+        return sel.some(s => vals.includes(s));
+      });
+    }
+  });
+  return list;
+}
+
+function candRefineActiveCount() {
+  return CAND_REFINE_FACETS.reduce((n, f) => n + ((candRefine[f.key] || []).length), 0);
+}
+
+function toggleCandRefine() {
+  const panel = document.getElementById('cand-refine-panel');
+  const caret = document.getElementById('cand-refine-caret');
+  const open = panel.style.display === 'none';
+  if (open && !panel.dataset.built) buildCandRefinePanel();
+  panel.style.display = open ? 'block' : 'none';
+  caret.textContent = open ? '▾' : '▸';
+}
+
+function buildCandRefinePanel() {
+  const panel = document.getElementById('cand-refine-panel');
+  const sections = CAND_REFINE_FACETS.map(f => {
+    const opts = candFacetOptions(f);
+    if (opts.length === 0) return '';
+    const sel = candRefine[f.key] || [];
+    const chips = opts.map(o => {
+      const active = sel.includes(o);
+      const safe = o.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/"/g, '&quot;');
+      return `<span onclick="toggleCandRefineValue('${f.key}', this.dataset.val)" data-val="${safe}" class="refine-chip${active ? ' active' : ''}" style="font-size:0.7rem;padding:2px 8px;border-radius:10px;cursor:pointer;border:1px solid ${active ? 'var(--tee-accent)' : 'var(--tee-border)'};background:${active ? 'rgba(53,150,194,0.12)' : 'transparent'};color:${active ? 'var(--tee-accent)' : 'var(--tee-muted)'};">${safe}</span>`;
+    }).join('');
+    return `<div style="margin-bottom:0.7rem;">
+      <div style="font-size:0.62rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--tee-muted);margin-bottom:0.35rem;font-weight:600;">${f.label}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:0.3rem;">${chips}</div>
+    </div>`;
+  }).join('');
+  panel.innerHTML = sections || '<div style="font-size:0.72rem;color:var(--tee-muted);padding:0.25rem 0;">No category data on the loaded candidates yet.</div>';
+  panel.dataset.built = '1';
+}
+
+function toggleCandRefineValue(key, val) {
+  const sel = candRefine[key] || [];
+  const i = sel.indexOf(val);
+  if (i > -1) sel.splice(i, 1); else sel.push(val);
+  candRefine[key] = sel;
+  buildCandRefinePanel();
+  updateCandRefineHeader();
+  filterCandidates();
+}
+
+function clearCandRefine() {
+  candRefine = {};
+  if (document.getElementById('cand-refine-panel').dataset.built) buildCandRefinePanel();
+  updateCandRefineHeader();
+  filterCandidates();
+}
+
+function updateCandRefineHeader() {
+  const n = candRefineActiveCount();
+  const badge = document.getElementById('cand-refine-active-count');
+  const clear = document.getElementById('cand-refine-clear');
+  if (badge) badge.innerHTML = n ? `<span style="background:var(--tee-accent);color:#fff;border-radius:9px;padding:1px 7px;font-size:0.65rem;margin-left:4px;">${n}</span>` : '';
+  if (clear) clear.style.display = n ? 'inline' : 'none';
 }
 
 // RENDER LIST
