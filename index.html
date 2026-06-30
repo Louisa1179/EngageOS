@@ -3635,7 +3635,8 @@ async function setNextSendDate(dateVal) {
     if (idx > -1) allContacts[idx].nextSendDate = dateVal || '';
     updateCounts();
     showToast(dateVal ? 'Next send date set ✓' : 'Next send date cleared', 'success');
-    renderContactDetail(selectedContact);
+    const ints = await fetchInteractions(selectedContact.id);
+    renderPanel(selectedContact, ints);
   } catch(e) {
     showToast('Failed to save next send date', 'error');
   }
@@ -7260,14 +7261,23 @@ function jumpToCandidate(candidateId) {
 
 function jumpToContact(contactId) {
   switchWorkspace('bd');
-  setTimeout(() => {
-    const contact = allContacts.find(c => c.id === contactId);
-    if (contact) {
-      selectedContact = contact;
-      renderView();
-      renderContactDetail(contact);
+  // selectContact searches every contact bucket (active, do-not-contact,
+  // do-not-sequence, unsubscribed, uncategorised), so it opens the record even
+  // when it sits outside the active list. Poll briefly for the cold-load case.
+  let tries = 0;
+  const found = () => allContacts.find(c => c.id === contactId)
+    || dncContacts.find(c => c.id === contactId)
+    || dnsContacts.find(c => c.id === contactId)
+    || unsubContacts.find(c => c.id === contactId)
+    || uncatContacts.find(c => c.id === contactId);
+  const tick = () => {
+    if (found()) {
+      selectContact(contactId);
+    } else if (tries++ < 20) {
+      setTimeout(tick, 150);
     }
-  }, 150);
+  };
+  setTimeout(tick, 100);
 }
 
 async function createCandidateFromContact() {
