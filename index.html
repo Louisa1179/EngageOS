@@ -7123,14 +7123,18 @@ function initPrevEmpPicker(existingIds, existingNames) {
 
 function jumpToCandidate(candidateId) {
   switchWorkspace('candidates');
-  setTimeout(() => {
-    const cand = allCandidates.find(c => c.id === candidateId);
-    if (cand) {
-      selectedCandidate = cand;
-      renderCandidateList();
-      renderCandidateDetail(cand);
+  // switchWorkspace renders the list synchronously when candidates are already
+  // loaded, but kicks off an async load on the first visit this session. Poll
+  // briefly so the profile opens in both cases.
+  let tries = 0;
+  const tick = () => {
+    if (allCandidates.find(c => c.id === candidateId)) {
+      selectCandidate(candidateId);
+    } else if (tries++ < 20) {
+      setTimeout(tick, 150);
     }
-  }, 150);
+  };
+  setTimeout(tick, 100);
 }
 
 function jumpToContact(contactId) {
