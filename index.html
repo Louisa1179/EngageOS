@@ -6933,6 +6933,8 @@ function renderCandList(candidates) {
     document.getElementById('cand-list').innerHTML = '<div class="empty-state"><div class="empty-state-title">No candidates</div><div class="empty-state-text">None match the current filter.</div></div>';
     return;
   }
+  // Always present alphabetically: first name, then surname (full-name compare).
+  candidates = [...candidates].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
   const avatarColors = ['#e8c547','#4ecdc4','#a78bfa','#ff6b6b','#74b9ff'];
   const html = candidates.map(c => {
     const initials = c.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
