@@ -453,6 +453,7 @@
         <button class="filter-chip active" data-val="all" onclick="setRowFilter('spec','all',this)">All</button>
         <button class="filter-chip" data-val="ceo" onclick="setRowFilter('spec','ceo',this)">CEO</button>
         <button class="filter-chip" data-val="resources" onclick="setRowFilter('spec','resources',this)">Director of Resources</button>
+        <button class="filter-chip" data-val="operations" onclick="setRowFilter('spec','operations',this)">Operations</button>
         <button class="filter-chip" data-val="transformation" onclick="setRowFilter('spec','transformation',this)">Transformation &amp; Change</button>
         <button class="filter-chip" data-val="hr" onclick="setRowFilter('spec','hr',this)">HR</button>
         <button class="filter-chip" data-val="governance" onclick="setRowFilter('spec','governance',this)">Governance &amp; Compliance</button>
@@ -954,7 +955,7 @@
         <option value="Louisa Daly">Louisa Daly</option>
         <option value="John Daly">John Daly</option>
       </select>
-      <div style="font-size:0.72rem;color:var(--tee-muted);margin-top:0.3rem;">Auto routes Governance and CEO to Louisa, HR, Transformation and Director of Resources to John. Pick a name to override; the choice sticks.</div>
+      <div style="font-size:0.72rem;color:var(--tee-muted);margin-top:0.3rem;">Auto routes Governance, CEO and Operations to Louisa, HR, Transformation and Director of Resources to John. Pick a name to override; the choice sticks.</div>
     </div>
 
     <!-- ADD MODE ONLY: routing -->
@@ -2693,6 +2694,7 @@ function specInCohort(contact, cohort) {
   const specs = contactSpecs(contact);
   if (cohort === 'ceo') return isCeoContact(contact);
   if (cohort === 'resources') return specs.includes('Director of Resources');
+  if (cohort === 'operations') return specs.includes('Operations');
   if (cohort === 'transformation') return specs.includes('Transformation & Change');
   if (cohort === 'hr') return specs.some(s => SPEC_HR.includes(s));
   if (cohort === 'governance') return specs.some(s => SPEC_GOV.includes(s));
@@ -2701,11 +2703,11 @@ function specInCohort(contact, cohort) {
 
 // TOPIC SPLIT: who owns a contact based on specialism + level.
 // John: HR, Transformation & Change, Director of Resources.
-// Louisa: Governance & Compliance, CEO.
+// Louisa: Governance & Compliance, CEO, Operations.
 // Dual-topic or no qualifying topic returns '' (uncategorised — left for manual sort).
 function ownerFromSpecialism(contact) {
   const johnSide = specInCohort(contact, 'hr') || specInCohort(contact, 'transformation') || specInCohort(contact, 'resources');
-  const louisaSide = specInCohort(contact, 'governance') || specInCohort(contact, 'ceo');
+  const louisaSide = specInCohort(contact, 'governance') || specInCohort(contact, 'ceo') || specInCohort(contact, 'operations');
   if (johnSide && !louisaSide) return 'John Daly';
   if (louisaSide && !johnSide) return 'Louisa Daly';
   return '';
@@ -2797,7 +2799,7 @@ function matchesLevel(contact) {
 }
 function matchesSpec(contact) {
   if (specFilter === 'all') return true;
-  if (specFilter === 'other') return !(specInCohort(contact,'ceo') || specInCohort(contact,'resources') || specInCohort(contact,'transformation') || specInCohort(contact,'hr') || specInCohort(contact,'governance'));
+  if (specFilter === 'other') return !(specInCohort(contact,'ceo') || specInCohort(contact,'resources') || specInCohort(contact,'operations') || specInCohort(contact,'transformation') || specInCohort(contact,'hr') || specInCohort(contact,'governance'));
   return specInCohort(contact, specFilter);
 }
 function matchesRefine(contact) {
@@ -3960,7 +3962,7 @@ function switchWorkspace(ws) {
     if (deskBar) deskBar.style.display = 'none';
     candsBody.style.display = 'flex';
     tabCands.classList.add('active');
-    if (allCandidates.length === 0) loadCandidates();
+    if (!candsLoaded) loadCandidates();
     else { updateCandCounts(); filterCandidates(); }
     if (allOrgs.length === 0) ensureOrgsLoaded();
   } else if (ws === 'assignments') {
@@ -6452,6 +6454,10 @@ function refreshDynamicSelects() {
 }
 
 let allCandidates = [];
+// True only after a real fetch of the Candidates table. Using this instead of
+// allCandidates.length===0 avoids the trap where pushing one new candidate into
+// an empty list makes the lazy-load guards think the table is already loaded.
+let candsLoaded = false;
 let filteredCandidates = [];
 // Refine search: facet key -> array of selected values (within-facet OR, across-facet AND)
 let candRefine = {};
@@ -6563,6 +6569,7 @@ async function loadCandidates() {
       }));
     }
 
+    candsLoaded = true;
     updateCandCounts();
     // Fresh candidate data: rebuild refine options on next open (or now if open).
     const _rp = document.getElementById('cand-refine-panel');
@@ -6584,7 +6591,7 @@ async function loadCandFieldOptions() {
     const data = await resp.json();
     const tbl = data.tables.find(t => t.id === CAND_TABLE_ID || t.name === 'Candidates');
     if (!tbl) return;
-    const targets = ['Candidate Status','Relationship Context','Candidate Availability','Notice Period','Contract type','Day Rate Range','Specialisms','Sector Expertise','Worked Sectors','Will Travel','Salary objective'];
+    const targets = ['Candidate Status','Relationship Context','Candidate Availability','Notice Period','Contract type','Day Rate Range','Specialisms','Qualifications','Sector Expertise','Worked Sectors','Will Travel','Salary objective'];
     targets.forEach(fn => {
       const field = tbl.fields.find(f => f.name === fn);
       if (field?.options?.choices) candFieldOptions[fn] = field.options.choices.map(c => c.name);
@@ -6602,13 +6609,49 @@ const SPECIALISM_GROUPS = {
   'Housing': ['Housing']
 };
 
+// Build a grouped picker map from the live Airtable options, keeping the
+// headings from membershipMap. Any Airtable option not listed in the map drops
+// into "Other / not categorised" so nothing in your Airtable list is hidden.
+function buildGroupsFromAirtableOptions(airtableOptions, membershipMap) {
+  const result = {};
+  const placed = new Set();
+  Object.entries(membershipMap).forEach(([group, items]) => {
+    const present = airtableOptions.filter(o => items.includes(o));
+    if (present.length) { result[group] = present; present.forEach(o => placed.add(o)); }
+  });
+  const leftovers = airtableOptions.filter(o => !placed.has(o));
+  if (leftovers.length) result['Other / not categorised'] = leftovers;
+  return result;
+}
+
+// Candidate specialism picker, sourced from the live Airtable Specialisms list
+// and shown under headings. Falls back to the built-in groups only if the
+// schema has not loaded (e.g. metadata fetch failed).
+function buildCandSpecialismPicker(pickerId, hiddenId, selected) {
+  const opts = candFieldOptions['Specialisms'];
+  let groups;
+  if (opts && opts.length) {
+    groups = buildGroupsFromAirtableOptions(opts, SPECIALISM_GROUPS);
+  } else {
+    groups = JSON.parse(JSON.stringify(SPECIALISM_GROUPS)); // clone so we can safely extend
+  }
+  // Safeguard: any value already on the record that isn't in the groups gets
+  // added to "Other / not categorised" so it renders and survives a re-save.
+  const inGroups = new Set(Object.values(groups).flat());
+  const missing = (selected||[]).filter(v => v && !inGroups.has(v));
+  if (missing.length) groups['Other / not categorised'] = [...(groups['Other / not categorised']||[]), ...missing];
+  buildGroupedSpecialismPicker(pickerId, hiddenId, selected, groups);
+}
+
 // Contact specialism picker groups. Transformation & Change stands as its own
 // bucket, deliberately NOT inside HR. HR list below excludes it.
 const CONTACT_SPECIALISM_GROUPS = {
   'Resources': ['Director of Resources'],
+  'Operations': ['Operations'],
   'Transformation': ['Transformation & Change'],
   'HR': ['HR Generalist', 'HRBP', 'HR Operations', 'HR projects', 'Change', 'Employee Engagement', 'Employee Relations', 'Culture', 'Learning and Development', 'Organisational Development', 'Organisational Design', 'Talent Acquisition', 'Talent', 'Reward', 'Payroll', 'HRIS', 'ED&I', 'CPO/HRD', 'Troubleshooting', 'System Implementation', 'Project Management'],
-  'Governance & Compliance': ['Governance', 'Legal', 'Mergers and Acquisitions', 'Compliance', 'Due Diligence']
+  'Governance & Compliance': ['Governance', 'Legal', 'Mergers and Acquisitions', 'Compliance', 'Due Diligence'],
+  'Other': ['Finance']
 };
 
 const QUALIFICATIONS_OPTIONS = ['CIPD Level 3', 'CIPD Level 5', 'CIPD Level 7', 'CiH Level 4', 'CiH Level 5', 'CiH Level 7', 'Prince2', 'Other Project Management Quals'];
@@ -6617,7 +6660,11 @@ function buildQualificationsPicker(pickerId, hiddenId, selectedValues) {
   const picker = document.getElementById(pickerId);
   const hidden = document.getElementById(hiddenId);
   if (!picker) return;
-  picker.innerHTML = QUALIFICATIONS_OPTIONS.map(q =>
+  let opts = (candFieldOptions['Qualifications'] && candFieldOptions['Qualifications'].length) ? candFieldOptions['Qualifications'].slice() : QUALIFICATIONS_OPTIONS.slice();
+  // Safeguard: always show a value already on the record, even if the option
+  // list doesn't (yet) contain it, so a re-save can never silently drop it.
+  (selectedValues||[]).forEach(v => { if (v && !opts.includes(v)) opts.push(v); });
+  picker.innerHTML = opts.map(q =>
     `<span class="tag-option${selectedValues.includes(q) ? ' selected' : ''}" data-val="${q}" onclick="toggleQualTag(this,'${hiddenId}')">${q}</span>`
   ).join('');
   if (hidden) hidden.value = JSON.stringify(selectedValues);
@@ -6641,8 +6688,15 @@ function buildGroupedSpecialismPicker(pickerId, hiddenId, selectedValues, groups
   const picker = document.getElementById(pickerId);
   const hidden = document.getElementById(hiddenId);
   if (!picker) return;
-  const groups = groupsObj || SPECIALISM_GROUPS;
+  const baseGroups = groupsObj || SPECIALISM_GROUPS;
   let selected = Array.isArray(selectedValues) ? [...selectedValues] : (selectedValues ? [selectedValues] : []);
+  // Safeguard: any already-selected value the groups don't contain is shown
+  // under "Other / not categorised" so it always renders and is never dropped
+  // on save. Clone first so the source group constant is never mutated.
+  const groups = JSON.parse(JSON.stringify(baseGroups));
+  const known = new Set(Object.values(groups).flat());
+  const missing = selected.filter(v => v && !known.has(v));
+  if (missing.length) groups['Other / not categorised'] = [...new Set([...(groups['Other / not categorised'] || []), ...missing])];
 
   function render() {
     picker.innerHTML = Object.entries(groups).map(([group, items]) => `
@@ -6724,7 +6778,9 @@ function buildCandSelects() {
   if (candFieldOptions['Contract type']) buildTagPicker('cf-contract-picker', 'cf-contract', candFieldOptions['Contract type'], curContract ? [curContract] : [], false);
   const curDayrateVals = getTagPickerValues('cf-dayrate-picker');
   if (candFieldOptions['Day Rate Range']) buildTagPicker('cf-dayrate-picker', 'cf-dayrate', candFieldOptions['Day Rate Range'], curDayrateVals, false);
-  buildGroupedSpecialismPicker('cf-specialism-picker', 'cf-specialism', curSpecs);
+  buildCandSpecialismPicker('cf-specialism-picker', 'cf-specialism', curSpecs);
+  const curQuals = getQualPickerValues('cf-qualifications-picker');
+  buildQualificationsPicker('cf-qualifications-picker', 'cf-qualifications', curQuals);
   // Sector expertise now uses cascading UI
   populateCandSectorSelect();
   const curTravel = getTagPickerValues('cf-travel-picker');
@@ -7283,6 +7339,9 @@ function jumpToContact(contactId) {
 async function createCandidateFromContact() {
   const contact = selectedContact;
   if (!contact) return;
+  // Make sure the full candidate list is fetched first; otherwise pushing this
+  // new candidate into an unloaded list would leave the session showing only them.
+  if (!candsLoaded) await loadCandidates();
   // Pre-fill add candidate modal with contact details
   openAddCandidateModal();
   await new Promise(r => setTimeout(r, 100)); // wait for modal to render
@@ -7414,7 +7473,7 @@ function openEditCandidateModal() {
     if (candFieldOptions['Contract type']) buildTagPicker('cf-contract-picker', 'cf-contract', candFieldOptions['Contract type'], c.contractType ? (Array.isArray(c.contractType) ? c.contractType : [c.contractType]) : [], false);
     const curDayrateEdit = Array.isArray(c.dayRate) ? c.dayRate : (c.dayRate ? [c.dayRate] : []);
     if (candFieldOptions['Day Rate Range']) buildTagPicker('cf-dayrate-picker', 'cf-dayrate', candFieldOptions['Day Rate Range'], curDayrateEdit, false);
-    buildGroupedSpecialismPicker('cf-specialism-picker', 'cf-specialism', c.specialisms||[]);
+    buildCandSpecialismPicker('cf-specialism-picker', 'cf-specialism', c.specialisms||[]);
     buildQualificationsPicker('cf-qualifications-picker', 'cf-qualifications', c.qualifications||[]);
     if (Object.keys(subsectorMap).length === 0) {
       fetchSubsectors().then(() => {
@@ -7806,7 +7865,7 @@ async function loadACPipeline(assignmentId) {
   if (list) list.innerHTML = '<div style="color:var(--tee-muted);font-size:0.82rem;text-align:center;padding:1rem;">Loading...</div>';
   try {
     // Ensure candidates loaded for name resolution
-    if (allCandidates.length === 0) await loadCandidates();
+    if (!candsLoaded) await loadCandidates();
 
     // Fetch all AC records and filter client-side
     const resp = await fetch(`${AC_API_URL}?pageSize=100`, {
@@ -7937,7 +7996,7 @@ async function openACModal(acId, assignmentId) {
   const sub = document.getElementById('ac-modal-sub');
   document.getElementById('ac-saving').style.display = 'none';
   // Ensure candidates are loaded before opening
-  if (allCandidates.length === 0) await loadCandidates();
+  if (!candsLoaded) await loadCandidates();
   // Reset fields
   document.getElementById('ac-cand-search').value = '';
   document.getElementById('ac-cand-search').style.display = 'block';
@@ -8113,7 +8172,7 @@ function searchACCandidates(val) {
   const dd = document.getElementById('ac-cand-dropdown');
   if (!dd) return;
   // Ensure candidates are loaded
-  if (allCandidates.length === 0) {
+  if (!candsLoaded) {
     loadCandidates().then(() => searchACCandidates(val));
     return;
   }
