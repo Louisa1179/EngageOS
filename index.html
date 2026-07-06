@@ -2995,7 +2995,7 @@ function renderPanel(contact, interactions) {
     <div class="panel-header">
       <div class="panel-avatar" style="background: ${color}22; color: ${color};">${initials}</div>
       <div class="panel-name">${contact.name}</div>
-      <div class="panel-role">${contact.role}${contact.orgName ? ' · ' + contact.orgName : ''}</div>
+      <div class="panel-role">${contact.role}${contact.orgName ? ' · ' + (contact.org ? `<span onclick="jumpToOrg('${contact.org}')" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" title="View ${contact.orgName.replace(/"/g,'&quot;')}">${contact.orgName}</span>` : contact.orgName) : ''}</div>
       <div class="panel-badges">${tierLabel}${liTag}<span class="due-pill ${due.cls}" style="font-size:0.72rem;">${due.label}</span></div>
       <div class="contact-ned-roles" style="margin-top:0.75rem;"></div>
       ${contact.previousEmployerNames && contact.previousEmployerNames.length > 0 ? `<div style="background:rgba(53,150,194,0.08);border:1.5px solid rgba(53,150,194,0.3);border-radius:12px;padding:0.7rem 1rem;margin-top:0.75rem;">
@@ -7359,6 +7359,23 @@ function jumpToCandidate(candidateId) {
   const tick = () => {
     if (allCandidates.find(c => c.id === candidateId)) {
       selectCandidate(candidateId);
+    } else if (tries++ < 20) {
+      setTimeout(tick, 150);
+    }
+  };
+  setTimeout(tick, 100);
+}
+
+function jumpToOrg(orgId) {
+  if (!orgId) return;
+  switchWorkspace('orgs');
+  // switchWorkspace renders the org list synchronously when orgs are already
+  // loaded, but kicks off an async load on the first visit this session. Poll
+  // briefly so the org panel opens in both cases.
+  let tries = 0;
+  const tick = () => {
+    if (allOrgs.find(o => o.id === orgId)) {
+      selectOrg(orgId);
     } else if (tries++ < 20) {
       setTimeout(tick, 150);
     }
