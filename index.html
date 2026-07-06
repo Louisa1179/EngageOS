@@ -818,6 +818,47 @@
   </div>
 </div>
 
+<!-- BOARD / NED ROLE MODAL -->
+<div class="modal-overlay" id="ned-edit-modal">
+  <div class="modal" style="max-width: 460px;">
+    <div class="modal-title" id="ned-modal-title">Add board / NED role</div>
+    <div class="modal-sub" id="ned-modal-sub">Links this contact to another organisation as a board or NED role.</div>
+    <div>
+      <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Organisation</label>
+      <div class="org-typeahead-wrap">
+        <input type="text" class="edit-input" id="ned-org-search" placeholder="Search organisations..." autocomplete="off"
+          oninput="searchNedOrgs(this.value)" onfocus="searchNedOrgs(this.value)"
+          onblur="setTimeout(function(){var d=document.getElementById('ned-org-dropdown'); if(d) d.style.display='none';},200)" />
+        <div class="org-dropdown" id="ned-org-dropdown"></div>
+      </div>
+      <div id="ned-org-selected-display" style="display:none;margin-bottom:0.75rem;">
+        <div class="org-selected-badge">
+          <span id="ned-org-selected-name"></span>
+          <span onclick="clearNedOrgSelection()" title="Clear" style="cursor:pointer;">✕</span>
+        </div>
+      </div>
+      <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Role type</label>
+      <select id="ned-role-type" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; margin-bottom: 0.75rem; appearance: none;">
+        <option value="">Select...</option>
+      </select>
+      <div style="background: rgba(16,185,129,0.06); border: 1px solid rgba(16,185,129,0.2); border-radius: 10px; padding: 0.75rem 1rem; margin-bottom: 0.75rem;">
+        <label style="display: flex; align-items: center; gap: 0.625rem; cursor: pointer; margin-bottom: 0;">
+          <input type="checkbox" id="ned-bd-active" style="accent-color: #10b981; width: 15px; height: 15px; cursor: pointer;" />
+          <span style="font-size: 0.82rem; color: var(--tee-text); font-weight: 500;">Actively BD them in this role</span>
+        </label>
+        <div style="font-size: 0.72rem; color: var(--tee-muted); margin-top: 0.35rem; margin-left: 1.5rem;">Leave unticked to keep this as an informational tag only — won't surface for BD against this organisation.</div>
+      </div>
+      <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Notes (optional)</label>
+      <textarea id="ned-notes" placeholder="Why active/inactive, appointment context..." rows="2" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; resize: none; margin-bottom: 0.75rem;"></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-yes" onclick="saveNedLink()">Save to Airtable</button>
+      <button class="modal-btn modal-btn-no" onclick="closeNedModal()">Cancel</button>
+    </div>
+    <div id="ned-delete-btn" onclick="deleteNedLink(nedEditingId)" style="display:none;text-align:center;margin-top:0.5rem;font-size:0.78rem;color:#dc2626;cursor:pointer;">Remove this link</div>
+  </div>
+</div>
+
 <!-- EDIT / ADD CONTACT MODAL -->
 <div class="modal-overlay" id="edit-modal">
   <div class="modal edit-modal">
@@ -3025,6 +3066,7 @@ function renderPanel(contact, interactions) {
         <div class="field-row"><span class="field-key">Relationship</span><span class="field-val">${formatRelationship(contact.relationshipStatus)}</span></div>
       </div>
       ${contact.previousEmployerNames && contact.previousEmployerNames.length > 0 ? `<div class="panel-section"><div class="panel-section-label">Previous employers</div><div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.25rem;">${contact.previousEmployerNames.map(n => `<span style="font-size:0.75rem;padding:2px 10px;border-radius:10px;background:rgba(53,150,194,0.08);color:var(--tee-accent);border:1px solid rgba(53,150,194,0.2);">${n}</span>`).join('')}</div></div>` : ''}
+      <div class="contact-ned-roles"></div>
       ${contact.notes ? `<div class="panel-section"><div class="panel-section-label">Notes</div><div style="font-size: 0.78rem; color: var(--tee-muted); line-height: 1.7;">${contact.notes}</div></div>` : ''}
       <div class="panel-section">
         <div class="panel-section-label">Interaction history</div>
@@ -3057,6 +3099,7 @@ function renderPanel(contact, interactions) {
     _orgDetail.innerHTML = panel.innerHTML;
   }
   renderContactInterviewImprint(contact);
+  renderContactNedRoles(contact);
 }
 
 // HANDLE MARK DONE
@@ -5046,6 +5089,7 @@ function selectOrg(id) {
   selectedContact = null;
   renderOrgDetail(selectedOrg);
   renderOrgActivityLog(selectedOrg);
+  renderOrgNedSection(selectedOrg);
   filterOrgs();
 }
 
@@ -5128,6 +5172,7 @@ function renderOrgDetail(org) {
       ${offSeq.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Off sequence (${offSeq.length})</div>${offSeq.map(contactRow).join('')}</div>` : ''}
       ${dnc.length > 0 ? `<div style="margin-bottom:1rem;"><div style="font-size:0.68rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Do not contact (${dnc.length})</div>${dnc.map(contactRow).join('')}</div>` : ''}
       ${former.length > 0 ? `<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--tee-border);"><div style="font-size:0.68rem;font-weight:600;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Previously here (${former.length})</div>${former.map(contactRow).join('')}</div>` : ''}
+      <div class="org-ned-roles"></div>
       ${(contacts.length === 0 && former.length === 0) ? `<div style="font-size:0.82rem;color:var(--tee-muted);text-align:center;padding:1.5rem 1rem;line-height:1.6;">No contacts here yet.<br>Use <span style="color:var(--tee-accent);font-weight:500;">+ Add contact</span> above to add the people you know.</div>` : ''}
       ${org.notes ? `<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--tee-border);font-size:0.78rem;color:var(--tee-muted);line-height:1.6;">${org.notes}</div>` : ''}
     </div>`;
@@ -8689,6 +8734,236 @@ async function loadAllInterviewStages() {
       assignmentRef: Array.isArray(asg) ? (asg[0] || '') : asg
     };
   });
+}
+
+// ---- NED / BOARD LINKS ----
+// A contact can hold a full-time role at their primary Organisation while also
+// sitting as NED/Chair/Trustee elsewhere. These links live in their own junction
+// table so each relationship can carry its own BD-active flag, role type and notes
+// without touching the contact's single primary Organisation field.
+const NED_API_URL = `https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent('NED Board Links')}`;
+const NED_ROLE_FALLBACK = ['Chair', 'NED', 'Trustee', 'Vice Chair'];
+let allNedLinksCache = [];
+let nedOrgSelected = null; // {id,name} currently chosen in the add/edit modal
+let nedEditingId = null;   // record id being edited, or null when adding
+let nedContextContactId = null; // contact the modal is attached to
+
+async function loadAllNedLinks() {
+  const resp = await fetch(`${NED_API_URL}?pageSize=100`, { headers: { Authorization: `Bearer ${getToken()}` } });
+  const data = await resp.json();
+  if (!resp.ok) throw new Error(data.error?.message || 'Failed to load board / NED links');
+  allNedLinksCache = (data.records || []).map(r => ({
+    id: r.id,
+    contactId: Array.isArray(r.fields['Contact']) ? (r.fields['Contact'][0] || '') : '',
+    orgId: Array.isArray(r.fields['Organisation']) ? (r.fields['Organisation'][0] || '') : '',
+    bdActive: !!r.fields['BD Active'],
+    roleType: r.fields['Role Type'] || '',
+    notes: r.fields['Notes'] || ''
+  }));
+}
+
+function nedLinksForContact(contactId) { return allNedLinksCache.filter(l => l.contactId === contactId); }
+function nedLinksForOrg(orgId) { return allNedLinksCache.filter(l => l.orgId === orgId); }
+
+// Editable "Board / NED roles" section on the contact panel.
+async function renderContactNedRoles(contact) {
+  const slots = document.querySelectorAll('.contact-ned-roles');
+  if (!slots.length || !contact) return;
+  try {
+    if (!allNedLinksCache.length) await loadAllNedLinks();
+    if (allOrgs.length === 0) await ensureOrgsLoaded();
+    const mine = nedLinksForContact(contact.id);
+    const addBtn = `<span onclick="openAddNedModal('${contact.id}')" style="font-size:0.74rem;color:var(--tee-accent);cursor:pointer;font-weight:500;">+ Add board / NED role</span>`;
+    const rows = mine.map(l => {
+      const org = allOrgs.find(o => o.id === l.orgId);
+      const orgName = org ? org.name : 'Unknown org';
+      const badge = l.bdActive
+        ? `<span style="font-size:0.68rem;padding:2px 8px;border-radius:10px;background:rgba(16,185,129,0.12);color:#10b981;border:1px solid rgba(16,185,129,0.25);font-weight:500;white-space:nowrap;">BD active</span>`
+        : `<span style="font-size:0.68rem;padding:2px 8px;border-radius:10px;background:rgba(148,163,184,0.15);color:var(--tee-muted);border:1px solid rgba(148,163,184,0.25);white-space:nowrap;">Info only</span>`;
+      return `<div style="background:rgba(53,150,194,0.06);border:1px solid rgba(53,150,194,0.2);border-radius:8px;padding:0.55rem 0.7rem;margin-bottom:0.4rem;">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.5rem;">
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:0.8rem;font-weight:500;color:var(--tee-text);">${l.roleType || 'Board role'} · ${orgName}</div>
+            ${l.notes ? `<div style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;">${l.notes}</div>` : ''}
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:0.3rem;flex-shrink:0;">
+            ${badge}
+            <div style="display:flex;gap:0.5rem;">
+              <span onclick="openEditNedModal('${l.id}')" title="Edit" style="cursor:pointer;font-size:0.72rem;color:var(--tee-muted);">✎</span>
+              <span onclick="deleteNedLink('${l.id}')" title="Remove" style="cursor:pointer;font-size:0.72rem;color:var(--tee-muted);">✕</span>
+            </div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    const html = `<div class="panel-section"><div class="panel-section-label" style="display:flex;justify-content:space-between;align-items:center;">Board / NED roles ${addBtn}</div>${rows}</div>`;
+    slots.forEach(el => el.innerHTML = html);
+  } catch(e) { console.log('NED roles render error', e); }
+}
+
+// Read-only "Board / NED contacts" section on the organisation panel.
+async function renderOrgNedSection(org) {
+  const slots = document.querySelectorAll('.org-ned-roles');
+  if (!slots.length || !org) return;
+  try {
+    if (!allNedLinksCache.length) await loadAllNedLinks();
+    const mine = nedLinksForOrg(org.id);
+    if (!mine.length) { slots.forEach(el => el.innerHTML = ''); return; }
+    const pool = allContactsAll.length > 0 ? allContactsAll : [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts, ...uncatContacts];
+    const rows = mine.map(l => {
+      const c = pool.find(cc => cc.id === l.contactId);
+      const name = c ? c.name : 'Unknown contact';
+      const badge = l.bdActive
+        ? `<span style="font-size:0.65rem;padding:1px 6px;border-radius:8px;background:rgba(16,185,129,0.12);color:#10b981;margin-left:6px;white-space:nowrap;">BD active</span>`
+        : `<span style="font-size:0.65rem;padding:1px 6px;border-radius:8px;background:rgba(148,163,184,0.15);color:var(--tee-muted);margin-left:6px;white-space:nowrap;">Info only</span>`;
+      return `<div onclick="${c ? `jumpToContact('${c.id}')` : ''}" style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem;border-bottom:1px solid var(--tee-border);cursor:${c ? 'pointer' : 'default'};">
+        <div>
+          <div style="font-size:0.8rem;font-weight:500;color:var(--tee-text);">${name}</div>
+          <div style="font-size:0.72rem;color:var(--tee-muted);">${l.roleType || 'Board role'}</div>
+        </div>
+        <div>${badge}</div>
+      </div>`;
+    }).join('');
+    const html = `<div style="margin-top:1rem;padding-top:1rem;border-top:1px solid var(--tee-border);"><div style="font-size:0.68rem;font-weight:600;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:0.5rem;">Board / NED contacts (${mine.length})</div>${rows}</div>`;
+    slots.forEach(el => el.innerHTML = html);
+  } catch(e) { console.log('Org NED section render error', e); }
+}
+
+// ---- NED / BOARD LINK MODAL ----
+function searchNedOrgs(val) {
+  const dd = document.getElementById('ned-org-dropdown');
+  if (!dd) return;
+  const q = val.toLowerCase().trim();
+  const matches = q
+    ? allOrgs.filter(o => o.name && o.name.toLowerCase().includes(q)).slice(0, 8)
+    : allOrgs.slice(0, 8);
+  if (matches.length === 0) { dd.style.display = 'none'; return; }
+  const matchMap = {};
+  matches.forEach(o => { matchMap[o.id] = o; });
+  dd.innerHTML = matches.map(o => `<div class="org-option" data-id="${o.id}">${o.name}${o.sector ? '<span style="font-size:0.72rem;color:var(--tee-muted);margin-left:6px;">· '+o.sector+'</span>' : ''}</div>`).join('');
+  dd.querySelectorAll('.org-option').forEach(el => {
+    el.onmousedown = (e) => {
+      e.preventDefault();
+      const id = el.getAttribute('data-id');
+      const org = matchMap[id];
+      if (!org) return;
+      nedOrgSelected = { id: org.id, name: org.name };
+      document.getElementById('ned-org-search').style.display = 'none';
+      document.getElementById('ned-org-selected-name').textContent = org.name;
+      document.getElementById('ned-org-selected-display').style.display = 'block';
+      dd.style.display = 'none';
+    };
+  });
+  dd.onwheel = (e) => { e.stopPropagation(); };
+  dd.style.display = 'block';
+}
+
+function clearNedOrgSelection() {
+  nedOrgSelected = null;
+  const si = document.getElementById('ned-org-search');
+  if (si) { si.value = ''; si.style.display = ''; }
+  document.getElementById('ned-org-selected-display').style.display = 'none';
+}
+
+function openAddNedModal(contactId) {
+  nedEditingId = null;
+  nedContextContactId = contactId;
+  nedOrgSelected = null;
+  document.getElementById('ned-modal-title').textContent = 'Add board / NED role';
+  document.getElementById('ned-modal-sub').textContent = 'Links this contact to another organisation as a board or NED role.';
+  const si = document.getElementById('ned-org-search');
+  si.value = ''; si.style.display = '';
+  document.getElementById('ned-org-selected-display').style.display = 'none';
+  document.getElementById('ned-org-dropdown').style.display = 'none';
+  populateSelectOptions(document.getElementById('ned-role-type'), optionsFor('NED Board Links', 'Role Type', NED_ROLE_FALLBACK), 'Select...');
+  document.getElementById('ned-bd-active').checked = false;
+  document.getElementById('ned-notes').value = '';
+  document.getElementById('ned-delete-btn').style.display = 'none';
+  if (allOrgs.length === 0) ensureOrgsLoaded();
+  document.getElementById('ned-edit-modal').classList.add('show');
+}
+
+function openEditNedModal(linkId) {
+  const l = allNedLinksCache.find(x => x.id === linkId);
+  if (!l) return;
+  nedEditingId = linkId;
+  nedContextContactId = l.contactId;
+  const org = allOrgs.find(o => o.id === l.orgId);
+  nedOrgSelected = org ? { id: org.id, name: org.name } : { id: l.orgId, name: 'Unknown org' };
+  document.getElementById('ned-modal-title').textContent = 'Edit board / NED role';
+  document.getElementById('ned-modal-sub').textContent = 'Update this board / NED link. Changes save directly to Airtable.';
+  document.getElementById('ned-org-search').style.display = 'none';
+  document.getElementById('ned-org-selected-name').textContent = nedOrgSelected.name;
+  document.getElementById('ned-org-selected-display').style.display = 'block';
+  document.getElementById('ned-org-dropdown').style.display = 'none';
+  populateSelectOptions(document.getElementById('ned-role-type'), optionsFor('NED Board Links', 'Role Type', NED_ROLE_FALLBACK), 'Select...');
+  setSelectVal(document.getElementById('ned-role-type'), l.roleType);
+  document.getElementById('ned-bd-active').checked = !!l.bdActive;
+  document.getElementById('ned-notes').value = l.notes || '';
+  document.getElementById('ned-delete-btn').style.display = 'inline-flex';
+  document.getElementById('ned-edit-modal').classList.add('show');
+}
+
+function closeNedModal() {
+  document.getElementById('ned-edit-modal').classList.remove('show');
+  document.getElementById('ned-org-dropdown').style.display = 'none';
+}
+
+async function saveNedLink() {
+  if (!nedOrgSelected || !nedOrgSelected.id) { showToast('Pick an organisation', 'error'); return; }
+  if (!nedContextContactId) { showToast('Missing contact', 'error'); return; }
+  const roleType = document.getElementById('ned-role-type').value;
+  const bdActive = document.getElementById('ned-bd-active').checked;
+  const notes = document.getElementById('ned-notes').value.trim();
+  const fields = {
+    'Contact': [nedContextContactId],
+    'Organisation': [nedOrgSelected.id],
+    'BD Active': bdActive,
+    'Notes': notes
+  };
+  if (roleType) fields['Role Type'] = roleType;
+  try {
+    const url = nedEditingId ? `${NED_API_URL}/${nedEditingId}` : NED_API_URL;
+    const method = nedEditingId ? 'PATCH' : 'POST';
+    const resp = await airtableFetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${getToken()}` },
+      body: JSON.stringify({ fields, typecast: true })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message || 'Save failed');
+    allNedLinksCache = [];
+    await loadAllNedLinks();
+    closeNedModal();
+    if (selectedContact) renderContactNedRoles(selectedContact);
+    if (selectedOrg) renderOrgNedSection(selectedOrg);
+    showToast('Board / NED role saved', 'success');
+  } catch(e) {
+    console.log('saveNedLink error', e);
+    showToast('Failed to save — try again', 'error');
+  }
+}
+
+async function deleteNedLink(linkId) {
+  const id = linkId || nedEditingId;
+  if (!id) return;
+  if (!confirm('Remove this board / NED role link?')) return;
+  try {
+    const resp = await airtableFetch(`${NED_API_URL}/${id}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    if (!resp.ok) { const data = await resp.json(); throw new Error(data.error?.message || 'Delete failed'); }
+    allNedLinksCache = [];
+    await loadAllNedLinks();
+    closeNedModal();
+    if (selectedContact) renderContactNedRoles(selectedContact);
+    if (selectedOrg) renderOrgNedSection(selectedOrg);
+    showToast('Board / NED role removed', 'success');
+  } catch(e) {
+    console.log('deleteNedLink error', e);
+    showToast('Failed to remove — try again', 'error');
+  }
 }
 
 // Jump from a contact card straight to an assignment's detail.
