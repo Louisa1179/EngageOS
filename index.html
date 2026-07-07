@@ -323,6 +323,8 @@
   #cf-specialism-picker .tag-option:hover { border-color:var(--tee-accent) !important; color:var(--tee-accent) !important; background:rgba(53,150,194,0.06) !important; }
   #cf-sector-picker .tag-option.selected { background:rgba(245,158,11,0.12) !important; border-color:#f59e0b !important; color:#f59e0b !important; font-weight:500; }
   #cf-sector-picker .tag-option:hover { border-color:#f59e0b !important; color:#f59e0b !important; background:rgba(245,158,11,0.06) !important; }
+  #gap-level-picker .tag-option.selected, #gap-specialism-picker .tag-option.selected { background:#bfe1f5 !important; border-color:var(--tee-accent) !important; color:#175b80 !important; font-weight:600; box-shadow:inset 0 0 0 1px var(--tee-accent); }
+  #gap-level-picker .tag-option:hover, #gap-specialism-picker .tag-option:hover { border-color:var(--tee-accent) !important; color:var(--tee-accent) !important; background:rgba(53,150,194,0.06) !important; }
   .subsector-check { display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0.4rem;border-radius:6px;cursor:pointer;font-size:0.8rem;color:var(--tee-text); }
   .subsector-check:hover { background:rgba(255,255,255,0.06); }
   .subsector-check input[type=checkbox] { accent-color:#f59e0b;width:14px;height:14px; }
@@ -519,8 +521,9 @@
   <div style="width:320px;flex-shrink:0;display:flex;flex-direction:column;overflow:hidden;border-right:1px solid var(--tee-border);">
     <div style="padding:1.5rem 1.25rem 1rem;border-bottom:1px solid var(--tee-border);flex-shrink:0;">
       <div style="font-family:'DM Serif Display',serif;font-size:1.3rem;color:var(--tee-text);margin-bottom:0.25rem;">Organisations</div>
-      <div style="margin-top:0.25rem;">
+      <div style="margin-top:0.25rem;display:flex;align-items:center;justify-content:space-between;gap:0.5rem;">
         <span id="org-subtitle" style="font-size:0.78rem;color:var(--tee-muted);"></span>
+        <span onclick="openGapFinderModal()" style="font-size:0.75rem;color:var(--tee-accent);cursor:pointer;white-space:nowrap;" onmouseover="this.style.textDecoration='underline'" onmouseout="this.style.textDecoration='none'">🔍 Find gaps</span>
       </div>
     </div>
     <div id="org-list" style="flex:1;overflow-y:auto;padding:0.75rem 1rem;">
@@ -729,6 +732,27 @@
       <button type="button" class="modal-btn modal-btn-yes" id="org-merge-start" style="opacity:0.5;pointer-events:none;" onclick="document.getElementById('org-merge-confirm').style.display='block'">Merge</button>
       <button type="button" class="modal-btn modal-btn-no" onclick="closeOrgMergeModal()">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- CONTACT GAP FINDER MODAL -->
+<div class="modal-overlay" id="gap-finder-modal">
+  <div class="modal" style="max-width:640px;">
+    <div class="modal-title">Find contact gaps</div>
+    <div class="modal-sub" style="margin-bottom:1rem;line-height:1.5;">Flags organisations with no contact matching the level and/or specialism you pick below. Scoped to <strong id="gap-finder-desk-name" style="color:var(--tee-text);"></strong> — switch desk before opening this to check another sector.</div>
+    <div style="margin-bottom:0.9rem;">
+      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.3rem;">Contact level (any selected)</label>
+      <div class="tag-picker" id="gap-level-picker"></div>
+    </div>
+    <div style="margin-bottom:1rem;">
+      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.3rem;">Specialism (any selected)</label>
+      <div class="tag-picker" id="gap-specialism-picker"></div>
+    </div>
+    <div class="modal-btns" style="margin-bottom:0.9rem;">
+      <button type="button" class="modal-btn modal-btn-yes" onclick="runGapFinder()">Run</button>
+      <button type="button" class="modal-btn modal-btn-no" onclick="closeGapFinderModal()">Close</button>
+    </div>
+    <div id="gap-finder-results" style="max-height:360px;overflow-y:auto;"></div>
   </div>
 </div>
 
@@ -4316,6 +4340,97 @@ async function executeOrgMerge() {
   } else {
     showToast(`Contacts moved into ${survivingName}, but deleting ${srcName} failed — delete it manually from its Edit panel.`, 'error');
   }
+}
+
+// CONTACT GAP FINDER — flags organisations with no contact matching a chosen
+// level and/or specialism (e.g. "no CEO", "no Director-level HR contact").
+// Scoped to the currently selected desk, same as the Organisations list itself.
+const GAP_LEVEL_OPTIONS = ['Board Level', 'CEO/MD', 'C-Level', 'Director Level', 'Head of', 'Senior Management', 'Management', 'Junior'];
+let gapSelectedLevels = [];
+let gapSelectedSpecialisms = [];
+
+async function openGapFinderModal() {
+  gapSelectedLevels = [];
+  gapSelectedSpecialisms = [];
+  document.getElementById('gap-finder-desk-name').textContent = currentDesk;
+  document.getElementById('gap-level-picker').innerHTML = GAP_LEVEL_OPTIONS.map(l =>
+    `<span class="tag-option" data-val="${l}" onclick="toggleGapTag(this, 'level')">${l}</span>`
+  ).join('');
+  document.getElementById('gap-specialism-picker').innerHTML = Object.keys(CONTACT_SPECIALISM_GROUPS).map(g =>
+    `<span class="tag-option" data-val="${g}" onclick="toggleGapTag(this, 'specialism')">${g}</span>`
+  ).join('');
+  document.getElementById('gap-finder-results').innerHTML = `<div style="font-size:0.8rem;color:var(--tee-muted);padding:0.75rem 0;">Pick a level and/or specialism above, then hit Run.</div>`;
+  document.getElementById('gap-finder-modal').classList.add('show');
+  // Make sure the full cross-owner contact book is loaded so coverage checks
+  // don't miss contacts owned by the other person.
+  if (allContactsAll.length === 0) {
+    try { await loadAllContactsFull(); } catch(e) {}
+  }
+}
+
+function closeGapFinderModal() {
+  document.getElementById('gap-finder-modal').classList.remove('show');
+}
+
+function toggleGapTag(el, kind) {
+  el.classList.toggle('selected');
+  const val = el.getAttribute('data-val');
+  const arr = kind === 'level' ? gapSelectedLevels : gapSelectedSpecialisms;
+  const idx = arr.indexOf(val);
+  if (idx > -1) arr.splice(idx, 1); else arr.push(val);
+}
+
+function orgHasGapCoverage(orgId, levels, specGroups) {
+  const contacts = getOrgContacts(orgId);
+  const groupItems = specGroups.flatMap(g => CONTACT_SPECIALISM_GROUPS[g] || []);
+  return contacts.some(c => {
+    if (levels.length && !levels.includes(c.contactLevel)) return false;
+    if (groupItems.length) {
+      const contactSpecs = (c.specialism || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!contactSpecs.some(s => groupItems.includes(s))) return false;
+    }
+    return true;
+  });
+}
+
+function runGapFinder() {
+  const resultsEl = document.getElementById('gap-finder-results');
+  if (gapSelectedLevels.length === 0 && gapSelectedSpecialisms.length === 0) {
+    resultsEl.innerHTML = `<div style="font-size:0.8rem;color:var(--tee-muted);padding:0.75rem 0;">Pick at least one level or specialism first.</div>`;
+    return;
+  }
+  // Scope to the currently selected desk, matching what the Organisations list shows.
+  const currentSectorForOrgs = DESK_CONFIG[currentDesk]?.sector || currentDesk;
+  const scopedOrgs = allOrgs.filter(o => {
+    if (currentDesk === 'All Others') return !o.sector || o.sector === '' || !PRIMARY_DESK_SECTORS.includes(o.sector);
+    return o.sector === currentSectorForOrgs;
+  });
+  const missing = scopedOrgs.filter(o => !orgHasGapCoverage(o.id, gapSelectedLevels, gapSelectedSpecialisms))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+
+  const filterLabel = [gapSelectedLevels.join(' or '), gapSelectedSpecialisms.length ? gapSelectedSpecialisms.join(' or ') + ' specialism' : ''].filter(Boolean).join(' + ');
+  if (missing.length === 0) {
+    resultsEl.innerHTML = `<div style="font-size:0.82rem;color:var(--tee-muted);padding:0.75rem 0;">Every organisation in ${currentDesk} has a matching contact for: <strong style="color:var(--tee-text);">${filterLabel}</strong>.</div>`;
+    return;
+  }
+  resultsEl.innerHTML = `
+    <div style="font-size:0.78rem;color:var(--tee-muted);margin-bottom:0.6rem;">${missing.length} of ${scopedOrgs.length} organisations in <strong style="color:var(--tee-text);">${currentDesk}</strong> have no contact matching <strong style="color:var(--tee-text);">${filterLabel}</strong>:</div>
+    ${missing.map(o => {
+      const contactCount = getOrgContacts(o.id).length;
+      return `<div onclick="jumpToOrgFromGapFinder('${o.id}')" style="display:flex;align-items:center;justify-content:space-between;gap:0.75rem;padding:0.55rem 0.75rem;margin-bottom:0.4rem;background:var(--tee-card);border:1px solid var(--tee-border);border-radius:8px;cursor:pointer;" onmouseover="this.style.borderColor='var(--tee-accent)'" onmouseout="this.style.borderColor='var(--tee-border)'">
+        <div>
+          <div style="font-size:0.84rem;color:var(--tee-text);font-weight:500;">${o.name}</div>
+          <div style="font-size:0.72rem;color:var(--tee-muted);">${o.subsector || o.sector || ''}${o.region ? ' · ' + o.region : ''}</div>
+        </div>
+        <div style="font-size:0.72rem;color:var(--tee-muted);white-space:nowrap;">${contactCount} contact${contactCount !== 1 ? 's' : ''} →</div>
+      </div>`;
+    }).join('')}
+  `;
+}
+
+function jumpToOrgFromGapFinder(orgId) {
+  closeGapFinderModal();
+  selectOrg(orgId);
 }
 
 // DUPLICATE DETECTION — soft, non-blocking. Flags likely matches on add so a near
