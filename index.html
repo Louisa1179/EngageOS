@@ -323,8 +323,8 @@
   #cf-specialism-picker .tag-option:hover { border-color:var(--tee-accent) !important; color:var(--tee-accent) !important; background:rgba(53,150,194,0.06) !important; }
   #cf-sector-picker .tag-option.selected { background:rgba(245,158,11,0.12) !important; border-color:#f59e0b !important; color:#f59e0b !important; font-weight:500; }
   #cf-sector-picker .tag-option:hover { border-color:#f59e0b !important; color:#f59e0b !important; background:rgba(245,158,11,0.06) !important; }
-  #gap-level-picker .tag-option.selected, #gap-specialism-picker .tag-option.selected { background:#bfe1f5 !important; border-color:var(--tee-accent) !important; color:#175b80 !important; font-weight:600; box-shadow:inset 0 0 0 1px var(--tee-accent); }
-  #gap-level-picker .tag-option:hover, #gap-specialism-picker .tag-option:hover { border-color:var(--tee-accent) !important; color:var(--tee-accent) !important; background:rgba(53,150,194,0.06) !important; }
+  #gap-level-picker .tag-option.selected, #gap-specialism-picker .tag-option.selected, #bulk-level-picker .tag-option.selected, #bulk-specialism-picker .tag-option.selected, #bulk-mode-filter.selected, #bulk-mode-manual.selected { background:#bfe1f5 !important; border-color:var(--tee-accent) !important; color:#175b80 !important; font-weight:600; box-shadow:inset 0 0 0 1px var(--tee-accent); }
+  #gap-level-picker .tag-option:hover, #gap-specialism-picker .tag-option:hover, #bulk-level-picker .tag-option:hover, #bulk-specialism-picker .tag-option:hover { border-color:var(--tee-accent) !important; color:var(--tee-accent) !important; background:rgba(53,150,194,0.06) !important; }
   .subsector-check { display:flex;align-items:center;gap:0.5rem;padding:0.3rem 0.4rem;border-radius:6px;cursor:pointer;font-size:0.8rem;color:var(--tee-text); }
   .subsector-check:hover { background:rgba(255,255,255,0.06); }
   .subsector-check input[type=checkbox] { accent-color:#f59e0b;width:14px;height:14px; }
@@ -417,6 +417,7 @@
       </div>
       <button class="refresh-btn" onclick="toggleTheme()" id="theme-toggle" title="Toggle dark/light mode">☀️</button>
       <button class="refresh-btn" id="add-btn" onclick="handleAddBtn()" style="color:var(--tee-accent);border-color:rgba(53,150,194,0.3);">+ Add contact</button>
+      <button class="refresh-btn" onclick="openBulkActionModal()" style="color:var(--tee-accent);border-color:rgba(53,150,194,0.3);">⚡ Bulk actions</button>
       <button class="refresh-btn" onclick="refreshCurrent()">↻ Refresh</button>
       <button class="refresh-btn" onclick="resetSetup()" style="color: #ff6b6b; border-color: rgba(255,107,107,0.3);">Sign out</button>
     </div>
@@ -839,6 +840,71 @@
       <button class="modal-btn modal-btn-no" onclick="closeLogModal()">Cancel</button>
     </div>
     <div id="log-saving" style="display:none; text-align:center; padding: 0.5rem; font-size: 0.82rem; color: var(--tee-muted);">Saving...</div>
+  </div>
+</div>
+
+<!-- ADD ACTION MODAL — quick scheduling, no interaction log required -->
+<div class="modal-overlay" id="add-action-modal">
+  <div class="modal" style="max-width: 420px;">
+    <div class="modal-title">Add an action</div>
+    <div class="modal-sub">Schedules something on this contact's chronological actions list — doesn't touch the sequence.</div>
+    <div>
+      <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Action</label>
+      <select id="add-action-text" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; margin-bottom: 0.5rem; appearance: none;"><option value="">— pick, or type your own below —</option></select>
+      <input type="text" id="add-action-custom" placeholder="...or type a custom action" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; margin-bottom: 0.75rem;" />
+      <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Due date</label>
+      <input type="date" id="add-action-date" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; margin-bottom: 0.75rem;" />
+      <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Detail (optional)</label>
+      <textarea id="add-action-detail" placeholder="Any extra context..." rows="2" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; resize: none;"></textarea>
+    </div>
+    <div class="modal-btns">
+      <button class="modal-btn modal-btn-yes" onclick="saveAddAction()">Add action</button>
+      <button class="modal-btn modal-btn-no" onclick="closeAddActionModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- BULK ACTIONS MODAL — writes one action to many contacts at once, always
+     scoped to whichever desk is active when the modal is opened. -->
+<div class="modal-overlay" id="bulk-action-modal">
+  <div class="modal" style="max-width: 640px;">
+    <div class="modal-title">Bulk action</div>
+    <div class="modal-sub" style="margin-bottom:0.9rem;">Applies one action to many contacts at once. Scoped to <strong id="bulk-desk-name" style="color:var(--tee-text);"></strong> — switch desk before opening this to reach another sector.</div>
+    <div style="display:flex;gap:0.5rem;margin-bottom:1rem;">
+      <span id="bulk-mode-filter" class="tag-option selected" onclick="setBulkMode('filter')" style="padding:5px 14px;">Filter by level / specialism</span>
+      <span id="bulk-mode-manual" class="tag-option" onclick="setBulkMode('manual')" style="padding:5px 14px;">Pick contacts manually</span>
+    </div>
+    <div id="bulk-filter-section">
+      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.3rem;">Contact level (any selected)</label>
+      <div class="tag-picker" id="bulk-level-picker"></div>
+      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.3rem;margin-top:0.5rem;">Specialism (any selected)</label>
+      <div class="tag-picker" id="bulk-specialism-picker"></div>
+      <div class="modal-btns" style="margin-top:0.75rem;margin-bottom:0;">
+        <button type="button" class="modal-btn modal-btn-yes" style="flex:0;padding:0.55rem 1.25rem;" onclick="runBulkPreview()">Preview matches</button>
+      </div>
+    </div>
+    <div id="bulk-manual-section" style="display:none;">
+      <input type="text" id="bulk-manual-search" placeholder="Search contacts in this desk..." oninput="renderBulkManualList()" style="width:100%;background:#f5f7fa;border:1px solid var(--tee-border);border-radius:8px;padding:0.6rem 0.875rem;font-family:'DM Sans',sans-serif;font-size:0.85rem;color:var(--tee-text);margin-bottom:0.5rem;" />
+      <div id="bulk-manual-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--tee-border);border-radius:8px;padding:0.4rem 0.75rem;"></div>
+    </div>
+    <div id="bulk-preview-section" style="display:none;margin-top:0.75rem;">
+      <div id="bulk-preview-summary"></div>
+      <div id="bulk-preview-list" style="max-height:220px;overflow-y:auto;border:1px solid var(--tee-border);border-radius:8px;padding:0.4rem 0.75rem;"></div>
+    </div>
+    <div id="bulk-define-section" style="display:none;margin-top:1rem;padding-top:0.9rem;border-top:1px solid var(--tee-border);">
+      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.5rem;">Action</label>
+      <select id="bulk-action-text" style="width:100%;background:#f5f7fa;border:1px solid var(--tee-border);border-radius:10px;padding:0.75rem 1rem;color:var(--tee-text);font-family:'DM Sans',sans-serif;font-size:0.9rem;margin-bottom:0.5rem;appearance:none;"><option value="">— pick, or type your own below —</option></select>
+      <input type="text" id="bulk-action-custom" placeholder="...or type a custom action" style="width:100%;background:#f5f7fa;border:1px solid var(--tee-border);border-radius:10px;padding:0.75rem 1rem;color:var(--tee-text);font-family:'DM Sans',sans-serif;font-size:0.9rem;margin-bottom:0.75rem;" />
+      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.5rem;">Due date</label>
+      <input type="date" id="bulk-action-date" style="width:100%;background:#f5f7fa;border:1px solid var(--tee-border);border-radius:10px;padding:0.75rem 1rem;color:var(--tee-text);font-family:'DM Sans',sans-serif;font-size:0.9rem;margin-bottom:0.75rem;" />
+      <label style="font-size:0.75rem;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;display:block;margin-bottom:0.5rem;">Detail (optional)</label>
+      <textarea id="bulk-action-detail" placeholder="Any extra context..." rows="2" style="width:100%;background:#f5f7fa;border:1px solid var(--tee-border);border-radius:10px;padding:0.75rem 1rem;color:var(--tee-text);font-family:'DM Sans',sans-serif;font-size:0.9rem;resize:none;"></textarea>
+    </div>
+    <div class="modal-btns">
+      <button type="button" class="modal-btn modal-btn-yes" id="bulk-confirm-btn" style="display:none;" onclick="confirmBulkAction()">Write to contacts</button>
+      <button type="button" class="modal-btn modal-btn-no" onclick="closeBulkActionModal()">Close</button>
+    </div>
+    <div id="bulk-status" style="display:none;font-size:0.8rem;color:var(--tee-muted);margin-top:0.5rem;"></div>
   </div>
 </div>
 
@@ -1906,6 +1972,149 @@ function ownerLiConnected(contact) {
   return contact.owner === 'John Daly' ? !!contact.liConnectedJohn : !!contact.liConnected;
 }
 
+// ===== ACTIONS TABLE — unified chronological action list per contact =====
+// One row per scheduled action (Contact link, Action text, Due Date, Completed,
+// Completed Date, Source: Sequence/Manual, Detail). Sequence steps and bespoke
+// reminders both live here so the contact panel can show one chronological list.
+// Only OPEN (not completed) rows are cached — completed history stays in Airtable
+// but isn't needed for day-to-day rendering, keeping the cache small indefinitely.
+const ACTIONS_URL = `https://api.airtable.com/v0/${BASE_ID}/Actions`;
+let allActions = [];
+let actionsLoaded = false;
+
+async function loadActions() {
+  try {
+    let records = [];
+    let offset;
+    const formula = encodeURIComponent('NOT({Completed})');
+    do {
+      const url = `${ACTIONS_URL}?pageSize=100&filterByFormula=${formula}${offset ? '&offset=' + offset : ''}`;
+      const resp = await airtableFetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      if (!resp.ok) break;
+      const data = await resp.json();
+      records = records.concat(data.records || []);
+      offset = data.offset;
+    } while (offset);
+    allActions = records.map(r => ({
+      id: r.id,
+      contactId: Array.isArray(r.fields['Contact']) ? r.fields['Contact'][0] : '',
+      action: r.fields['Action'] || '',
+      dueDate: r.fields['Due Date'] || '',
+      completed: !!r.fields['Completed'],
+      source: r.fields['Source'] || 'Manual',
+      detail: r.fields['Detail'] || ''
+    }));
+    actionsLoaded = true;
+  } catch(e) { console.log('loadActions error:', e); }
+}
+
+// All open actions for a contact, soonest due first (undated last).
+function getContactActions(contactId) {
+  return allActions.filter(a => a.contactId === contactId && !a.completed)
+    .sort((a, b) => (a.dueDate || '9999-99-99').localeCompare(b.dueDate || '9999-99-99'));
+}
+
+// Earliest open Manual (bespoke reminder) due date for a contact, or '' if none.
+function earliestManualActionDue(contactId) {
+  const manual = allActions.filter(a => a.contactId === contactId && a.source === 'Manual' && !a.completed && a.dueDate);
+  if (manual.length === 0) return '';
+  return manual.reduce((min, a) => a.dueDate < min ? a.dueDate : min, manual[0].dueDate);
+}
+
+async function createAction(contactId, action, dueDate, source, detail) {
+  const fields = { 'Contact': [contactId], 'Action': action, 'Source': source || 'Manual' };
+  if (dueDate) fields['Due Date'] = dueDate;
+  if (detail) fields['Detail'] = detail;
+  try {
+    const resp = await airtableFetch(ACTIONS_URL, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields })
+    });
+    const data = await resp.json();
+    if (!resp.ok) { console.error('createAction error:', JSON.stringify(data)); return null; }
+    const rec = { id: data.id, contactId, action, dueDate: dueDate || '', completed: false, source: source || 'Manual', detail: detail || '' };
+    allActions.push(rec);
+    return rec;
+  } catch(e) { console.error('createAction error:', e); return null; }
+}
+
+async function completeAction(actionId) {
+  try {
+    const resp = await airtableFetch(`${ACTIONS_URL}/${actionId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Completed': true, 'Completed Date': new Date().toISOString().split('T')[0] } })
+    });
+    if (!resp.ok) { console.error('completeAction error:', JSON.stringify(await resp.json().catch(() => ({})))); return false; }
+    allActions = allActions.filter(a => a.id !== actionId);
+    return true;
+  } catch(e) { console.error('completeAction error:', e); return false; }
+}
+
+// Completes whatever Sequence-sourced action is currently open for a contact (there
+// should only ever be one, since the sequence is linear) and creates the next one.
+// Used by every sequence-progression call site so the panel's chronological list
+// always reflects the current step, without each call site managing rows itself.
+async function upsertSequenceAction(contactId, label, dueDate) {
+  const open = allActions.filter(a => a.contactId === contactId && a.source === 'Sequence' && !a.completed);
+  for (const a of open) { await completeAction(a.id); }
+  if (label) return await createAction(contactId, label, dueDate, 'Sequence', '');
+  return null;
+}
+
+// Shared label logic for "what should the sequence action say at this step" —
+// used by resumeSequence and reinstateContact so both agree on wording.
+function sequenceLabelForStep(step, liConnected) {
+  if (step === 1) return 'Send LI connection request';
+  if (step === 2) return liConnected ? 'Send Email 1 - connected' : 'Send Email 1 - not connected';
+  if (step === 3) return liConnected ? 'Send Email 2 - connected' : 'Send Email 2 - not connected';
+  if (step === 4) return 'Send Email 3';
+  if (step === 5) return liConnected ? 'LinkedIn Message - connected' : 'InMail - not connected';
+  if (step === 6) return 'Follow-up call';
+  return '';
+}
+
+// ONE-OFF MIGRATION — creates an Actions row for any contact whose legacy
+// Next Action Due/Notes fields aren't yet represented in the new table. Safe to
+// run more than once in the same session (checks the live cache first) and safe
+// across sessions (the cache reloads from Airtable, so already-migrated contacts
+// are found and skipped).
+async function migrateLegacyActions() {
+  if (!confirm('Scans every contact for an existing "Next action" and creates a matching row in the new Actions table for any that don\'t already have one there. Safe to run more than once. Continue?')) return;
+  showToast('Migrating legacy actions...', 'success');
+  await ensureParkedListsLoaded();
+  if (!actionsLoaded) await loadActions();
+  const merged = allContactsAll.length > 0 ? allContactsAll : [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts, ...uncatContacts];
+  const seen = new Set();
+  const candidates = [];
+  for (const c of merged) {
+    if (seen.has(c.id)) continue;
+    seen.add(c.id);
+    if (!c.nextActionDue) continue;
+    const already = allActions.some(a => a.contactId === c.id && a.source === 'Sequence' && !a.completed);
+    if (already) continue;
+    const label = Array.isArray(c.nextActionNotes) ? c.nextActionNotes.join(', ') : (c.nextActionNotes || 'Next action');
+    candidates.push({ id: c.id, label, due: c.nextActionDue, detail: c.nextActionDetail || '' });
+  }
+  if (candidates.length === 0) { showToast('Nothing to migrate — every contact with a next action already has one in the Actions table.', 'success'); return; }
+  let done = 0, failed = 0;
+  for (let i = 0; i < candidates.length; i += 3) {
+    const batch = candidates.slice(i, i + 3);
+    await Promise.all(batch.map(async cand => {
+      const created = await createAction(cand.id, cand.label, cand.due, 'Sequence', cand.detail);
+      if (created) done++; else failed++;
+    }));
+    if (i + 3 < candidates.length) await teeSleep(350);
+  }
+  updateCounts();
+  if (selectedContact) {
+    const list = document.getElementById('upcoming-actions-list');
+    if (list) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
+  }
+  showToast(`Migration done — ${done} action${done === 1 ? '' : 's'} created${failed ? `, ${failed} failed (check console)` : ''}`, failed ? 'error' : 'success');
+}
+
 function renderSidebar() {
   const sidebar = document.getElementById('main-sidebar');
   if (!sidebar) return;
@@ -2066,6 +2275,7 @@ window.onload = async function() {
     updateToggleUI(getViewUser());
     renderSidebar();
     await loadContacts();
+    loadActions();
     loadAllContactsForCounting();
     ensureParkedListsLoaded();
     loadSelectOptions().then(refreshDynamicSelects);
@@ -2236,7 +2446,8 @@ function getContactsForView(view) {
     });
   }
   if (cfg.reminders) {
-    return allContacts.filter(c => deskFilter(c) && c.followUpDate && c.status !== 'Do Not Contact');
+    return allContacts.filter(c => deskFilter(c) && c.status !== 'Do Not Contact' && getContactActions(c.id).some(a => a.source === 'Manual'))
+      .sort((a, b) => (earliestManualActionDue(a.id) || '9999').localeCompare(earliestManualActionDue(b.id) || '9999'));
   }
   if (cfg.dns) {
     return dnsContacts;
@@ -2401,10 +2612,12 @@ function updateCounts() {
   // DNC count — loaded separately since filtered out of main load
   const dncEl = document.getElementById('count-do-not-contact');
   if (dncEl) dncEl.textContent = ''; // shown in Airtable, not loaded here
-  // Reminders count — due today or overdue
-  const remindersDue = allContacts.filter(c => {
-    if (!c.followUpDate || c.status === 'Do Not Contact') return false;
-    const diff = dueDiff(c.followUpDate);
+  // Reminders count — due today or overdue, based on open Manual actions
+  const remindersDue = allActions.filter(a => {
+    if (a.source !== 'Manual' || a.completed || !a.dueDate) return false;
+    const contact = allContacts.find(c => c.id === a.contactId);
+    if (!contact || contact.status === 'Do Not Contact') return false;
+    const diff = dueDiff(a.dueDate);
     return diff !== null && diff <= 0;
   }).length;
   const reminderEl = document.getElementById('count-reminders');
@@ -2918,7 +3131,7 @@ function renderView() {
     const initials = c.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
     const avatarColors = ['#e8c547', '#4ecdc4', '#a78bfa', '#ff6b6b', '#74b9ff'];
     const colorIdx = c.name.charCodeAt(0) % avatarColors.length;
-    const due = isReminders ? duePill(c.followUpDate) : duePill(c.nextActionDue);
+    const due = isReminders ? duePill(earliestManualActionDue(c.id)) : duePill(c.nextActionDue);
     const levelAbbr = c.contactLevel ? c.contactLevel.split(' ')[0].slice(0,3).toUpperCase() : '';
     const tier = levelAbbr ? `<span class="tier-pill t1" style="background:rgba(232,197,71,0.12);color:#e8c547;">${levelAbbr}</span>` : '';
     // Warm badge — shown in warm contacts view
@@ -2974,6 +3187,83 @@ function restoreSelectedContact() {
   if (!allContacts.find(c => c.id === savedId)) return; // contact no longer in the active list
   selectContact(savedId);
 }
+// UPCOMING ACTIONS — chronological list combining the sequence's current step
+// with any bespoke reminders, sourced from the Actions table cache.
+function renderUpcomingActionsHtml(contact) {
+  const rows = getContactActions(contact.id);
+  if (rows.length === 0) {
+    return `<div style="font-size:0.78rem;color:var(--tee-muted);padding:0.5rem 0;">Nothing scheduled. ${(!contact.step || contact.step === 0) ? 'Start the sequence or add one below.' : 'Add one below if needed.'}</div>`;
+  }
+  return rows.map(a => {
+    const pill = duePill(a.dueDate);
+    const isSeq = a.source === 'Sequence';
+    return `<div style="display:flex;align-items:flex-start;gap:0.6rem;padding:0.55rem 0;border-bottom:1px solid var(--tee-border);">
+      <div onclick="completeActionRow('${a.id}','${a.source}')" title="Mark done" style="flex-shrink:0;width:18px;height:18px;margin-top:1px;border-radius:5px;border:1.5px solid var(--tee-border);cursor:pointer;" onmouseover="this.style.borderColor='#10b981';this.style.background='rgba(16,185,129,0.12)'" onmouseout="this.style.borderColor='var(--tee-border)';this.style.background='transparent'"></div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.82rem;color:var(--tee-text);line-height:1.4;">${a.action}${isSeq ? ' <span style="font-size:0.68rem;color:var(--tee-muted);">· sequence</span>' : ''}</div>
+        ${a.detail ? `<div style="font-size:0.74rem;color:var(--tee-muted);margin-top:2px;line-height:1.4;white-space:pre-wrap;">${a.detail.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
+      </div>
+      <span class="due-pill ${pill.cls}" style="font-size:0.68rem;flex-shrink:0;">${pill.label}</span>
+    </div>`;
+  }).join('');
+}
+
+// Ticking a row done: a sequence-sourced row advances the sequence properly
+// (via the same path as the "I've sent..." button); a manual row just completes.
+async function completeActionRow(actionId, source) {
+  if (source === 'Sequence') {
+    handleMarkDone();
+    return;
+  }
+  const ok = await completeAction(actionId);
+  if (ok) {
+    const list = document.getElementById('upcoming-actions-list');
+    if (list && selectedContact) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
+    updateCounts();
+    renderView();
+  } else {
+    showToast('Could not mark that done — check the console', 'error');
+  }
+}
+
+function openAddActionModal() {
+  if (!selectedContact) return;
+  const sel = document.getElementById('add-action-text');
+  const fillOpts = () => {
+    const opts = nextActionOptions.length > 0 ? nextActionOptions : NEXT_ACTION_FALLBACK;
+    if (sel) sel.innerHTML = '<option value="">— pick, or type your own below —</option>' + opts.map(o => `<option value="${o.replace(/"/g,'&quot;')}">${o}</option>`).join('');
+  };
+  fillOpts();
+  if (nextActionOptions.length === 0) loadOrgFieldOptions().then(fillOpts);
+  document.getElementById('add-action-custom').value = '';
+  document.getElementById('add-action-date').value = '';
+  document.getElementById('add-action-detail').value = '';
+  document.getElementById('add-action-modal').classList.add('show');
+}
+
+function closeAddActionModal() {
+  document.getElementById('add-action-modal').classList.remove('show');
+}
+
+async function saveAddAction() {
+  if (!selectedContact) return;
+  const picked = (document.getElementById('add-action-text')?.value || '').trim();
+  const custom = (document.getElementById('add-action-custom')?.value || '').trim();
+  const label = custom || picked;
+  const dueDate = document.getElementById('add-action-date')?.value || '';
+  const detail = (document.getElementById('add-action-detail')?.value || '').trim();
+  if (!label) { showToast('Add a short description of the action', 'error'); return; }
+  if (!dueDate) { showToast('Pick a due date', 'error'); return; }
+  const created = await createAction(selectedContact.id, label, dueDate, 'Manual', detail);
+  if (!created) { showToast('Could not save that action — check the console', 'error'); return; }
+  closeAddActionModal();
+  const list = document.getElementById('upcoming-actions-list');
+  if (list) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
+  updateCounts();
+  renderView();
+  showToast('Action added ✓', 'success');
+}
+
 function renderPanel(contact, interactions) {
   const panel = document.getElementById('detail-panel');
   if (!contact) {
@@ -3044,16 +3334,11 @@ function renderPanel(contact, interactions) {
     </div>
     <div class="panel-body">
       <div class="panel-section">
-        <div class="panel-section-label">Next action</div>
-        <div class="action-box">
-          <div id="next-action-notes-display" class="action-box-label" onclick="editNextActionNotes()" title="Click to edit" style="cursor:pointer;">${(contact.nextActionNotes ? (Array.isArray(contact.nextActionNotes) ? contact.nextActionNotes.join(', ') : contact.nextActionNotes) : 'Set next action')}</div>
-          ${contact.nextActionDetail ? `<div style="font-size:0.78rem;color:var(--tee-muted);margin-top:0.25rem;line-height:1.4;white-space:pre-wrap;">${contact.nextActionDetail.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
-          <div id="next-action-notes-picker" style="display:none;margin-top:0.35rem;"></div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:0.35rem;">
-            <div class="action-box-due ${dueIsOverdue ? '' : 'ok'}">${contact.nextActionDue ? 'Due ' + contact.nextActionDue : 'No date set'}</div>
-            <input type="date" id="next-action-date-input" style="background:transparent;border:none;border-bottom:1px solid var(--tee-border);font-family:'DM Sans',sans-serif;font-size:0.72rem;color:var(--tee-muted);cursor:pointer;outline:none;padding:2px 4px;" title="Set next action date" onchange="setNextActionDate(this.value)" />
-          </div>
+        <div class="panel-section-label" style="display:flex;justify-content:space-between;align-items:center;">
+          Upcoming actions
+          <span onclick="openAddActionModal()" style="font-size:0.72rem;color:var(--tee-accent);cursor:pointer;">+ Add action</span>
         </div>
+        <div id="upcoming-actions-list">${renderUpcomingActionsHtml(contact)}</div>
       </div>
       <div class="contact-interview-imprint"></div>
       ${(contact.status === 'Warm Ongoing' || contact.status === 'Cold Ongoing') ? `
@@ -3065,17 +3350,6 @@ function renderPanel(contact, interactions) {
         <div style="display:flex;align-items:center;gap:0.75rem;background:rgba(53,150,194,0.08);border:1px solid rgba(53,150,194,0.2);border-radius:10px;padding:0.625rem 0.875rem;">
           <input type="date" id="next-send-date-input" value="${contact.nextSendDate || ''}" style="background:transparent;border:none;font-family:'DM Sans',sans-serif;font-size:0.82rem;color:var(--tee-text);cursor:pointer;outline:none;flex:1;" onchange="setNextSendDate(this.value)" />
           ${contact.nextSendDate ? `<div onclick="setNextSendDate('')" style="font-size:0.72rem;color:var(--tee-muted);cursor:pointer;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.06);">Clear</div>` : ''}
-        </div>
-      </div>` : ''}
-      ${(contact.followUpDate || contact.nextActionDue) ? `
-      <div class="panel-section">
-        <div class="panel-section-label">Next action due</div>
-        <div style="display:flex;align-items:center;justify-content:space-between;background:rgba(251,146,60,0.08);border:1px solid rgba(251,146,60,0.2);border-radius:10px;padding:0.625rem 0.875rem;">
-          <div>
-            <div style="font-size:0.78rem;color:#fb923c;font-weight:500;">⏰ ${contact.nextActionDue || contact.followUpDate}</div>
-            ${contact.nextActionNotes ? `<div style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;">${Array.isArray(contact.nextActionNotes) ? contact.nextActionNotes.join(', ') : contact.nextActionNotes}</div>` : '<div style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;">Check interaction history for details</div>'}
-          </div>
-          <div onclick="clearReminder()" style="font-size:0.72rem;color:var(--tee-muted);cursor:pointer;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,0.06);">Clear</div>
         </div>
       </div>` : ''}
       <div class="panel-section">
@@ -3220,6 +3494,10 @@ async function advanceSequence(liConnected) {
     } catch(e) { console.log('Notes save error:', e); }
   }
 
+  // Mirror the same transition into the Actions table: complete the step just
+  // finished, open the next one. Powers the chronological "Upcoming actions" list.
+  await upsertSequenceAction(contact.id, newNotes, newDue);
+
   // Log the completed action to interaction history, capture its ID and link it
   // locally so it appears in the panel immediately rather than only after a reload.
   try {
@@ -3270,6 +3548,7 @@ async function markLiConnectedAndAdvance() {
     'Next Action Due': newDue
   };
   await updateContact(contact.id, fields);
+  await upsertSequenceAction(contact.id, 'Send Email 1 - connected', newDue);
   try {
     const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
       method: 'POST',
@@ -3306,6 +3585,7 @@ async function markResponded() {
     'Next Action Notes': ['Book meeting'],
     'Next Action Due': addDays(0)
   });
+  await upsertSequenceAction(selectedContact.id, 'Book meeting', addDays(0));
 }
 
 // MARK DO NOT CONTACT
@@ -3548,90 +3828,20 @@ async function saveLogAction() {
     const nextActionNotes = (document.getElementById('log-na-note')?.value || '').trim();
     const nextActionDetail = (document.getElementById('log-na-detail')?.value || '').trim();
 
-    // If reminder date set — save it. The date and the (multiple-select) note must go
-    // in SEPARATE updates: a note value that isn't an existing option rejects the whole
-    // request, which previously took the date down with it and reported false success.
+    // A bespoke reminder becomes its own row in the Actions table — Source: Manual —
+    // rather than overwriting the contact's Next Action fields, so it can sit
+    // alongside the sequence's own action instead of clobbering it.
     if (setHold && followup) {
-      const reminderLabel = nextActionNotes; // a chosen option, or '' to skip the note
-
-      // 1) Save the reminder date on its own — must never fail over a note issue.
-      let dateOk = false;
-      try {
-        const dResp = await fetch(`${API_URL}/${selectedContact.id}`, {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'Next Action Due': followup } })
-        });
-        const dData = await dResp.json();
-        if (!dResp.ok) throw new Error(dData.error?.message || 'date save failed');
-        dateOk = true;
-      } catch(e) {
-        console.error('Reminder date save error:', e);
-        showToast('Could not save the reminder date: ' + e.message, 'error');
-      }
-
-      // 2) Try the note separately. Tolerate a value that isn't an existing option.
-      let noteOk = false;
-      if (dateOk && reminderLabel) {
-        try {
-          const nResp = await fetch(`${API_URL}/${selectedContact.id}`, {
-            method: 'PATCH',
-            headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ fields: { 'Next Action Notes': [reminderLabel] } })
-          });
-          noteOk = nResp.ok;
-          if (!nResp.ok) console.warn('Next Action Notes not saved (option may not exist):', reminderLabel);
-        } catch(e) { console.warn('Note save error:', e); }
-      }
-
-      // Local state reflects only what actually persisted.
-      const idx = allContacts.findIndex(c => c.id === selectedContact.id);
-      if (idx > -1 && dateOk) {
-        allContacts[idx].nextActionDue = followup;
-        if (noteOk) allContacts[idx].nextActionNotes = [reminderLabel];
-        allContacts[idx].nextActionDetail = nextActionDetail;
-        selectedContact = allContacts[idx];
-      }
-
-      // Save the free-text detail separately — best-effort, ignore if the field doesn't exist yet.
-      if (dateOk) {
-        fetch(`${API_URL}/${selectedContact.id}`, {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'Next Action Detail': nextActionDetail } })
-        }).catch(() => {});
-      }
-
-      // Best-effort Follow-up Date mirror — ignore if the field doesn't exist.
-      if (dateOk) {
-        fetch(`${API_URL}/${selectedContact.id}`, {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'Follow-up Date': followup } })
-        }).catch(() => {});
-      }
-
+      const created = await createAction(selectedContact.id, nextActionNotes || subject, followup, 'Manual', nextActionDetail);
       closeLogModal();
       updateCounts();
       renderView();
       const ints = await fetchInteractions(selectedContact?.id);
       renderPanel(selectedContact, ints);
       const dueFmt = new Date(followup).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-      if (dateOk && noteOk) showToast('Logged — next action set for ' + dueFmt, 'success');
-      else if (dateOk && !noteOk) showToast(`Reminder set for ${dueFmt}. Note “${reminderLabel}” isn’t a saved label — add it as an option in Airtable to tag it`, 'success');
+      if (created) showToast('Logged — reminder set for ' + dueFmt, 'success');
+      else showToast('Interaction logged, but the reminder didn’t save — check the console', 'error');
     } else {
-      if (nextActionNotes) {
-        await updateContact(selectedContact.id, { 'Next Action Notes': [nextActionNotes] });
-      }
-      if (nextActionDetail) {
-        const idx = allContacts.findIndex(c => c.id === selectedContact.id);
-        if (idx > -1) { allContacts[idx].nextActionDetail = nextActionDetail; selectedContact = allContacts[idx]; }
-        fetch(`${API_URL}/${selectedContact.id}`, {
-          method: 'PATCH',
-          headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fields: { 'Next Action Detail': nextActionDetail } })
-        }).catch(() => {});
-      }
       closeLogModal();
       const interactions = await fetchInteractions(selectedContact.id);
       renderPanel(selectedContact, interactions);
@@ -3660,13 +3870,7 @@ async function resumeSequence() {
   const li = ownerLiConnected(selectedContact);
   
   // Work out what the next action notes should be at this step
-  let nextNotes = '';
-  if (step === 1) nextNotes = 'Send LI connection request';
-  else if (step === 2) nextNotes = li ? 'Send Email 1 - connected' : 'Send Email 1 - not connected';
-  else if (step === 3) nextNotes = li ? 'Send Email 2 - connected' : 'Send Email 2 - not connected';
-  else if (step === 4) nextNotes = 'Send Email 3';
-  else if (step === 5) nextNotes = li ? 'LinkedIn Message - connected' : 'InMail - not connected';
-  else if (step === 6) nextNotes = 'Follow-up call';
+  let nextNotes = sequenceLabelForStep(step, li);
 
   // Log a note that the hold is cleared
   try {
@@ -3688,6 +3892,7 @@ async function resumeSequence() {
     'Next Action Notes': nextNotes ? [nextNotes] : [],
     'Next Action Due': addDays(0)
   });
+  await upsertSequenceAction(selectedContact.id, nextNotes, addDays(0));
 }
 
 
@@ -3733,6 +3938,7 @@ async function toggleLiConnected(who = 'louisa') {
     fields['Next Action Notes'] = ['Send Email 1 - connected'];
     fields['Next Action Due'] = addDays(3);
     showToast('Marked connected — Email 1 due in 3 days ✓', 'success');
+    await upsertSequenceAction(selectedContact.id, 'Send Email 1 - connected', addDays(3));
   }
   await updateContact(selectedContact.id, fields);
 }
@@ -4433,6 +4639,160 @@ function jumpToOrgFromGapFinder(orgId) {
   selectOrg(orgId);
 }
 
+// ===== BULK ACTIONS — write one Action row to many contacts at once. Always
+// scoped to whichever desk tab is active when the modal opens, so a filter can
+// never silently reach contacts outside the desk you meant. =====
+let bulkSelectedIds = new Set();
+let bulkLevels = [];
+let bulkSpecialisms = [];
+
+function bulkDeskContacts() {
+  const currentSector = DESK_CONFIG[currentDesk]?.sector || currentDesk;
+  const deskFilter = c => currentDesk === 'All Others'
+    ? (!c.orgSector || c.orgSector === '' || !PRIMARY_DESK_SECTORS.includes(c.orgSector))
+    : c.orgSector === currentSector;
+  return allContacts.filter(c => deskFilter(c) && c.status !== 'Do Not Contact');
+}
+
+function openBulkActionModal() {
+  bulkSelectedIds = new Set();
+  bulkLevels = [];
+  bulkSpecialisms = [];
+  document.getElementById('bulk-desk-name').textContent = currentDesk;
+  document.getElementById('bulk-level-picker').innerHTML = GAP_LEVEL_OPTIONS.map(l =>
+    `<span class="tag-option" data-val="${l}" onclick="toggleBulkTag(this,'level')">${l}</span>`
+  ).join('');
+  document.getElementById('bulk-specialism-picker').innerHTML = Object.keys(CONTACT_SPECIALISM_GROUPS).map(g =>
+    `<span class="tag-option" data-val="${g}" onclick="toggleBulkTag(this,'specialism')">${g}</span>`
+  ).join('');
+  document.getElementById('bulk-manual-search').value = '';
+  const sel = document.getElementById('bulk-action-text');
+  const fillOpts = () => {
+    const opts = nextActionOptions.length > 0 ? nextActionOptions : NEXT_ACTION_FALLBACK;
+    sel.innerHTML = '<option value="">— pick, or type your own below —</option>' + opts.map(o => `<option value="${o.replace(/"/g,'&quot;')}">${o}</option>`).join('');
+  };
+  fillOpts();
+  if (nextActionOptions.length === 0) loadOrgFieldOptions().then(fillOpts);
+  document.getElementById('bulk-action-custom').value = '';
+  document.getElementById('bulk-action-date').value = '';
+  document.getElementById('bulk-action-detail').value = '';
+  document.getElementById('bulk-status').style.display = 'none';
+  setBulkMode('filter');
+  document.getElementById('bulk-action-modal').classList.add('show');
+}
+
+function closeBulkActionModal() {
+  document.getElementById('bulk-action-modal').classList.remove('show');
+}
+
+function setBulkMode(mode) {
+  document.getElementById('bulk-mode-filter').classList.toggle('selected', mode === 'filter');
+  document.getElementById('bulk-mode-manual').classList.toggle('selected', mode === 'manual');
+  document.getElementById('bulk-filter-section').style.display = mode === 'filter' ? 'block' : 'none';
+  document.getElementById('bulk-manual-section').style.display = mode === 'manual' ? 'block' : 'none';
+  document.getElementById('bulk-preview-section').style.display = 'none';
+  document.getElementById('bulk-define-section').style.display = 'none';
+  document.getElementById('bulk-confirm-btn').style.display = 'none';
+  bulkSelectedIds = new Set();
+  if (mode === 'manual') renderBulkManualList();
+}
+
+function toggleBulkTag(el, kind) {
+  el.classList.toggle('selected');
+  const val = el.getAttribute('data-val');
+  const arr = kind === 'level' ? bulkLevels : bulkSpecialisms;
+  const idx = arr.indexOf(val);
+  if (idx > -1) arr.splice(idx, 1); else arr.push(val);
+}
+
+function runBulkPreview() {
+  if (bulkLevels.length === 0 && bulkSpecialisms.length === 0) { showToast('Pick at least one level or specialism first', 'error'); return; }
+  const groupItems = bulkSpecialisms.flatMap(g => CONTACT_SPECIALISM_GROUPS[g] || []);
+  const matches = bulkDeskContacts().filter(c => {
+    if (bulkLevels.length && !bulkLevels.includes(c.contactLevel)) return false;
+    if (groupItems.length) {
+      const specs = (c.specialism || '').split(',').map(s => s.trim()).filter(Boolean);
+      if (!specs.some(s => groupItems.includes(s))) return false;
+    }
+    return true;
+  }).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  bulkSelectedIds = new Set(matches.map(c => c.id));
+  renderBulkPreviewList(matches);
+}
+
+function renderBulkPreviewList(matches) {
+  document.getElementById('bulk-preview-section').style.display = 'block';
+  document.getElementById('bulk-preview-summary').innerHTML = `<div style="font-size:0.8rem;color:var(--tee-muted);margin-bottom:0.5rem;">${matches.length} contact${matches.length === 1 ? '' : 's'} matched in ${currentDesk}. Untick any to exclude:</div>`;
+  document.getElementById('bulk-preview-list').innerHTML = matches.length === 0
+    ? '<div style="font-size:0.8rem;color:var(--tee-muted);padding:0.5rem 0;">No contacts matched that filter.</div>'
+    : matches.map(c => `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" checked onchange="toggleBulkContact('${c.id}', this.checked)" style="accent-color:var(--tee-accent);" />
+        <span style="color:var(--tee-text);">${c.name}</span><span style="color:var(--tee-muted);font-size:0.74rem;">${c.role || ''}${c.orgName ? ' · ' + c.orgName : ''}</span>
+      </label>`).join('');
+  updateBulkConfirmState();
+}
+
+function renderBulkManualList() {
+  const q = (document.getElementById('bulk-manual-search')?.value || '').toLowerCase();
+  const list = bulkDeskContacts()
+    .filter(c => !q || (c.name || '').toLowerCase().includes(q) || (c.orgName || '').toLowerCase().includes(q))
+    .sort((a, b) => (a.name || '').localeCompare(b.name || ''))
+    .slice(0, 200);
+  document.getElementById('bulk-manual-list').innerHTML = list.length === 0
+    ? '<div style="font-size:0.8rem;color:var(--tee-muted);padding:0.5rem 0;">No contacts match.</div>'
+    : list.map(c => `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0;font-size:0.82rem;cursor:pointer;">
+        <input type="checkbox" ${bulkSelectedIds.has(c.id) ? 'checked' : ''} onchange="toggleBulkContact('${c.id}', this.checked)" style="accent-color:var(--tee-accent);" />
+        <span style="color:var(--tee-text);">${c.name}</span><span style="color:var(--tee-muted);font-size:0.74rem;">${c.role || ''}${c.orgName ? ' · ' + c.orgName : ''}</span>
+      </label>`).join('');
+}
+
+function toggleBulkContact(id, checked) {
+  if (checked) bulkSelectedIds.add(id); else bulkSelectedIds.delete(id);
+  updateBulkConfirmState();
+}
+
+function updateBulkConfirmState() {
+  const btn = document.getElementById('bulk-confirm-btn');
+  const hasSelection = bulkSelectedIds.size > 0;
+  document.getElementById('bulk-define-section').style.display = hasSelection ? 'block' : 'none';
+  btn.style.display = hasSelection ? 'inline-block' : 'none';
+  btn.textContent = `Write to ${bulkSelectedIds.size} contact${bulkSelectedIds.size === 1 ? '' : 's'}`;
+}
+
+async function confirmBulkAction() {
+  const picked = (document.getElementById('bulk-action-text')?.value || '').trim();
+  const custom = (document.getElementById('bulk-action-custom')?.value || '').trim();
+  const label = custom || picked;
+  const dueDate = document.getElementById('bulk-action-date')?.value || '';
+  const detail = (document.getElementById('bulk-action-detail')?.value || '').trim();
+  if (!label) { showToast('Add a short description of the action', 'error'); return; }
+  if (!dueDate) { showToast('Pick a due date', 'error'); return; }
+  const ids = [...bulkSelectedIds];
+  if (ids.length === 0) { showToast('No contacts selected', 'error'); return; }
+  if (!confirm(`Write "${label}" due ${dueDate} to ${ids.length} contact${ids.length === 1 ? '' : 's'} in ${currentDesk}?`)) return;
+
+  const statusEl = document.getElementById('bulk-status');
+  statusEl.style.display = 'block';
+  let done = 0, failed = 0;
+  for (let i = 0; i < ids.length; i += 3) {
+    const batch = ids.slice(i, i + 3);
+    await Promise.all(batch.map(async id => {
+      const created = await createAction(id, label, dueDate, 'Manual', detail);
+      if (created) done++; else failed++;
+    }));
+    statusEl.textContent = `Writing... ${Math.min(i + 3, ids.length)} of ${ids.length}`;
+    if (i + 3 < ids.length) await teeSleep(350);
+  }
+  updateCounts();
+  renderView();
+  if (selectedContact && ids.includes(selectedContact.id)) {
+    const list = document.getElementById('upcoming-actions-list');
+    if (list) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
+  }
+  closeBulkActionModal();
+  showToast(`Bulk action complete — ${done} added${failed ? `, ${failed} failed (check console)` : ''}`, failed ? 'error' : 'success');
+}
+
 // DUPLICATE DETECTION — soft, non-blocking. Flags likely matches on add so a near
 // twin can be caught before it's created. Never blocks; just asks you to confirm.
 function dupNorm(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').replace(/\s+/g,' ').trim(); }
@@ -4933,7 +5293,8 @@ function dashChrome() {
   const seg = (val, cur, fn, txt) => `<span onclick="${fn}('${val}')" style="cursor:pointer;font-size:0.8rem;padding:6px 12px;${cur === val ? 'background:var(--tee-accent);color:#fff;' : 'color:var(--tee-muted);'}">${txt}</span>`;
   return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:0.5rem;">
     <div style="font-size:1.2rem;font-weight:600;color:var(--tee-text);">BD performance</div>
-    <div style="display:flex;gap:8px;">
+    <div style="display:flex;align-items:center;gap:8px;">
+      <span onclick="migrateLegacyActions()" title="One-off: creates an Actions row for any contact whose existing next action isn't in the new table yet. Safe to run more than once." style="cursor:pointer;font-size:0.72rem;color:var(--tee-muted);text-decoration:underline;">⚙ Migrate legacy actions</span>
       <div style="display:inline-flex;border:1px solid var(--tee-border);border-radius:8px;overflow:hidden;">${seg('Louisa Daly',dashOwner,'dashSetOwner','Louisa')}${seg('John Daly',dashOwner,'dashSetOwner','John')}${seg('All',dashOwner,'dashSetOwner','All')}</div>
       <div style="display:inline-flex;border:1px solid var(--tee-border);border-radius:8px;overflow:hidden;">${seg('week',dashPeriod,'dashSetPeriod','Week')}${seg('month',dashPeriod,'dashSetPeriod','Month')}${seg('90d',dashPeriod,'dashSetPeriod','90 days')}</div>
     </div>
@@ -5309,6 +5670,7 @@ async function startSequence() {
     'Next Action Due': addDays(0),
     'Next Action Notes': ['Send LI connection request']
   }, { silent: true });
+  await upsertSequenceAction(id, 'Send LI connection request', addDays(0));
   selectedContact = allContacts.find(c => c.id === id) || selectedContact;
   try {
     const ints = await fetchInteractions(id);
@@ -5441,6 +5803,7 @@ async function reinstateContact() {
   if (selectedContact.status === 'Do Not Contact') dncContacts = dncContacts.filter(c => c.id !== selectedContact.id);
   // Preserve the contact's existing sequence position — do NOT reset to step 1.
   await updateContact(selectedContact.id, { 'Sequence Status': 'Active', 'Status Reason': null, 'Next Action Due': addDays(0) });
+  await upsertSequenceAction(selectedContact.id, sequenceLabelForStep(selectedContact.step, ownerLiConnected(selectedContact)), addDays(0));
   // Bring the contact back into the active list and refresh everything on screen
   const updated = { ...selectedContact, status: 'Active', nextActionDue: addDays(0) };
   if (allContacts.some(c => c.id === updated.id)) {
