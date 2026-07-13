@@ -2094,7 +2094,10 @@ async function migrateLegacyActions() {
     if (!c.nextActionDue) continue;
     const already = allActions.some(a => a.contactId === c.id && a.source === 'Sequence' && !a.completed);
     if (already) continue;
-    const label = Array.isArray(c.nextActionNotes) ? c.nextActionNotes.join(', ') : (c.nextActionNotes || 'Next action');
+    const notesLabel = Array.isArray(c.nextActionNotes) ? c.nextActionNotes.join(', ') : c.nextActionNotes;
+    // Notes field is often blank even when a due date is set — fall back to what
+    // we actually know (their current sequence step) instead of a placeholder.
+    const label = notesLabel || sequenceLabelForStep(c.step, ownerLiConnected(c)) || 'Next action';
     candidates.push({ id: c.id, label, due: c.nextActionDue, detail: c.nextActionDetail || '' });
   }
   if (candidates.length === 0) { showToast('Nothing to migrate — every contact with a next action already has one in the Actions table.', 'success'); return; }
@@ -2113,6 +2116,51 @@ async function migrateLegacyActions() {
     if (list) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
   }
   showToast(`Migration done — ${done} action${done === 1 ? '' : 's'} created${failed ? `, ${failed} failed (check console)` : ''}`, failed ? 'error' : 'success');
+}
+
+// ONE-OFF REPAIR — the first migration pass fell back to the literal placeholder
+// "Next action" wherever a contact's old Next Action Notes field was blank. This
+// rewrites every such row using the same sequence-step logic the migration now
+// uses, so the label actually says what's due. Safe to run more than once —
+// it only touches rows still showing the exact placeholder text.
+async function fixGenericActionLabels() {
+  if (!confirm('Rewrites any Actions row still showing the generic "Next action" placeholder with the correct step label (e.g. "Send Email 1 - not connected"). Continue?')) return;
+  migrationBanner('⏳ <strong>Fixing generic labels...</strong><br><span style="color:var(--tee-muted);">Gathering contacts — do not close this tab.</span>');
+  await ensureParkedListsLoaded();
+  if (!actionsLoaded) await loadActions();
+  const merged = allContactsAll.length > 0 ? allContactsAll : [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts, ...uncatContacts];
+  const contactMap = {};
+  merged.forEach(c => { if (!contactMap[c.id]) contactMap[c.id] = c; });
+  const toFix = allActions.filter(a => a.source === 'Sequence' && !a.completed && (a.action || '').trim() === 'Next action');
+  if (toFix.length === 0) { migrationBanner('✓ <strong>Nothing to fix.</strong><br><span style="color:var(--tee-muted);">No rows are showing the generic placeholder.</span>', true); return; }
+  migrationBanner(`⏳ <strong>Fixing generic labels...</strong><br><span style="color:var(--tee-muted);">0 of ${toFix.length}</span>`);
+  let done = 0, failed = 0, skipped = 0;
+  for (let i = 0; i < toFix.length; i += 3) {
+    const batch = toFix.slice(i, i + 3);
+    await Promise.all(batch.map(async a => {
+      const contact = contactMap[a.contactId];
+      const newLabel = contact ? sequenceLabelForStep(contact.step, ownerLiConnected(contact)) : '';
+      if (!newLabel) { skipped++; return; }
+      try {
+        const resp = await airtableFetch(`${ACTIONS_URL}/${a.id}`, {
+          method: 'PATCH',
+          headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fields: { 'Action': newLabel } })
+        });
+        if (resp.ok) { a.action = newLabel; done++; } else { failed++; }
+      } catch(e) { failed++; }
+    }));
+    migrationBanner(`⏳ <strong>Fixing generic labels...</strong><br><span style="color:var(--tee-muted);">${Math.min(i + 3, toFix.length)} of ${toFix.length} — do not close this tab</span>`);
+    if (i + 3 < toFix.length) await teeSleep(350);
+  }
+  updateCounts();
+  if (selectedContact) {
+    const list = document.getElementById('upcoming-actions-list');
+    if (list) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
+  }
+  migrationBanner(failed || skipped
+    ? `⚠️ <strong>Fix finished with some gaps.</strong><br><span style="color:var(--tee-muted);">${done} fixed, ${skipped} skipped (no step data), ${failed} failed — check console.</span>`
+    : `✓ <strong>Labels fixed.</strong><br><span style="color:var(--tee-muted);">${done} action${done === 1 ? '' : 's'} updated.</span>`, true);
 }
 
 function renderSidebar() {
@@ -5295,6 +5343,7 @@ function dashChrome() {
     <div style="font-size:1.2rem;font-weight:600;color:var(--tee-text);">BD performance</div>
     <div style="display:flex;align-items:center;gap:8px;">
       <span onclick="migrateLegacyActions()" title="One-off: creates an Actions row for any contact whose existing next action isn't in the new table yet. Safe to run more than once." style="cursor:pointer;font-size:0.72rem;color:var(--tee-muted);text-decoration:underline;">⚙ Migrate legacy actions</span>
+      <span onclick="fixGenericActionLabels()" title="One-off: rewrites any Actions row still showing the generic 'Next action' placeholder with the correct step label. Safe to run more than once." style="cursor:pointer;font-size:0.72rem;color:var(--tee-muted);text-decoration:underline;">🔧 Fix generic labels</span>
       <div style="display:inline-flex;border:1px solid var(--tee-border);border-radius:8px;overflow:hidden;">${seg('Louisa Daly',dashOwner,'dashSetOwner','Louisa')}${seg('John Daly',dashOwner,'dashSetOwner','John')}${seg('All',dashOwner,'dashSetOwner','All')}</div>
       <div style="display:inline-flex;border:1px solid var(--tee-border);border-radius:8px;overflow:hidden;">${seg('week',dashPeriod,'dashSetPeriod','Week')}${seg('month',dashPeriod,'dashSetPeriod','Month')}${seg('90d',dashPeriod,'dashSetPeriod','90 days')}</div>
     </div>
