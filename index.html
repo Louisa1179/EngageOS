@@ -4197,6 +4197,11 @@ async function confirmSetPosition() {
   }
   selectedContact = allContacts.find(c => c.id === id) || selectedContact;
 
+  // Mirror the same move into the Actions table — completes whatever sequence
+  // action was open (e.g. the one from before this reposition) and opens the
+  // correct one for the new step, so the Upcoming actions list matches.
+  await upsertSequenceAction(id, notesArr[0] || '', due);
+
   try {
     const ints = await fetchInteractions(id);
     renderPanel(selectedContact, ints);
