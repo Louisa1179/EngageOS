@@ -2080,9 +2080,20 @@ function sequenceLabelForStep(step, liConnected) {
 // run more than once in the same session (checks the live cache first) and safe
 // across sessions (the cache reloads from Airtable, so already-migrated contacts
 // are found and skipped).
+function migrationBanner(html, isFinal) {
+  let el = document.getElementById('migration-banner');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'migration-banner';
+    el.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--tee-mid);border:1.5px solid var(--tee-accent);border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,0.18);padding:0.9rem 1.25rem;font-family:\'DM Sans\',sans-serif;font-size:0.85rem;color:var(--tee-text);min-width:320px;text-align:center;';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = html + (isFinal ? `<div onclick="document.getElementById('migration-banner').remove()" style="margin-top:0.6rem;font-size:0.72rem;color:var(--tee-accent);cursor:pointer;text-decoration:underline;">Dismiss</div>` : '');
+}
+
 async function migrateLegacyActions() {
   if (!confirm('Scans every contact for an existing "Next action" and creates a matching row in the new Actions table for any that don\'t already have one there. Safe to run more than once. Continue?')) return;
-  showToast('Migrating legacy actions...', 'success');
+  migrationBanner('⏳ <strong>Migrating actions...</strong><br><span style="color:var(--tee-muted);">Gathering contacts — do not close this tab.</span>');
   await ensureParkedListsLoaded();
   if (!actionsLoaded) await loadActions();
   const merged = allContactsAll.length > 0 ? allContactsAll : [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts, ...uncatContacts];
@@ -2100,7 +2111,8 @@ async function migrateLegacyActions() {
     const label = notesLabel || sequenceLabelForStep(c.step, ownerLiConnected(c)) || 'Next action';
     candidates.push({ id: c.id, label, due: c.nextActionDue, detail: c.nextActionDetail || '' });
   }
-  if (candidates.length === 0) { showToast('Nothing to migrate — every contact with a next action already has one in the Actions table.', 'success'); return; }
+  if (candidates.length === 0) { migrationBanner('✓ <strong>Nothing to migrate.</strong><br><span style="color:var(--tee-muted);">Every contact with a next action already has one in the Actions table.</span>', true); return; }
+  migrationBanner(`⏳ <strong>Migrating actions...</strong><br><span style="color:var(--tee-muted);">0 of ${candidates.length}</span>`);
   let done = 0, failed = 0;
   for (let i = 0; i < candidates.length; i += 3) {
     const batch = candidates.slice(i, i + 3);
@@ -2108,6 +2120,7 @@ async function migrateLegacyActions() {
       const created = await createAction(cand.id, cand.label, cand.due, 'Sequence', cand.detail);
       if (created) done++; else failed++;
     }));
+    migrationBanner(`⏳ <strong>Migrating actions...</strong><br><span style="color:var(--tee-muted);">${Math.min(i + 3, candidates.length)} of ${candidates.length} — do not close this tab</span>`);
     if (i + 3 < candidates.length) await teeSleep(350);
   }
   updateCounts();
@@ -2115,7 +2128,9 @@ async function migrateLegacyActions() {
     const list = document.getElementById('upcoming-actions-list');
     if (list) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
   }
-  showToast(`Migration done — ${done} action${done === 1 ? '' : 's'} created${failed ? `, ${failed} failed (check console)` : ''}`, failed ? 'error' : 'success');
+  migrationBanner(failed
+    ? `⚠️ <strong>Migration finished with problems.</strong><br><span style="color:var(--tee-muted);">${done} action${done === 1 ? '' : 's'} created, ${failed} failed — check the browser console for details.</span>`
+    : `✓ <strong>Migration complete.</strong><br><span style="color:var(--tee-muted);">${done} action${done === 1 ? '' : 's'} created.</span>`, true);
 }
 
 // ONE-OFF REPAIR — the first migration pass fell back to the literal placeholder
