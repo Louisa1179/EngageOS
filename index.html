@@ -2113,14 +2113,19 @@ async function migrateLegacyActions() {
   for (const c of merged) {
     if (seen.has(c.id)) continue;
     seen.add(c.id);
-    if (!c.nextActionDue) continue;
+    // Eligible if there's a due date to carry over, OR they're actively mid-sequence
+    // with no due date at all (a pre-existing data gap — we don't know when it was
+    // really due, so it surfaces as due today rather than being silently dropped).
+    const midSequence = (c.step || 0) > 0 && (c.status === 'Active' || c.status === 'On Hold');
+    if (!c.nextActionDue && !midSequence) continue;
     const already = allActions.some(a => a.contactId === c.id && a.source === 'Sequence' && !a.completed);
     if (already) continue;
     const notesLabel = Array.isArray(c.nextActionNotes) ? c.nextActionNotes.join(', ') : c.nextActionNotes;
     // Notes field is often blank even when a due date is set — fall back to what
     // we actually know (their current sequence step) instead of a placeholder.
     const label = notesLabel || sequenceLabelForStep(c.step, ownerLiConnected(c)) || 'Next action';
-    candidates.push({ id: c.id, label, due: c.nextActionDue, detail: c.nextActionDetail || '' });
+    const due = c.nextActionDue || addDays(0);
+    candidates.push({ id: c.id, label, due, detail: c.nextActionDetail || '' });
   }
   if (candidates.length === 0) { migrationBanner('✓ <strong>Nothing to migrate.</strong><br><span style="color:var(--tee-muted);">Every contact with a next action already has one in the Actions table.</span>', true); return; }
   migrationBanner(`⏳ <strong>Migrating actions...</strong><br><span style="color:var(--tee-muted);">0 of ${candidates.length}</span>`);
