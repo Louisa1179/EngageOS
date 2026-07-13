@@ -1986,15 +1986,26 @@ async function loadActions() {
   try {
     let records = [];
     let offset;
+    let failed = false;
     const formula = encodeURIComponent('NOT({Completed})');
     do {
       const url = `${ACTIONS_URL}?pageSize=100&filterByFormula=${formula}${offset ? '&offset=' + offset : ''}`;
       const resp = await airtableFetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
-      if (!resp.ok) break;
+      if (!resp.ok) {
+        failed = true;
+        console.error('loadActions fetch failed:', resp.status, await resp.text().catch(() => ''));
+        break;
+      }
       const data = await resp.json();
       records = records.concat(data.records || []);
       offset = data.offset;
     } while (offset);
+    if (failed) {
+      // Don't mask a failed fetch as "loaded, just empty" — leave any existing
+      // cache alone and surface it so a broken Actions table doesn't go unnoticed.
+      migrationBanner('⚠️ <strong>Actions table failed to load.</strong><br><span style="color:var(--tee-muted);">Upcoming actions may be missing or stale. Check the field names on the Actions table in Airtable, then refresh.</span>', true);
+      return;
+    }
     allActions = records.map(r => ({
       id: r.id,
       contactId: Array.isArray(r.fields['Contact']) ? r.fields['Contact'][0] : '',
