@@ -5435,6 +5435,13 @@ function dashRenderBody() {
   return dashSection('Activity · ' + periodLabel)
     + dashGrid([dashCard('Total touches', a.total), dashCard('LinkedIn', a.linkedin), dashCard('Emails', a.email), dashCard('Calls / meetings', a.call + a.meeting)], 120)
     + `<div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1rem 1.25rem;margin-top:12px;"><div style="font-size:0.78rem;color:var(--tee-muted);margin-bottom:6px;">Weekly outreach, last 8 weeks</div>${dashTrend(weeks)}</div>`
+    + dashSection('New records added · ' + periodLabel)
+    + (dashAddedByData ? dashGrid([
+        dashCard('New contacts', newC.total, `Louisa ${newC['Louisa Daly']} · John ${newC['John Daly']}`),
+        dashCard('New organisations', newO.total, `Louisa ${newO['Louisa Daly']} · John ${newO['John Daly']}`),
+        dashCard('New candidates', newCand.total, `Louisa ${newCand['Louisa Daly']} · John ${newCand['John Daly']}`)
+      ], 150)
+      : `<div style="font-size:0.8rem;color:var(--tee-muted);padding:0.5rem 0;">Loading…</div>`)
     + dashSection('Engagement')
     + dashGrid([dashCard('Connection acceptance', eng.acceptance + '%', eng.connected + ' of ' + eng.approached + ' approached'), dashCard('Response rate', eng.respRate + '%', eng.responded + ' of ' + eng.contacted + ' contacted'), dashCard('Warm relationships', eng.warm, 'being nurtured')], 150)
     + dashSection('Pipeline health · live snapshot')
@@ -5452,14 +5459,7 @@ function dashRenderBody() {
         <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--tee-border);padding-top:10px;margin-top:8px;font-size:0.8rem;color:${overdue > 0 ? 'var(--overdue)' : 'var(--tee-muted)'};">${overdue > 0 ? '⏰ ' + overdue + ' follow-up' + (overdue !== 1 ? 's' : '') + ' overdue across all stages' : '✓ No overdue follow-ups'}</div>
       </div>`
     + dashSection('Outcomes · all assignments')
-    + dashGrid([dashCard('Live assignments', out.live), dashCard('Placements YTD', out.placedYtd), dashCard('Placed (all time)', out.placed), dashCard('Fees in pipeline', gbp(out.feePipeline), 'sum of open fee amounts')], 120)
-    + dashSection('New records added · ' + periodLabel)
-    + (dashAddedByData ? dashGrid([
-        dashCard('New contacts', newC.total, `Louisa ${newC['Louisa Daly']} · John ${newC['John Daly']}`),
-        dashCard('New organisations', newO.total, `Louisa ${newO['Louisa Daly']} · John ${newO['John Daly']}`),
-        dashCard('New candidates', newCand.total, `Louisa ${newCand['Louisa Daly']} · John ${newCand['John Daly']}`)
-      ], 150)
-      : `<div style="font-size:0.8rem;color:var(--tee-muted);padding:0.5rem 0;">Loading…</div>`);
+    + dashGrid([dashCard('Live assignments', out.live), dashCard('Placements YTD', out.placedYtd), dashCard('Placed (all time)', out.placed), dashCard('Fees in pipeline', gbp(out.feePipeline), 'sum of open fee amounts')], 120);
 }
 
 async function renderDashboard() {
