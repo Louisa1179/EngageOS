@@ -3356,6 +3356,11 @@ function openAddActionModal(actionId) {
   };
   fillOpts();
   if (nextActionOptions.length === 0) loadOrgFieldOptions().then(fillOpts);
+  // Picking from the dropdown clears any leftover custom text (and vice versa)
+  // so the two can never silently disagree about which one wins on save.
+  const customInput = document.getElementById('add-action-custom');
+  if (sel) sel.onchange = () => { if (sel.value && customInput) customInput.value = ''; };
+  if (customInput) customInput.oninput = () => { if (customInput.value && sel) sel.value = ''; };
   document.getElementById('add-action-custom').value = existing && !nextActionOptions.includes(existing.action) && !NEXT_ACTION_FALLBACK.includes(existing.action) ? existing.action : '';
   document.getElementById('add-action-date').value = existing ? (existing.dueDate || '') : '';
   document.getElementById('add-action-detail').value = existing ? (existing.detail || '') : '';
