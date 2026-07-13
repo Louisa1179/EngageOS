@@ -5197,6 +5197,8 @@ async function loadAllContactsFull() {
 let dashPeriod = 'month';      // 'week' | 'month' | '90d'
 let dashOwner = 'All';         // 'Louisa Daly' | 'John Daly' | 'All'
 let dashInteractions = null;   // cached interaction records for the last 90 days
+let dashAddedByData = null;    // cached { contacts, orgs, candidates } creation records
+let dashAddedByLoading = false;
 let dashLoading = false;
 
 function dashPeriodStart(period) {
@@ -5381,6 +5383,47 @@ function dashChrome() {
   </div>`;
 }
 
+// Lightweight fetch of just id/createdTime/Added By across the three tables —
+// used for the "who added what" dashboard cards. Kept separate from the main
+// contact/org/candidate loaders so it doesn't add weight to normal app use.
+async function loadAddedByStats() {
+  if (dashAddedByLoading) return;
+  dashAddedByLoading = true;
+  try {
+    const fetchTable = async (tableName) => {
+      let records = [], offset;
+      do {
+        const url = `https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(tableName)}?pageSize=100&fields[]=Added By${offset ? '&offset=' + offset : ''}`;
+        const resp = await airtableFetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+        if (!resp.ok) return null;
+        const data = await resp.json();
+        records = records.concat(data.records || []);
+        offset = data.offset;
+      } while (offset);
+      return records.map(r => ({ createdTime: r.createdTime, addedBy: r.fields['Added By'] || '' }));
+    };
+    const [contacts, orgs, candidates] = await Promise.all([
+      fetchTable('Clients'), fetchTable('Organisations'), fetchTable('Candidates')
+    ]);
+    dashAddedByData = { contacts: contacts || [], orgs: orgs || [], candidates: candidates || [] };
+  } catch(e) { console.log('loadAddedByStats error:', e); }
+  dashAddedByLoading = false;
+}
+
+function dashAddedByCounts(kind) {
+  const out = { total: 0, 'Louisa Daly': 0, 'John Daly': 0 };
+  if (!dashAddedByData) return out;
+  const since = dashPeriodStart(dashPeriod);
+  (dashAddedByData[kind] || []).forEach(r => {
+    if (!r.createdTime) return;
+    if (r.createdTime.split('T')[0] < since) return;
+    out.total++;
+    if (r.addedBy === 'Louisa Daly') out['Louisa Daly']++;
+    else if (r.addedBy === 'John Daly') out['John Daly']++;
+  });
+  return out;
+}
+
 function dashRenderBody() {
   const a = dashActivity(), eng = dashEngagement(), pipe = dashPipeline(), out = dashOutcomes(), weeks = dashWeeklyTrend();
   const periodLabel = dashPeriod === 'week' ? 'last 7 days' : dashPeriod === '90d' ? 'last 90 days' : 'last 30 days';
@@ -5388,6 +5431,7 @@ function dashRenderBody() {
   const pmax = Math.max(pipe.start.count,pipe.li.count,pipe.e1.count,pipe.e2.count,pipe.e3.count,pipe.lim.count,pipe.call.count,pipe.warm.count,pipe.responded.count,1);
   const today = new Date().toISOString().split('T')[0];
   const overdue = dashPool().filter(c => c.nextActionDue && c.nextActionDue < today && !['Do Not Contact','Do Not Sequence','Unsubscribed'].includes(c.status)).length;
+  const newC = dashAddedByCounts('contacts'), newO = dashAddedByCounts('orgs'), newCand = dashAddedByCounts('candidates');
   return dashSection('Activity · ' + periodLabel)
     + dashGrid([dashCard('Total touches', a.total), dashCard('LinkedIn', a.linkedin), dashCard('Emails', a.email), dashCard('Calls / meetings', a.call + a.meeting)], 120)
     + `<div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1rem 1.25rem;margin-top:12px;"><div style="font-size:0.78rem;color:var(--tee-muted);margin-bottom:6px;">Weekly outreach, last 8 weeks</div>${dashTrend(weeks)}</div>`
@@ -5408,7 +5452,14 @@ function dashRenderBody() {
         <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--tee-border);padding-top:10px;margin-top:8px;font-size:0.8rem;color:${overdue > 0 ? 'var(--overdue)' : 'var(--tee-muted)'};">${overdue > 0 ? '⏰ ' + overdue + ' follow-up' + (overdue !== 1 ? 's' : '') + ' overdue across all stages' : '✓ No overdue follow-ups'}</div>
       </div>`
     + dashSection('Outcomes · all assignments')
-    + dashGrid([dashCard('Live assignments', out.live), dashCard('Placements YTD', out.placedYtd), dashCard('Placed (all time)', out.placed), dashCard('Fees in pipeline', gbp(out.feePipeline), 'sum of open fee amounts')], 120);
+    + dashGrid([dashCard('Live assignments', out.live), dashCard('Placements YTD', out.placedYtd), dashCard('Placed (all time)', out.placed), dashCard('Fees in pipeline', gbp(out.feePipeline), 'sum of open fee amounts')], 120)
+    + dashSection('New records added · ' + periodLabel)
+    + (dashAddedByData ? dashGrid([
+        dashCard('New contacts', newC.total, `Louisa ${newC['Louisa Daly']} · John ${newC['John Daly']}`),
+        dashCard('New organisations', newO.total, `Louisa ${newO['Louisa Daly']} · John ${newO['John Daly']}`),
+        dashCard('New candidates', newCand.total, `Louisa ${newCand['Louisa Daly']} · John ${newCand['John Daly']}`)
+      ], 150)
+      : `<div style="font-size:0.8rem;color:var(--tee-muted);padding:0.5rem 0;">Loading…</div>`);
 }
 
 async function renderDashboard() {
@@ -5421,6 +5472,9 @@ async function renderDashboard() {
     el.innerHTML = '<div style="max-width:1100px;margin:0 auto;">' + dashChrome() + '<div style="padding:3rem;text-align:center;color:var(--tee-muted);">Loading activity…</div></div>';
     await loadDashboardInteractions();
     dashLoading = false;
+  }
+  if (dashAddedByData === null) {
+    loadAddedByStats().then(() => { if (document.getElementById('tab-dashboard')?.classList.contains('active')) renderDashboard(); });
   }
   el.innerHTML = '<div style="max-width:1100px;margin:0 auto;">' + dashChrome() + dashRenderBody() + '</div>';
 }
@@ -6416,6 +6470,7 @@ async function createNewOrg() {
     if (size) fields['Employee Size Range'] = size;
     if (website) fields['Website plain text'] = website;
     if (notes) fields['Notes'] = notes;
+    fields['Added By'] = getOwner();
     const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
@@ -6671,6 +6726,7 @@ async function saveEditContact() {
 
   if (editMode === 'add') {
     if (resolvedOwner) fields['Owner'] = resolvedOwner; // blank = uncategorised, leave unset
+    fields['Added By'] = getOwner();
     if (routing === 'warm') {
       fields['Sequence Status'] = 'Ongoing Programme';
       fields['Sequence Step'] = 0;
@@ -8195,6 +8251,8 @@ async function saveCandidateEdit() {
   const subsectorExpertiseList = [...new Set(candSectorExpertise.map(i => i.subsector))];
   if (sectorExpertiseList.length > 0) fields['Sector Expertise'] = sectorExpertiseList.join(', ');
   if (subsectorExpertiseList.length > 0) fields['Subsector Expertise'] = subsectorExpertiseList.join(', ');
+
+  if (candEditMode !== 'edit') fields['Added By'] = getOwner();
 
   document.getElementById('cand-edit-saving').style.display = 'block';
   try {
