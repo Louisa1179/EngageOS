@@ -2373,7 +2373,14 @@ window.onload = async function() {
     updateToggleUI(getViewUser());
     renderSidebar();
     await loadContacts();
-    loadActions();
+    loadActions().then(() => {
+      // If a contact was opened before this finished, its Upcoming actions
+      // list would have rendered empty — refresh it now that data's in.
+      if (selectedContact) {
+        const list = document.getElementById('upcoming-actions-list');
+        if (list) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
+      }
+    });
     loadAllContactsForCounting();
     ensureParkedListsLoaded();
     loadSelectOptions().then(refreshDynamicSelects);
@@ -3288,6 +3295,9 @@ function restoreSelectedContact() {
 // UPCOMING ACTIONS — chronological list combining the sequence's current step
 // with any bespoke reminders, sourced from the Actions table cache.
 function renderUpcomingActionsHtml(contact) {
+  if (!actionsLoaded) {
+    return `<div style="font-size:0.78rem;color:var(--tee-muted);padding:0.5rem 0;">Loading…</div>`;
+  }
   const rows = getContactActions(contact.id);
   if (rows.length === 0) {
     return `<div style="font-size:0.78rem;color:var(--tee-muted);padding:0.5rem 0;">Nothing scheduled. ${(!contact.step || contact.step === 0) ? 'Start the sequence or add one below.' : 'Add one below if needed.'}</div>`;
