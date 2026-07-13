@@ -846,8 +846,8 @@
 <!-- ADD ACTION MODAL — quick scheduling, no interaction log required -->
 <div class="modal-overlay" id="add-action-modal">
   <div class="modal" style="max-width: 420px;">
-    <div class="modal-title">Add an action</div>
-    <div class="modal-sub">Schedules something on this contact's chronological actions list — doesn't touch the sequence.</div>
+    <div class="modal-title" id="add-action-modal-title">Add an action</div>
+    <div class="modal-sub" id="add-action-modal-sub">Schedules something on this contact's chronological actions list — doesn't touch the sequence.</div>
     <div>
       <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Action</label>
       <select id="add-action-text" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; margin-bottom: 0.5rem; appearance: none;"><option value="">— pick, or type your own below —</option></select>
@@ -858,7 +858,7 @@
       <textarea id="add-action-detail" placeholder="Any extra context..." rows="2" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; resize: none;"></textarea>
     </div>
     <div class="modal-btns">
-      <button class="modal-btn modal-btn-yes" onclick="saveAddAction()">Add action</button>
+      <button class="modal-btn modal-btn-yes" id="add-action-modal-save" onclick="saveAddAction()">Add action</button>
       <button class="modal-btn modal-btn-no" onclick="closeAddActionModal()">Cancel</button>
     </div>
   </div>
@@ -2048,6 +2048,25 @@ async function createAction(contactId, action, dueDate, source, detail) {
     allActions.push(rec);
     return rec;
   } catch(e) { console.error('createAction error:', e); return null; }
+}
+
+// Edits an existing open action in place — e.g. changing "not connected" to
+// "connected" once they accept, or adding a note — without completing it or
+// creating a duplicate row.
+async function updateAction(actionId, action, dueDate, detail) {
+  const fields = { 'Action': action, 'Detail': detail || '' };
+  fields['Due Date'] = dueDate || null;
+  try {
+    const resp = await airtableFetch(`${ACTIONS_URL}/${actionId}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields })
+    });
+    if (!resp.ok) { console.error('updateAction error:', JSON.stringify(await resp.json().catch(() => ({})))); return false; }
+    const idx = allActions.findIndex(a => a.id === actionId);
+    if (idx > -1) allActions[idx] = { ...allActions[idx], action, dueDate: dueDate || '', detail: detail || '' };
+    return true;
+  } catch(e) { console.error('updateAction error:', e); return false; }
 }
 
 async function completeAction(actionId) {
@@ -3278,8 +3297,8 @@ function renderUpcomingActionsHtml(contact) {
     const isSeq = a.source === 'Sequence';
     return `<div style="display:flex;align-items:flex-start;gap:0.6rem;padding:0.55rem 0;border-bottom:1px solid var(--tee-border);">
       <div onclick="completeActionRow('${a.id}','${a.source}')" title="Mark done" style="flex-shrink:0;width:18px;height:18px;margin-top:1px;border-radius:5px;border:1.5px solid var(--tee-border);cursor:pointer;" onmouseover="this.style.borderColor='#10b981';this.style.background='rgba(16,185,129,0.12)'" onmouseout="this.style.borderColor='var(--tee-border)';this.style.background='transparent'"></div>
-      <div style="flex:1;min-width:0;">
-        <div style="font-size:0.82rem;color:var(--tee-text);line-height:1.4;">${a.action}${isSeq ? ' <span style="font-size:0.68rem;color:var(--tee-muted);">· sequence</span>' : ''}</div>
+      <div onclick="openAddActionModal('${a.id}')" style="flex:1;min-width:0;cursor:pointer;" title="Click to edit">
+        <div style="font-size:0.82rem;color:var(--tee-text);line-height:1.4;">${a.action}${isSeq ? ' <span style="font-size:0.68rem;color:var(--tee-muted);">· sequence</span>' : ''} <span style="font-size:0.7rem;color:var(--tee-accent);opacity:0.7;">✎</span></div>
         ${a.detail ? `<div style="font-size:0.74rem;color:var(--tee-muted);margin-top:2px;line-height:1.4;white-space:pre-wrap;">${a.detail.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
       </div>
       <span class="due-pill ${pill.cls}" style="font-size:0.68rem;flex-shrink:0;">${pill.label}</span>
@@ -3305,22 +3324,36 @@ async function completeActionRow(actionId, source) {
   }
 }
 
-function openAddActionModal() {
+// Add-action modal doubles as the edit modal: pass an actionId to prefill and
+// edit that row in place, or call with no argument to add a new one.
+let editingActionId = null;
+
+function openAddActionModal(actionId) {
   if (!selectedContact) return;
+  editingActionId = actionId || null;
+  const editing = !!editingActionId;
+  const existing = editing ? allActions.find(a => a.id === editingActionId) : null;
+  document.getElementById('add-action-modal-title').textContent = editing ? 'Edit action' : 'Add an action';
+  document.getElementById('add-action-modal-sub').textContent = editing
+    ? 'Updates this row in place — the due date stays where it is in the chronological list unless you change it.'
+    : "Schedules something on this contact's chronological actions list — doesn't touch the sequence.";
+  document.getElementById('add-action-modal-save').textContent = editing ? 'Save changes' : 'Add action';
   const sel = document.getElementById('add-action-text');
   const fillOpts = () => {
     const opts = nextActionOptions.length > 0 ? nextActionOptions : NEXT_ACTION_FALLBACK;
     if (sel) sel.innerHTML = '<option value="">— pick, or type your own below —</option>' + opts.map(o => `<option value="${o.replace(/"/g,'&quot;')}">${o}</option>`).join('');
+    if (sel && existing) sel.value = opts.includes(existing.action) ? existing.action : '';
   };
   fillOpts();
   if (nextActionOptions.length === 0) loadOrgFieldOptions().then(fillOpts);
-  document.getElementById('add-action-custom').value = '';
-  document.getElementById('add-action-date').value = '';
-  document.getElementById('add-action-detail').value = '';
+  document.getElementById('add-action-custom').value = existing && !nextActionOptions.includes(existing.action) && !NEXT_ACTION_FALLBACK.includes(existing.action) ? existing.action : '';
+  document.getElementById('add-action-date').value = existing ? (existing.dueDate || '') : '';
+  document.getElementById('add-action-detail').value = existing ? (existing.detail || '') : '';
   document.getElementById('add-action-modal').classList.add('show');
 }
 
 function closeAddActionModal() {
+  editingActionId = null;
   document.getElementById('add-action-modal').classList.remove('show');
 }
 
@@ -3333,14 +3366,17 @@ async function saveAddAction() {
   const detail = (document.getElementById('add-action-detail')?.value || '').trim();
   if (!label) { showToast('Add a short description of the action', 'error'); return; }
   if (!dueDate) { showToast('Pick a due date', 'error'); return; }
-  const created = await createAction(selectedContact.id, label, dueDate, 'Manual', detail);
-  if (!created) { showToast('Could not save that action — check the console', 'error'); return; }
+  const ok = editingActionId
+    ? await updateAction(editingActionId, label, dueDate, detail)
+    : await createAction(selectedContact.id, label, dueDate, 'Manual', detail);
+  if (!ok) { showToast('Could not save that action — check the console', 'error'); return; }
+  const wasEditing = !!editingActionId;
   closeAddActionModal();
   const list = document.getElementById('upcoming-actions-list');
   if (list) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
   updateCounts();
   renderView();
-  showToast('Action added ✓', 'success');
+  showToast(wasEditing ? 'Action updated ✓' : 'Action added ✓', 'success');
 }
 
 function renderPanel(contact, interactions) {
