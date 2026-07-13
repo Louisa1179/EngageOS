@@ -4052,6 +4052,7 @@ async function clearReminder() {
 // TOGGLE LINKEDIN CONNECTED
 async function toggleLiConnected(who = 'louisa') {
   if (!selectedContact) return;
+  const contactId = selectedContact.id;
   const field = who === 'john' ? 'LinkedIn Connected John' : 'LinkedIn Connected';
   const current = who === 'john' ? selectedContact.liConnectedJohn : selectedContact.liConnected;
   const newValue = !current;
@@ -4065,7 +4066,33 @@ async function toggleLiConnected(who = 'louisa') {
     showToast('Marked connected — Email 1 due in 3 days ✓', 'success');
     await upsertSequenceAction(selectedContact.id, 'Send Email 1 - connected', addDays(3));
   }
-  await updateContact(selectedContact.id, fields);
+  await updateContact(contactId, fields);
+  // Log the connection so there's a dated record of when it happened — only on
+  // the ON transition, not when correcting a mistaken tick.
+  if (newValue) {
+    try {
+      const who_name = who === 'john' ? 'John' : 'Louisa';
+      const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: {
+          'Interaction Subject': `Connected on LinkedIn (${who_name})`,
+          'Type': 'LinkedIn',
+          'Date': new Date().toISOString().split('T')[0],
+          'Related Contact': [contactId],
+          'Logged by': getOwner()
+        }})
+      });
+      const intData = await intResp.json();
+      if (intResp.ok && intData.id) {
+        linkInteractionLocally(contactId, intData.id);
+        const ints = await fetchInteractions(contactId);
+        renderPanel(selectedContact, ints);
+      } else if (!intResp.ok) {
+        console.error('LI connected interaction log error:', JSON.stringify(intData));
+      }
+    } catch(e) { console.log('LI connected interaction log error:', e); }
+  }
 }
 
 // TOGGLE INTERACTION NOTES EXPAND/COLLAPSE
