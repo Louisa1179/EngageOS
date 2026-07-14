@@ -3281,6 +3281,7 @@ async function selectContact(id) {
     || dnsContacts.find(c => c.id === id)
     || unsubContacts.find(c => c.id === id)
     || uncatContacts.find(c => c.id === id)
+    || allContactsAll.find(c => c.id === id)
     || null;
   localStorage.setItem('tee_selected_contact', id);
   document.querySelectorAll('.contact-card').forEach(el => el.classList.remove('selected'));
@@ -6179,7 +6180,11 @@ function handleSearch(query) {
   const resultsEl = document.getElementById('search-results');
   if (!query || query.length < 2) { resultsEl.style.display = 'none'; return; }
   const q = query.toLowerCase();
-  const matches = allContacts.filter(c =>
+  // Search the full cross-owner, all-status book (allContactsAll) so results are
+  // never limited by the Louisa/John/All toggle or by parked status. Falls back
+  // to the owner-scoped list only in the brief window before it's finished loading.
+  const source = (allContactsAll && allContactsAll.length) ? allContactsAll : allContacts;
+  const matches = source.filter(c =>
     c.name.toLowerCase().includes(q) || (c.orgName && c.orgName.toLowerCase().includes(q)) || (c.role && c.role.toLowerCase().includes(q))
   ).slice(0, 8);
   if (matches.length === 0) {
@@ -6187,17 +6192,21 @@ function handleSearch(query) {
     resultsEl.style.display = 'block'; return;
   }
   const stepNames = ['','LI request','Email 1','Email 2','Email 3','LI message','Follow-up call'];
+  const parkedLabels = { 'Do Not Contact': 'Do not contact', 'Do Not Sequence': 'Do not sequence', 'Unsubscribed': 'Unsubscribed' };
   resultsEl.innerHTML = matches.map(c => {
     const initials = c.name.split(' ').map(n=>n[0]).join('').slice(0,2).toUpperCase();
     const colors = ['#e8c547','#4ecdc4','#a78bfa','#ff6b6b','#74b9ff'];
     const color = colors[c.name.charCodeAt(0) % colors.length];
+    const parked = parkedLabels[c.status];
+    const tagLabel = parked || stepNames[c.step] || '';
+    const tagStyle = parked ? 'background:#fee2e2;color:#b91c1c;' : 'background:var(--tee-card);color:var(--tee-muted);';
     return `<div onclick="selectFromSearch('${c.id}')" style="display:flex;align-items:center;gap:0.75rem;padding:0.75rem 1.25rem;cursor:pointer;border-bottom:1px solid var(--tee-border);" onmouseover="this.style.background='var(--tee-hover)'" onmouseout="this.style.background='transparent'">
       <div style="width:32px;height:32px;border-radius:50%;background:${color}22;color:${color};display:flex;align-items:center;justify-content:center;font-size:0.72rem;font-weight:500;flex-shrink:0;">${initials}</div>
       <div style="flex:1;min-width:0;">
         <div style="font-size:0.85rem;font-weight:500;color:var(--tee-text);">${c.name}</div>
         <div style="font-size:0.75rem;color:var(--tee-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${c.role}${c.orgName ? ' · ' + c.orgName : ''}</div>
       </div>
-      ${stepNames[c.step] ? `<span style="font-size:0.7rem;padding:2px 7px;border-radius:20px;background:var(--tee-card);color:var(--tee-muted);flex-shrink:0;">${stepNames[c.step]}</span>` : ''}
+      ${tagLabel ? `<span style="font-size:0.7rem;padding:2px 7px;border-radius:20px;${tagStyle}flex-shrink:0;">${tagLabel}</span>` : ''}
     </div>`;
   }).join('');
   resultsEl.style.display = 'block';
@@ -6205,10 +6214,19 @@ function handleSearch(query) {
 
 function selectFromSearch(id) {
   closeSearch();
-  const contact = allContacts.find(c => c.id === id);
+  const contact = (allContactsAll.find(c => c.id === id)) || allContacts.find(c => c.id === id);
   if (!contact) return;
-  const stepViews = ['not-started','li-connect','email-1','email-2','email-3','li-message','follow-up'];
-  const view = stepViews[contact.step] || 'not-started';
+  // Route to the right list view based on status/step. We deliberately don't touch
+  // the Louisa/John/All toggle here — the contact panel opens as-is regardless of
+  // whose desk it's on.
+  let view;
+  if (contact.status === 'Do Not Contact') view = 'do-not-contact';
+  else if (contact.status === 'Do Not Sequence') view = 'do-not-sequence';
+  else if (contact.status === 'Unsubscribed') view = 'unsubscribed';
+  else {
+    const stepViews = ['not-started','li-connect','email-1','email-2','email-3','li-message','follow-up'];
+    view = stepViews[contact.step] || 'not-started';
+  }
   switchView(view);
   setTimeout(() => selectContact(id), 100);
 }
