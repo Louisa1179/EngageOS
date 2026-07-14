@@ -8497,7 +8497,7 @@ async function saveCandReminder() {
   document.getElementById('cand-reminder-saving').style.display = 'block';
   const by = candActionUser();
   try {
-    const r1 = await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': date, 'Next action by': by } }) });
+    const r1 = await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': date } }) });
     if (!r1.ok) { const e = await r1.json(); throw new Error(e.error?.message || 'Save failed'); }
     // Next action notes saved separately, matching saveCandidateLog
     await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action notes': note } }) });
@@ -8554,7 +8554,7 @@ async function saveCandidateLog() {
     // Save reminder date and next action notes
     if (setReminder && reminderDate) {
       // Save date and owner first
-      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': reminderDate, 'Next action by': loggedBy } }) });
+      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': reminderDate } }) });
       // Save next action notes separately (multiple select field)
       if (nextActionNotes) {
         await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action notes': nextActionNotes } }) });
