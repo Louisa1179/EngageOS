@@ -6898,7 +6898,7 @@ async function saveEditContact() {
       const idx = allContacts.findIndex(c => c.id === selectedContact.id);
       const prevOrgName = idx > -1 ? allContacts[idx].orgName : (selectedContact.orgName || '');
       const newOrgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || prevOrgName || '') : '';
-      const localPatch = { name: fullName, firstName, role, email, phone, linkedin, contactLevel, tier, org: orgId, orgName: newOrgName, specialism: specialisms.join(', '), owner: (ownerPick || ''), previousEmployerIds: contactPrevEmpIds, previousEmployerNames: contactPrevEmpSelected.map(e => e.name) };
+      const localPatch = { name: fullName, firstName, role, email, personalEmail, phone, linkedin, contactLevel, tier, org: orgId, orgName: newOrgName, specialism: specialisms.join(', '), owner: (ownerPick || ''), previousEmployerIds: contactPrevEmpIds, previousEmployerNames: contactPrevEmpSelected.map(e => e.name) };
       if (idx > -1) {
         allContacts[idx] = { ...allContacts[idx], ...localPatch };
         selectedContact = allContacts[idx];
@@ -6931,7 +6931,7 @@ async function saveEditContact() {
       // Add to local list
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || '') : '';
       const newContact = {
-        id: data.id, name: fullName, firstName, role, email, phone, linkedin,
+        id: data.id, name: fullName, firstName, role, email, personalEmail, phone, linkedin,
         contactLevel, tier, org: orgId, orgName,
         owner: resolvedOwner,
         step: routing === 'sequence' ? 1 : 0,
