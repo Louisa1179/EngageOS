@@ -1111,8 +1111,13 @@
     </div>
 
     <div class="edit-field-group">
-      <label class="edit-label">Email</label>
+      <label class="edit-label">Work Email</label>
       <input type="email" class="edit-input" id="ef-email" placeholder="email@organisation.com" />
+    </div>
+
+    <div class="edit-field-group">
+      <label class="edit-label">Personal Email</label>
+      <input type="email" class="edit-input" id="ef-personal-email" placeholder="personal@email.com" />
     </div>
 
     <div class="edit-row">
@@ -2438,6 +2443,7 @@ async function loadContacts() {
       orgName: '',
       role: getField(r, 'Role / Title'),
       email: getField(r, 'Email'),
+      personalEmail: getField(r, 'Personal Email'),
       phone: getField(r, 'Phone') || getField(r, 'Mobile'),
       linkedin: getField(r, 'LinkedIn'),
       tier: String(getField(r, 'Tier')),
@@ -2831,6 +2837,7 @@ async function loadDncContacts() {
       orgName: '',
       role: getField(r, 'Role / Title'),
       email: getField(r, 'Email'),
+      personalEmail: getField(r, 'Personal Email'),
       phone: getField(r, 'Phone') || getField(r, 'Mobile'),
       linkedin: getField(r, 'LinkedIn'),
       tier: String(getField(r, 'Tier')),
@@ -2896,6 +2903,7 @@ async function loadUncatContacts() {
       orgName: '',
       role: getField(r, 'Role / Title'),
       email: getField(r, 'Email'),
+      personalEmail: getField(r, 'Personal Email'),
       phone: getField(r, 'Phone') || getField(r, 'Mobile'),
       linkedin: getField(r, 'LinkedIn'),
       tier: String(getField(r, 'Tier')),
@@ -2958,7 +2966,7 @@ async function loadDnsContacts() {
     dnsContacts = records.map(r => ({
       id: r.id, name: gf(r, 'Full Name'),
       org: r.fields['Organisation'] ? (Array.isArray(r.fields['Organisation']) ? r.fields['Organisation'][0] : r.fields['Organisation']) : '',
-      orgName: '', role: gf(r, 'Role / Title'), email: gf(r, 'Email'),
+      orgName: '', role: gf(r, 'Role / Title'), email: gf(r, 'Email'), personalEmail: gf(r, 'Personal Email'),
       phone: gf(r, 'Phone') || gf(r, 'Mobile'), linkedin: gf(r, 'LinkedIn'),
       tier: String(gf(r, 'Tier')), step: parseInt(gf(r, 'Sequence Step', 0)) || 0,
       interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
@@ -3011,7 +3019,7 @@ async function loadUnsubContacts() {
     unsubContacts = records.map(r => ({
       id: r.id, name: gf(r, 'Full Name'),
       org: r.fields['Organisation'] ? (Array.isArray(r.fields['Organisation']) ? r.fields['Organisation'][0] : r.fields['Organisation']) : '',
-      orgName: '', role: gf(r, 'Role / Title'), email: gf(r, 'Email'),
+      orgName: '', role: gf(r, 'Role / Title'), email: gf(r, 'Email'), personalEmail: gf(r, 'Personal Email'),
       phone: gf(r, 'Phone') || gf(r, 'Mobile'), linkedin: gf(r, 'LinkedIn'),
       tier: String(gf(r, 'Tier')), step: parseInt(gf(r, 'Sequence Step', 0)) || 0,
       interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
@@ -3491,14 +3499,15 @@ function renderPanel(contact, interactions) {
       </div>
       <div class="panel-section">
         <div class="panel-section-label">Contact details</div>
-        <div class="field-row"><span class="field-key">Email</span><span class="field-val">${contact.email ? `<a href="mailto:${contact.email}">${contact.email}</a>` : '—'}</span></div>
+        <div class="field-row"><span class="field-key">Work Email</span><span class="field-val">${contact.email ? `<a href="mailto:${contact.email}">${contact.email}</a>` : '—'}</span></div>
+        ${contact.personalEmail ? `<div class="field-row"><span class="field-key">Personal Email</span><span class="field-val"><a href="mailto:${contact.personalEmail}">${contact.personalEmail}</a></span></div>` : ''}
         <div class="field-row"><span class="field-key">Phone</span><span class="field-val">${contact.phone || '—'}</span></div>
         <div class="field-row"><span class="field-key">LinkedIn</span><span class="field-val">${contact.linkedin ? `<a href="${contact.linkedin}" target="_blank">View profile</a>` : '—'}</span></div>
         <div class="field-row"><span class="field-key">Specialism</span><span class="field-val">${contact.specialism || '—'}</span></div>
         <div class="field-row"><span class="field-key">Level</span><span class="field-val">${contact.contactLevel || '—'}</span></div>
         <div class="field-row"><span class="field-key">Relationship</span><span class="field-val">${formatRelationship(contact.relationshipStatus)}</span></div>
       </div>
-      ${contact.notes ? `<div class="panel-section"><div class="panel-section-label">Notes</div><div style="font-size: 0.78rem; color: var(--tee-muted); line-height: 1.7;">${contact.notes}</div></div>` : ''}
+      ${contact.notes ? `<div class="panel-section"><div class="panel-section-label">Notes</div><div style="font-size: 0.78rem; color: var(--tee-muted); line-height: 1.7; white-space: pre-wrap;">${contact.notes}</div></div>` : ''}
       <div class="panel-section">
         <div class="panel-section-label">Interaction history</div>
         ${interactions === undefined || interactions === null ? 
@@ -4972,12 +4981,21 @@ function looksLikeDuplicate(aName, bName, useBase){
   if (shared.length >= 2 && shared.length / Math.max(ta.length, tb.length, 1) >= 0.5) return true;
   return false;
 }
-function findContactDuplicates(name, email){
+function findContactDuplicates(name, email, personalEmail){
   const e = (email||'').toLowerCase().trim();
+  const pe = (personalEmail||'').toLowerCase().trim();
   // Search the full cross-owner book so a contact the other person owns is still
   // caught. Falls back to the loaded view if the full book isn't ready yet.
   const pool = allContactsAll.length > 0 ? allContactsAll : allContacts;
-  return pool.filter(c => looksLikeDuplicate(name, c.name, false) || (e && c.email && e === c.email.toLowerCase().trim())).slice(0,5);
+  return pool.filter(c => {
+    const cEmail = c.email ? c.email.toLowerCase().trim() : '';
+    const cPersonalEmail = c.personalEmail ? c.personalEmail.toLowerCase().trim() : '';
+    return looksLikeDuplicate(name, c.name, false)
+      || (e && cEmail && e === cEmail)
+      || (e && cPersonalEmail && e === cPersonalEmail)
+      || (pe && cEmail && pe === cEmail)
+      || (pe && cPersonalEmail && pe === cPersonalEmail);
+  }).slice(0,5);
 }
 function findOrgDuplicates(name){
   return allOrgs.filter(o => looksLikeDuplicate(name, o.name, true)).slice(0,5);
@@ -5008,8 +5026,9 @@ function checkContactDupInline() {
   const fn = (document.getElementById('ef-firstname')?.value || '').trim();
   const ln = (document.getElementById('ef-lastname')?.value || '').trim();
   const email = (document.getElementById('ef-email')?.value || '').trim();
+  const personalEmail = (document.getElementById('ef-personal-email')?.value || '').trim();
   const full = (editMode === 'add') ? [fn, ln].filter(Boolean).join(' ') : '';
-  const matches = full.length >= 3 ? findContactDuplicates(full, email) : [];
+  const matches = full.length >= 3 ? findContactDuplicates(full, email, personalEmail) : [];
   _renderDupWarn(document.getElementById('ef-lastname'), 'contact-dup-warn', matches, 'contact', c => c.name + (c.orgName ? ' (' + c.orgName + ')' : ''));
 }
 
@@ -5243,6 +5262,7 @@ async function loadAllContactsFull() {
       orgName: '',
       role: getField(r, 'Role / Title'),
       email: getField(r, 'Email'),
+      personalEmail: getField(r, 'Personal Email'),
       phone: getField(r, 'Phone') || getField(r, 'Mobile'),
       linkedin: getField(r, 'LinkedIn'),
       tier: String(getField(r, 'Tier')),
@@ -6586,6 +6606,7 @@ function openEditModal() {
   document.getElementById('ef-lastname').value = nameParts.slice(1).join(' ') || '';
   document.getElementById('ef-role').value = c.role || '';
   document.getElementById('ef-email').value = c.email || '';
+  document.getElementById('ef-personal-email').value = c.personalEmail || '';
   document.getElementById('ef-phone').value = c.phone || '';
   document.getElementById('ef-mobile').value = '';
   document.getElementById('ef-linkedin').value = c.linkedin || '';
@@ -6701,6 +6722,7 @@ function openAddContactModal() {
   document.getElementById('ef-lastname').value = '';
   document.getElementById('ef-role').value = '';
   document.getElementById('ef-email').value = '';
+  document.getElementById('ef-personal-email').value = '';
   document.getElementById('ef-phone').value = '';
   document.getElementById('ef-mobile').value = '';
   document.getElementById('ef-linkedin').value = '';
@@ -6765,6 +6787,7 @@ async function saveEditContact() {
   const lastName = document.getElementById('ef-lastname').value.trim();
   const role = document.getElementById('ef-role').value.trim();
   const email = document.getElementById('ef-email').value.trim();
+  const personalEmail = document.getElementById('ef-personal-email').value.trim();
   const phone = document.getElementById('ef-phone').value.trim();
   const mobile = document.getElementById('ef-mobile').value.trim();
   const linkedin = document.getElementById('ef-linkedin').value.trim();
@@ -6794,6 +6817,7 @@ async function saveEditContact() {
     'Role / Title': role,
   };
   if (email) fields['Email'] = email;
+  if (personalEmail) fields['Personal Email'] = personalEmail;
   if (phone) fields['Phone'] = phone;
   if (mobile) fields['Mobile'] = mobile;
   if (linkedin) fields['LinkedIn'] = linkedin;
@@ -7879,8 +7903,8 @@ function renderCandPanel(c, interactions) {
       ${c.salary ? `<div class="field-row"><span class="field-key">Salary / rate</span><span class="field-val">${c.salary}</span></div>` : ''}
     </div>
 
-    ${c.summary ? `<div class="panel-section"><div class="panel-section-label">Background</div><div style="font-size:0.78rem;color:var(--tee-muted);line-height:1.7;">${c.summary}</div></div>` : ''}
-    ${c.lastThreeCompanies ? `<div class="panel-section"><div class="panel-section-label">Last three companies</div><div style="font-size:0.78rem;color:var(--tee-muted);line-height:1.7;">${c.lastThreeCompanies}</div></div>` : ''}
+    ${c.summary ? `<div class="panel-section"><div class="panel-section-label">Background</div><div style="font-size:0.78rem;color:var(--tee-muted);line-height:1.7;white-space:pre-wrap;">${c.summary}</div></div>` : ''}
+    ${c.lastThreeCompanies ? `<div class="panel-section"><div class="panel-section-label">Last three companies</div><div style="font-size:0.78rem;color:var(--tee-muted);line-height:1.7;white-space:pre-wrap;">${c.lastThreeCompanies}</div></div>` : ''}
     ${c.previousEmployerNames && c.previousEmployerNames.length > 0 ? `<div class="panel-section"><div class="panel-section-label">Previous employers</div><div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.25rem;">${c.previousEmployerNames.map(n => `<span style="font-size:0.75rem;padding:2px 10px;border-radius:10px;background:rgba(53,150,194,0.08);color:var(--tee-accent);border:1px solid rgba(53,150,194,0.2);">${n}</span>`).join('')}</div></div>` : ''}
 
     <div class="panel-section">
