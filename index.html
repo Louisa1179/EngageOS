@@ -3078,14 +3078,14 @@ function specInCohort(contact, cohort) {
   if (cohort === 'ceo') return isCeoContact(contact);
   if (cohort === 'resources') return specs.includes('Director of Resources');
   if (cohort === 'operations') return specs.includes('Operations');
-  if (cohort === 'transformation') return specs.includes('Transformation & Change');
+  if (cohort === 'transformation') return specs.includes('Transformation & Change') || specs.includes('Strategic');
   if (cohort === 'hr') return specs.some(s => SPEC_HR.includes(s));
   if (cohort === 'governance') return specs.some(s => SPEC_GOV.includes(s));
   return false;
 }
 
 // TOPIC SPLIT: who owns a contact based on specialism + level.
-// John: HR, Transformation & Change, Director of Resources.
+// John: HR, Transformation & Change / Strategic, Director of Resources.
 // Louisa: Governance & Compliance, CEO, Operations.
 // Dual-topic or no qualifying topic returns '' (uncategorised — left for manual sort).
 function ownerFromSpecialism(contact) {
