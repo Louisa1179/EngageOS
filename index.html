@@ -2319,7 +2319,11 @@ function selectUser(name) {
 }
 
 function switchUser(name) {
-  if (name !== 'All') localStorage.setItem('tee_owner', name);
+  // Note: this toggle only changes which desk you're viewing. It must never touch
+  // 'tee_owner' — that's the fixed identity (set once at setup) used to attribute
+  // new contacts/orgs/candidates via 'Added By'. Bug fixed 15/07/2026: this used to
+  // overwrite tee_owner too, so viewing the other person's desk and adding a record
+  // before switching back silently credited it to the wrong person.
   localStorage.setItem('tee_view_user', name);
   updateToggleUI(name);
   renderSidebar();
@@ -5062,6 +5066,7 @@ async function saveOrgEdit() {
     if (website) fields['Website plain text'] = website;
     fields['Notes'] = notes;
     if (orgEditMode === 'add') {
+      fields['Added By'] = getOwner();
       const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Organisations`, {
         method: 'POST', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ fields })
