@@ -2467,7 +2467,8 @@ async function loadContacts() {
       dncReason: getField(r, 'Status Reason'), owner: getField(r, 'Owner'),
       candidateRecordId: Array.isArray(r.fields['Candidate Record']) ? r.fields['Candidate Record'][0] : (r.fields['Candidate Record'] || ''),
       previousEmployerIds: Array.isArray(r.fields['Previous Employers']) ? r.fields['Previous Employers'] : [],
-      previousEmployerNames: []
+      previousEmployerNames: [],
+      alertNote: getField(r, 'Alert Note')
     }));
 
     // Populate unfiltered copy for org counts - only if not already loaded by loadAllContactsForCounting
@@ -2796,10 +2797,11 @@ function switchJohnView(bucket) {
       const nan = Array.isArray(c.nextActionNotes) ? c.nextActionNotes.join(', ') : (c.nextActionNotes || '');
       const due = duePill(c.nextActionDue);
       const ownerBadge = getViewUser() === 'All' && c.owner ? `<span style="font-size:0.65rem;padding:1px 6px;border-radius:8px;background:rgba(53,150,194,0.1);color:var(--tee-accent);margin-bottom:2px;">${c.owner.split(' ')[0]}</span>` : '';
+      const alertBadge = c.alertNote ? `<span title="Alert set — see contact card" style="font-size:0.8rem;line-height:1;">⚠️</span>` : '';
       return `<div class="contact-card${selectedContact?.id === c.id ? ' selected' : ''}" onclick="selectContact('${c.id}')">
         <div class="contact-avatar" style="background:${avatarColors[colorIdx]}22;color:${avatarColors[colorIdx]};">${initials}</div>
         <div class="contact-info">
-          <div class="contact-name">${c.name}</div>
+          <div class="contact-name">${c.name}${alertBadge ? ' ' + alertBadge : ''}</div>
           <div class="contact-meta">${c.role}</div>
           ${c.orgName ? `<div class="contact-meta" style="color:var(--tee-accent);opacity:0.8;">${c.orgName}</div>` : ''}
         </div>
@@ -2856,7 +2858,8 @@ async function loadDncContacts() {
       notes: getField(r, 'Notes'),
       followUpDate: getField(r, 'Follow-up Date'),
       nextSendDate: getField(r, 'Next Send Date'),
-      dncReason: getField(r, 'Status Reason'), owner: getField(r, 'Owner')
+      dncReason: getField(r, 'Status Reason'), owner: getField(r, 'Owner'),
+      alertNote: getField(r, 'Alert Note')
     }));
     // Resolve org names
     const orgIds = [...new Set(dncContacts.map(c => c.org).filter(id => id && id.startsWith('rec')))];
@@ -2924,7 +2927,8 @@ async function loadUncatContacts() {
       followUpDate: getField(r, 'Follow-up Date'),
       nextSendDate: getField(r, 'Next Send Date'),
       dncReason: getField(r, 'Status Reason'),
-      owner: getField(r, 'Owner')
+      owner: getField(r, 'Owner'),
+      alertNote: getField(r, 'Alert Note')
     }));
     // Resolve org names
     const orgIds = [...new Set(uncatContacts.map(c => c.org).filter(id => id && id.startsWith('rec')))];
@@ -2977,7 +2981,8 @@ async function loadDnsContacts() {
       liConnected: r.fields['LinkedIn Connected'] || false, liConnectedJohn: r.fields['LinkedIn Connected John'] || false, status: 'Do Not Sequence',
       nextActionNotes: gf(r, 'Next Action Notes'), nextActionDue: gf(r, 'Next Action Due'),
       relationshipStatus: r.fields['Relationship Status'] || '', contactLevel: gf(r, 'Contact Level'),
-      followUpDate: gf(r, 'Follow-up Date'), dncReason: '', owner: gf(r, 'Owner')
+      followUpDate: gf(r, 'Follow-up Date'), dncReason: '', owner: gf(r, 'Owner'),
+      alertNote: gf(r, 'Alert Note')
     }));
     // Resolve org names
     const orgIds = [...new Set(dnsContacts.map(c => c.org).filter(id => id && id.startsWith('rec')))];
@@ -3030,7 +3035,8 @@ async function loadUnsubContacts() {
       liConnected: r.fields['LinkedIn Connected'] || false, liConnectedJohn: r.fields['LinkedIn Connected John'] || false, status: 'Unsubscribed',
       nextActionNotes: gf(r, 'Next Action Notes'), nextActionDue: gf(r, 'Next Action Due'),
       relationshipStatus: r.fields['Relationship Status'] || '', contactLevel: gf(r, 'Contact Level'),
-      followUpDate: gf(r, 'Follow-up Date'), dncReason: '', owner: gf(r, 'Owner')
+      followUpDate: gf(r, 'Follow-up Date'), dncReason: '', owner: gf(r, 'Owner'),
+      alertNote: gf(r, 'Alert Note')
     }));
     const orgIds = [...new Set(unsubContacts.map(c => c.org).filter(id => id && id.startsWith('rec')))];
     if (orgIds.length > 0) {
@@ -3279,6 +3285,7 @@ function renderView() {
 
 // SELECT CONTACT
 async function selectContact(id) {
+  alertNoteEditing = false;
   // Search across all contact arrays
   selectedContact = allContacts.find(c => c.id === id)
     || dncContacts.find(c => c.id === id)
@@ -3454,6 +3461,7 @@ function renderPanel(contact, interactions) {
       <div class="panel-name">${contact.name}</div>
       <div class="panel-role">${contact.role}${contact.orgName ? ' · ' + (contact.org ? `<span onclick="jumpToOrg('${contact.org}')" style="cursor:pointer;text-decoration:underline;text-decoration-style:dotted;" title="View ${contact.orgName.replace(/"/g,'&quot;')}">${contact.orgName}</span>` : contact.orgName) : ''}</div>
       <div class="panel-badges">${tierLabel}${liTag}<span class="due-pill ${due.cls}" style="font-size:0.72rem;">${due.label}</span></div>
+      <div class="contact-alert-note" style="margin-top:0.75rem;"></div>
       <div class="contact-ned-roles" style="margin-top:0.75rem;"></div>
       ${contact.previousEmployerNames && contact.previousEmployerNames.length > 0 ? `<div style="background:rgba(53,150,194,0.08);border:1.5px solid rgba(53,150,194,0.3);border-radius:12px;padding:0.7rem 1rem;margin-top:0.75rem;">
         <div style="font-size:0.72rem;font-weight:700;color:var(--tee-accent);text-transform:uppercase;letter-spacing:0.08em;display:flex;align-items:center;gap:0.4rem;margin-bottom:0.5rem;">🕒 Previously at</div>
@@ -3545,6 +3553,7 @@ function renderPanel(contact, interactions) {
   }
   renderContactInterviewImprint(contact);
   renderContactNedRoles(contact);
+  renderContactAlertNote(contact);
 }
 
 // HANDLE MARK DONE
@@ -5283,7 +5292,8 @@ async function loadAllContactsFull() {
       contactLevel: getField(r, 'Contact Level'),
       previousEmployerIds: Array.isArray(r.fields['Previous Employers']) ? r.fields['Previous Employers'] : [],
       dncReason: getField(r, 'Status Reason'),
-      owner: getField(r, 'Owner')
+      owner: getField(r, 'Owner'),
+      alertNote: getField(r, 'Alert Note')
     }));
     // Resolve org names from already-loaded orgs where possible
     if (allOrgs && allOrgs.length) {
@@ -9534,6 +9544,86 @@ function nedLinksForOrg(orgId) { return allNedLinksCache.filter(l => l.orgId ===
 // Editable "Board / NED roles" section — sits at the top of the contact panel,
 // styled to stand out (distinct purple accent) so it's never missed, and always
 // renders (even with zero roles) so the add action is never hidden away.
+// ALERT NOTE — a manual heads-up flag on the contact (e.g. "Council CEO, not
+// purely housing — tailor tone"). Shows as a ⚠️ badge on the mini card, and as
+// an amber callout on the main card, above the Board/NED block.
+let alertNoteEditing = false;
+
+function renderContactAlertNote(contact) {
+  const slots = document.querySelectorAll('.contact-alert-note');
+  if (!slots.length || !contact) return;
+  const esc = (s) => String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let html;
+  if (alertNoteEditing) {
+    html = `<div style="background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.4);border-radius:12px;padding:0.7rem 1rem;">
+      <div style="font-size:0.68rem;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:6px;display:flex;align-items:center;gap:0.4rem;">⚠️ Alert</div>
+      <textarea id="alert-note-input" rows="3" style="width:100%;border:1px solid rgba(245,158,11,0.4);border-radius:8px;padding:0.5rem;font-family:'DM Sans',sans-serif;font-size:0.82rem;resize:vertical;background:rgba(255,255,255,0.8);color:var(--tee-text);" placeholder="e.g. Council CEO — tailor tone, not purely housing-focused">${esc(contact.alertNote)}</textarea>
+      <div style="display:flex;gap:0.5rem;margin-top:0.5rem;align-items:center;">
+        <div onclick="saveAlertNote()" style="font-size:0.72rem;padding:4px 12px;border-radius:8px;background:#f59e0b;color:#fff;cursor:pointer;font-weight:600;">Save</div>
+        <div onclick="cancelEditAlertNote()" style="font-size:0.72rem;padding:4px 12px;border-radius:8px;background:rgba(0,0,0,0.06);color:var(--tee-muted);cursor:pointer;">Cancel</div>
+        ${contact.alertNote ? `<div onclick="deleteAlertNote()" style="font-size:0.72rem;padding:4px 12px;border-radius:8px;background:rgba(220,38,38,0.08);color:#dc2626;cursor:pointer;margin-left:auto;">Remove</div>` : ''}
+      </div>
+    </div>`;
+  } else if (contact.alertNote) {
+    html = `<div onclick="startEditAlertNote()" title="Click to edit" style="background:rgba(245,158,11,0.1);border:1.5px solid rgba(245,158,11,0.4);border-radius:12px;padding:0.7rem 1rem;display:flex;align-items:flex-start;gap:0.6rem;cursor:pointer;">
+      <div style="font-size:1.05rem;line-height:1.3;">⚠️</div>
+      <div style="flex:1;min-width:0;">
+        <div style="font-size:0.68rem;font-weight:700;color:#b45309;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:2px;">Alert</div>
+        <div style="font-size:0.82rem;color:var(--tee-text);line-height:1.4;white-space:pre-wrap;">${esc(contact.alertNote)}</div>
+      </div>
+    </div>`;
+  } else {
+    html = `<div onclick="startEditAlertNote()" style="font-size:0.75rem;color:var(--tee-muted);cursor:pointer;display:inline-flex;align-items:center;gap:0.3rem;" onmouseover="this.style.color='#b45309'" onmouseout="this.style.color='var(--tee-muted)'">⚠️ + Add alert</div>`;
+  }
+  slots.forEach(el => el.innerHTML = html);
+}
+
+function startEditAlertNote() {
+  alertNoteEditing = true;
+  renderContactAlertNote(selectedContact);
+  const ta = document.getElementById('alert-note-input');
+  if (ta) { ta.focus(); ta.selectionStart = ta.value.length; }
+}
+
+function cancelEditAlertNote() {
+  alertNoteEditing = false;
+  renderContactAlertNote(selectedContact);
+}
+
+async function saveAlertNote() {
+  if (!selectedContact) return;
+  const ta = document.getElementById('alert-note-input');
+  const text = (ta?.value || '').trim();
+  await persistAlertNote(text);
+}
+
+async function deleteAlertNote() {
+  await persistAlertNote('');
+}
+
+async function persistAlertNote(text) {
+  if (!selectedContact) return;
+  try {
+    const resp = await fetch(`${API_URL}/${selectedContact.id}`, {
+      method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields: { 'Alert Note': text || null } })
+    });
+    if (!resp.ok) throw new Error('Failed');
+    selectedContact.alertNote = text;
+    [allContacts, dncContacts, dnsContacts, unsubContacts, uncatContacts, allContactsAll].forEach(arr => {
+      const idx = arr.findIndex(c => c.id === selectedContact.id);
+      if (idx > -1) arr[idx].alertNote = text;
+    });
+    alertNoteEditing = false;
+    renderContactAlertNote(selectedContact);
+    renderView();
+    showToast(text ? 'Alert saved ✓' : 'Alert removed', 'success');
+  } catch(e) {
+    showToast('Failed to save alert — check the console', 'error');
+    console.log('Alert note save error:', e);
+  }
+}
+
 async function renderContactNedRoles(contact) {
   const slots = document.querySelectorAll('.contact-ned-roles');
   if (!slots.length || !contact) return;
