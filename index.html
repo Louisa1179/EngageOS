@@ -581,11 +581,11 @@
       <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Move to step</label>
       <select id="setpos-step" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: 'DM Sans', sans-serif; font-size: 0.9rem; appearance: none;">
         <option value="0">Not started</option>
-        <option value="1">LI connection request</option>
-        <option value="2">Email 1</option>
-        <option value="3">Email 2</option>
-        <option value="4">Email 3</option>
-        <option value="5">LI message / InMail</option>
+        <option value="1">LinkedIn connection request</option>
+        <option value="2">Email 1 - intro</option>
+        <option value="3">Email 2 - follow up</option>
+        <option value="4">LinkedIn message or InMail</option>
+        <option value="5">Email 3 - candidate profile</option>
         <option value="6">Follow-up call</option>
       </select>
     </div>
@@ -1898,28 +1898,29 @@ const API_URL = `https://api.airtable.com/v0/${BASE_ID}/${encodeURIComponent(TAB
 const SEQUENCE_TIMING = {
   afterStep1: 14,  // days after LI request before Email 1
   afterStep2: 21,  // days after Email 1 before Email 2
-  afterStep3: 21,  // days after Email 2 before Email 3
-  afterStep4: 14,  // days after Email 3 before LI message
-  afterStep5: 14   // days after LI message before follow-up call
+  afterStep3: 21,  // days after Email 2 before LinkedIn message
+  afterStep4: 14,  // days after LinkedIn message before Email 3 (candidate profile)
+  afterStep5: 14   // days after Email 3 before follow-up call
 };
 
-// Next action labels per step
+// Next action labels per step (not currently referenced in code — kept for documentation)
 const STEP_LABELS = {
-  1: { connected: 'Send Email 1 — connected', notConnected: 'Send Email 1 — non connected', both: 'Send LI connection request' },
-  2: { connected: 'LinkedIn message — connected', notConnected: 'InMail — not connected', both: 'Send Email 1' },
-  3: { connected: 'Send Email 2 — connected', notConnected: 'Send Email 2 — non connected', both: 'LI message / InMail' },
-  4: { connected: 'Send Email 3', notConnected: 'Send Email 3', both: 'Send Email 2' },
-  5: { connected: 'Follow-up call', notConnected: 'Follow-up call', both: 'Send Email 3' }
+  1: { both: 'Send LI connection request' },
+  2: { connected: 'Send Email 1 — connected', notConnected: 'Send Email 1 — not connected' },
+  3: { connected: 'Send Email 2 — connected', notConnected: 'Send Email 2 — not connected' },
+  4: { connected: 'LinkedIn message — connected', notConnected: 'InMail — not connected' },
+  5: { both: 'Send Email 3 — candidate profile' },
+  6: { both: 'Follow-up call' }
 };
 
 const VIEW_CONFIG = {
   'not-started':       { title: 'Not yet started — send LI connection request', notStarted: true },
-  'li-connect':        { title: 'LI connection requests', step: 1 },
-  'email-1':           { title: 'Email 1 — introduction', step: 2 },
-  'email-2':           { title: 'Email 2 — follow-on', step: 3 },
-  'email-3':           { title: 'Email 3 — value add', step: 4 },
-  'li-message':        { title: 'LI messages / InMail', step: 5 },
-  'follow-up':         { title: 'Follow-up calls', step: 6 },
+  'li-connect':        { title: 'Send LinkedIn connection request', step: 1 },
+  'email-1':           { title: 'Email 1 - intro', step: 2 },
+  'email-2':           { title: 'Email 2 - follow up', step: 3 },
+  'li-message':        { title: 'LinkedIn message or InMail', step: 4 },
+  'email-3':           { title: 'Email 3 - candidate profile', step: 5 },
+  'follow-up':         { title: 'Follow up call', step: 6 },
   'warm-ongoing-overdue': { title: 'Warm ongoing — overdue', status: 'Warm Ongoing', overdue: true },
   'cold-ongoing-overdue': { title: 'Cold ongoing — overdue', status: 'Cold Ongoing', overdue: true },
   'warm-ongoing':      { title: 'Warm ongoing', status: 'Warm Ongoing' },
@@ -2113,8 +2114,8 @@ function sequenceLabelForStep(step, liConnected) {
   if (step === 1) return 'Send LI connection request';
   if (step === 2) return liConnected ? 'Send Email 1 - connected' : 'Send Email 1 - not connected';
   if (step === 3) return liConnected ? 'Send Email 2 - connected' : 'Send Email 2 - not connected';
-  if (step === 4) return 'Send Email 3';
-  if (step === 5) return liConnected ? 'LinkedIn Message - connected' : 'InMail - not connected';
+  if (step === 4) return liConnected ? 'LinkedIn Message - connected' : 'InMail - not connected';
+  if (step === 5) return 'Send Email 3 - candidate profile';
   if (step === 6) return 'Follow-up call';
   return '';
 }
@@ -2243,23 +2244,23 @@ function renderSidebar() {
         <span class="nav-count count-red" id="count-li-connect">–</span>
       </div>
       <div class="nav-item" onclick="switchView('email-1')" id="nav-email-1">
-        <div class="nav-left"><div class="nav-dot" style="background: #4ecdc4;"></div><span class="nav-label">Email 1</span></div>
+        <div class="nav-left"><div class="nav-dot" style="background: #4ecdc4;"></div><span class="nav-label">Email 1 - intro</span></div>
         <span class="nav-count count-yellow" id="count-email-1">–</span>
       </div>
       <div class="nav-item" onclick="switchView('email-2')" id="nav-email-2">
-        <div class="nav-left"><div class="nav-dot" style="background: #4ecdc4;"></div><span class="nav-label">Email 2</span></div>
+        <div class="nav-left"><div class="nav-dot" style="background: #4ecdc4;"></div><span class="nav-label">Email 2 - follow up</span></div>
         <span class="nav-count count-gray" id="count-email-2">–</span>
       </div>
-      <div class="nav-item" onclick="switchView('email-3')" id="nav-email-3">
-        <div class="nav-left"><div class="nav-dot" style="background: #4ecdc4;"></div><span class="nav-label">Email 3</span></div>
-        <span class="nav-count count-gray" id="count-email-3">–</span>
-      </div>
       <div class="nav-item" onclick="switchView('li-message')" id="nav-li-message">
-        <div class="nav-left"><div class="nav-dot" style="background: #0077b5;"></div><span class="nav-label">LI messages</span></div>
+        <div class="nav-left"><div class="nav-dot" style="background: #0077b5;"></div><span class="nav-label">LI message / InMail</span></div>
         <span class="nav-count count-gray" id="count-li-message">–</span>
       </div>
+      <div class="nav-item" onclick="switchView('email-3')" id="nav-email-3">
+        <div class="nav-left"><div class="nav-dot" style="background: #4ecdc4;"></div><span class="nav-label">Email 3 - candidate</span></div>
+        <span class="nav-count count-gray" id="count-email-3">–</span>
+      </div>
       <div class="nav-item" onclick="switchView('follow-up')" id="nav-follow-up">
-        <div class="nav-left"><div class="nav-dot" style="background: #e8c547;"></div><span class="nav-label">Follow-up calls</span></div>
+        <div class="nav-left"><div class="nav-dot" style="background: #e8c547;"></div><span class="nav-label">Follow-up call</span></div>
         <span class="nav-count count-gray" id="count-follow-up">–</span>
       </div>
       <div class="nav-item" onclick="switchView('reminders')" id="nav-reminders">
@@ -3445,13 +3446,13 @@ function renderPanel(contact, interactions) {
   const liTag = liPill('louisa', contact.liConnected) + ' ' + liPill('john', contact.liConnectedJohn);
 
 
-  const stepNames = ['LI request', 'Email 1', 'Email 2', 'Email 3', 'LI message', 'Follow-up call'];
+  const stepNames = ['LI request', 'Email 1', 'Email 2', 'LI message', 'Email 3', 'Follow-up call'];
   const markDoneLabels = {
     1: "✓ I've sent the LI connection request",
     2: "✓ I've sent Email 1",
     3: "✓ I've sent Email 2",
-    4: "✓ I've sent Email 3",
-    5: "✓ I've sent the LI message / InMail",
+    4: "✓ I've sent the LI message / InMail",
+    5: "✓ I've sent Email 3 - candidate profile",
     6: "✓ Follow-up call done"
   };
   const markDoneLabel = markDoneLabels[contact.step] || 'Mark done — advance sequence';
@@ -3608,9 +3609,9 @@ async function advanceSequence(liConnected) {
   } else if (currentStep === 2) {
     newNotes = connected ? 'Send Email 2 - connected' : 'Send Email 2 - not connected';
   } else if (currentStep === 3) {
-    newNotes = 'Send Email 3';
-  } else if (currentStep === 4) {
     newNotes = connected ? 'LinkedIn Message - connected' : 'InMail - not connected';
+  } else if (currentStep === 4) {
+    newNotes = 'Send Email 3 - candidate profile';
   } else if (currentStep === 5) {
     newNotes = 'Follow-up call';
   } else if (currentStep >= 6) {
@@ -3622,11 +3623,11 @@ async function advanceSequence(liConnected) {
     1: 'Sent LI connection request',
     2: 'Sent Email 1',
     3: 'Sent Email 2',
-    4: 'Sent Email 3',
-    5: 'Sent LI message / InMail',
+    4: 'Sent LI message / InMail',
+    5: 'Sent Email 3 - candidate profile',
     6: 'Follow-up call made'
   };
-  const stepTypes = { 1: 'LinkedIn', 2: 'Email', 3: 'Email', 4: 'Email', 5: 'LinkedIn', 6: 'Phone Call' };
+  const stepTypes = { 1: 'LinkedIn', 2: 'Email', 3: 'Email', 4: 'LinkedIn', 5: 'Email', 6: 'Phone Call' };
 
   const fields = {
     'Sequence Step': newStep,
@@ -3691,7 +3692,7 @@ async function advanceSequence(liConnected) {
     renderPanel(selectedContact, ints);
   } catch(e) { renderPanel(selectedContact, null); }
   renderView();
-  const nextNames = { 2: 'Email 1', 3: 'Email 2', 4: 'Email 3', 5: 'LI message / InMail', 6: 'Follow-up call', 7: 'Ongoing programme' };
+  const nextNames = { 2: 'Email 1 - intro', 3: 'Email 2 - follow up', 4: 'LinkedIn message or InMail', 5: 'Email 3 - candidate profile', 6: 'Follow-up call', 7: 'Ongoing sequence' };
   const nextLabel = nextNames[newStep] || 'next step';
   const dueFmt = newDue ? new Date(newDue).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' }) : '';
   showToast(`✓ ${stepLabels[currentStep] || 'Step done'} — next: ${nextLabel}${dueFmt ? ', due ' + dueFmt : ''}`, 'success');
@@ -3836,7 +3837,7 @@ function formatRelationship(val) {
 // SKIP STEP
 function skipStep() {
   if (!selectedContact) return;
-  const stepNames = ['LI connection request', 'Email 1', 'LI message', 'Email 2', 'Email 3', 'Follow-up call'];
+  const stepNames = ['LI connection request', 'Email 1', 'Email 2', 'LI message', 'Email 3', 'Follow-up call'];
   const currentStepName = stepNames[(selectedContact.step || 1) - 1] || 'this step';
   document.getElementById('skip-modal-text').textContent = `Skip ${currentStepName} for ${selectedContact.firstName || selectedContact.name} and advance to the next step. A note will be logged in Airtable.`;
   document.getElementById('skip-modal').classList.add('show');
@@ -3851,7 +3852,7 @@ async function confirmSkipStep() {
   if (!selectedContact) return;
   
   const reason = document.getElementById('skip-reason').value;
-  const stepNames = ['LI connection request', 'Email 1', 'LI message', 'Email 2', 'Email 3', 'Follow-up call'];
+  const stepNames = ['LI connection request', 'Email 1', 'Email 2', 'LI message', 'Email 3', 'Follow-up call'];
   const currentStepName = stepNames[(selectedContact.step || 1) - 1] || 'step';
   
   // Log the skip as an interaction
@@ -4261,8 +4262,8 @@ function setPosNotesForStep(step, li) {
   if (step === 1) return 'Send LI connection request';
   if (step === 2) return li ? 'Send Email 1 - connected' : 'Send Email 1 - not connected';
   if (step === 3) return li ? 'Send Email 2 - connected' : 'Send Email 2 - not connected';
-  if (step === 4) return 'Send Email 3';
-  if (step === 5) return li ? 'LinkedIn Message - connected' : 'InMail - not connected';
+  if (step === 4) return li ? 'LinkedIn Message - connected' : 'InMail - not connected';
+  if (step === 5) return 'Send Email 3 - candidate profile';
   if (step === 6) return 'Follow-up call';
   return '';
 }
@@ -5457,7 +5458,7 @@ function dashPipeline() {
   const seq = s => stage(c => (c.status === 'Active' || !c.status) && (c.step || 0) === s);
   return {
     start: stage(c => (c.status === 'Active' || !c.status) && (!c.step || c.step === 0)),
-    li: seq(1), e1: seq(2), e2: seq(3), e3: seq(4), lim: seq(5), call: seq(6),
+    li: seq(1), e1: seq(2), e2: seq(3), lim: seq(4), e3: seq(5), call: seq(6),
     warm: stage(c => c.status === 'Warm Ongoing' || c.status === 'Cold Ongoing'),
     responded: stage(c => c.status === 'Responded')
   };
@@ -5610,10 +5611,10 @@ function dashRenderBody() {
         <div style="font-size:0.72rem;color:var(--tee-muted);margin-bottom:8px;">Click any stage to action its overdue list</div>
         ${dashBar('Start sequence', pipe.start, pmax, 'var(--tee-accent2)', 'not-started')}
         ${dashBar('LI request', pipe.li, pmax, 'var(--tee-accent)', 'li-connect')}
-        ${dashBar('Email 1', pipe.e1, pmax, 'var(--tee-accent)', 'email-1')}
-        ${dashBar('Email 2', pipe.e2, pmax, 'var(--tee-accent)', 'email-2')}
-        ${dashBar('Email 3', pipe.e3, pmax, 'var(--tee-accent)', 'email-3')}
-        ${dashBar('LI message', pipe.lim, pmax, 'var(--tee-accent)', 'li-message')}
+        ${dashBar('Email 1 - intro', pipe.e1, pmax, 'var(--tee-accent)', 'email-1')}
+        ${dashBar('Email 2 - follow up', pipe.e2, pmax, 'var(--tee-accent)', 'email-2')}
+        ${dashBar('LI message / InMail', pipe.lim, pmax, 'var(--tee-accent)', 'li-message')}
+        ${dashBar('Email 3 - candidate', pipe.e3, pmax, 'var(--tee-accent)', 'email-3')}
         ${dashBar('Follow-up call', pipe.call, pmax, 'var(--tee-accent)', 'follow-up')}
         ${dashBar('Warm / ongoing', pipe.warm, pmax, '#f59e0b', 'warm-ongoing')}
         ${dashBar('Responded', pipe.responded, pmax, '#16a34a', 'responded')}
@@ -7186,9 +7187,9 @@ const NEXT_ACTION_FALLBACK = [
   'Send Email 1 - not connected',
   'Send Email 2 - connected',
   'Send Email 2 - not connected',
-  'Send Email 3',
   'LinkedIn Message - connected',
   'InMail - not connected',
+  'Send Email 3 - candidate profile',
   'Follow-up call',
   'Re-send LI connection request'
 ];
