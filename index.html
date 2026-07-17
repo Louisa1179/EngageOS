@@ -799,7 +799,7 @@
     <div class="modal-sub">Records what you did. Optionally set a follow-up to hold the sequence until you're ready to resume.</div>
     <div>
       <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Type</label>
-      <select id="log-type" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; margin-bottom: 0.75rem; appearance: none;">
+      <select id="log-type" onchange="toggleLiSubtype()" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; margin-bottom: 0.75rem; appearance: none;">
         <option value="LinkedIn">LinkedIn</option>
         <option value="Email">Email</option>
         <option value="Phone Call">Phone Call</option>
@@ -807,6 +807,15 @@
         <option value="In person Meeting">In person Meeting</option>
         <option value="Note">Note</option>
       </select>
+      <div id="log-li-subtype-wrap" style="display:none;">
+        <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">LinkedIn action</label>
+        <select id="log-li-subtype" onchange="applyLiSubtype()" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; margin-bottom: 0.75rem; appearance: none;">
+          <option value="">Choose one...</option>
+          <option value="Sent LI connection request">Connection request</option>
+          <option value="Connected on LinkedIn">Acceptance</option>
+          <option value="Sent LI message / InMail">Message / InMail</option>
+        </select>
+      </div>
       <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Logged by</label>
       <select id="log-logged-by" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 10px; padding: 0.75rem 1rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.9rem; margin-bottom: 0.75rem; appearance: none;">
         <option value="Louisa Daly">Louisa Daly</option>
@@ -3867,6 +3876,27 @@ async function confirmSkipStep() {
 }
 
 // LOG ACTION MODAL
+// Shows/hides the LinkedIn action sub-picker based on the selected Type
+function toggleLiSubtype() {
+  const typeSelect = document.getElementById('log-type');
+  const wrap = document.getElementById('log-li-subtype-wrap');
+  if (!typeSelect || !wrap) return;
+  wrap.style.display = typeSelect.value === 'LinkedIn' ? 'block' : 'none';
+}
+
+// Seeds the subject field with a classifiable label when a LinkedIn sub-type is picked,
+// but only if the subject is empty or still matches a previous seeded default —
+// so it never overwrites something the user has already typed.
+function applyLiSubtype() {
+  const subtypeSelect = document.getElementById('log-li-subtype');
+  const subjectEl = document.getElementById('log-subject');
+  if (!subtypeSelect || !subjectEl) return;
+  const seeded = ['Sent LI connection request', 'Connected on LinkedIn', 'Sent LI message / InMail'];
+  if (!subjectEl.value.trim() || seeded.includes(subjectEl.value.trim())) {
+    subjectEl.value = subtypeSelect.value;
+  }
+}
+
 function openLogModal() {
   if (!selectedContact) return;
   document.getElementById('log-subject').value = '';
@@ -3876,6 +3906,9 @@ function openLogModal() {
   document.getElementById('log-set-hold').checked = false;
   document.getElementById('hold-fields').style.display = 'none';
   document.getElementById('log-saving').style.display = 'none';
+  const liSubtypeSelect = document.getElementById('log-li-subtype');
+  if (liSubtypeSelect) liSubtypeSelect.value = '';
+  toggleLiSubtype();
   populateLogNaSelect();
   // For John — swap the action dropdown for a quick channel picker (writes to Detail)
   const naSelect = document.getElementById('log-na-note');
@@ -5344,6 +5377,7 @@ async function loadDashboardInteractions() {
     } while (offset && ++guard < 30);
     dashInteractions = records.map(r => ({
       type: r.fields['Type'] || 'Note',
+      subject: r.fields['Interaction Subject'] || '',
       date: r.fields['Date'] || '',
       loggedBy: r.fields['Logged by'] || '',
       contactId: Array.isArray(r.fields['Related Contact']) ? r.fields['Related Contact'][0] : null
@@ -5372,13 +5406,20 @@ function dashIsOutreach(type) {
 
 function dashActivity() {
   const since = dashPeriodStart(dashPeriod);
-  const out = { total: 0, linkedin: 0, email: 0, call: 0, meeting: 0 };
+  const out = { total: 0, linkedin: 0, liRequest: 0, liAccept: 0, liMessage: 0, liOther: 0, email: 0, call: 0, meeting: 0 };
   (dashInteractions || []).forEach(i => {
     if (!i.date || i.date < since) return;
     if (!dashOwnerMatch(i.loggedBy, i.contactId)) return;
     const t = (i.type || '').toLowerCase();
     let b = null;
-    if (t.includes('linkedin') || t.includes('inmail')) b = 'linkedin';
+    if (t.includes('linkedin') || t.includes('inmail')) {
+      b = 'linkedin';
+      const subj = (i.subject || '').toLowerCase();
+      if (subj.includes('connected on linkedin') || subj.includes('accepted')) out.liAccept++;
+      else if (subj.includes('connection request')) out.liRequest++;
+      else if (subj.includes('message') || subj.includes('inmail')) out.liMessage++;
+      else out.liOther++;
+    }
     else if (t.includes('email')) b = 'email';
     else if (t.includes('phone') || t.includes('call')) b = 'call';
     else if (t.includes('meeting')) b = 'meeting';
@@ -5553,6 +5594,7 @@ function dashRenderBody() {
   const newC = dashAddedByCounts('contacts'), newO = dashAddedByCounts('orgs'), newCand = dashAddedByCounts('candidates');
   return dashSection('Activity · ' + periodLabel)
     + dashGrid([dashCard('Total touches', a.total), dashCard('LinkedIn', a.linkedin), dashCard('Emails', a.email), dashCard('Calls / meetings', a.call + a.meeting)], 120)
+    + dashGrid([dashCard('LI connection requests', a.liRequest), dashCard('LI acceptances', a.liAccept), dashCard('LI messages / InMail', a.liMessage + a.liOther)], 130)
     + `<div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1rem 1.25rem;margin-top:12px;"><div style="font-size:0.78rem;color:var(--tee-muted);margin-bottom:6px;">Weekly outreach, last 8 weeks</div>${dashTrend(weeks)}</div>`
     + dashSection('New records added · ' + periodLabel)
     + (dashAddedByData ? dashGrid([
