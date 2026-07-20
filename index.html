@@ -3444,10 +3444,22 @@ async function saveAddAction() {
   const detail = (document.getElementById('add-action-detail')?.value || '').trim();
   if (!label) { showToast('Add a short description of the action', 'error'); return; }
   if (!dueDate) { showToast('Pick a due date', 'error'); return; }
+  // Capture before updateAction() mutates the cache, so we know whether this
+  // row is the active sequence step (vs a bespoke Manual reminder).
+  const existingBefore = editingActionId ? allActions.find(a => a.id === editingActionId) : null;
+  const isSequenceRow = !!(existingBefore && existingBefore.source === 'Sequence');
   const ok = editingActionId
     ? await updateAction(editingActionId, label, dueDate, detail)
     : await createAction(selectedContact.id, label, dueDate, 'Manual', detail);
   if (!ok) { showToast('Could not save that action — check the console', 'error'); return; }
+  // Sequence rows are the source the bucket badge and card date read from —
+  // keep the Clients field in step so editing here doesn't silently drift again.
+  if (isSequenceRow) {
+    await updateContact(selectedContact.id, { 'Next Action Due': dueDate }, { silent: true });
+    const idx = allContacts.findIndex(c => c.id === selectedContact.id);
+    if (idx > -1) allContacts[idx].nextActionDue = dueDate;
+    selectedContact.nextActionDue = dueDate;
+  }
   const wasEditing = !!editingActionId;
   closeAddActionModal();
   const list = document.getElementById('upcoming-actions-list');
@@ -4380,7 +4392,7 @@ async function confirmSetPosition() {
     renderPanel(selectedContact, ints);
   } catch(e) { renderPanel(selectedContact, null); }
   renderView();
-  const names = ['Not started','LI connection request','Email 1','Email 2','Email 3','LI message / InMail','Follow-up call'];
+  const names = ['Not started','LI connection request','Email 1','Email 2','LI message / InMail','Email 3','Follow-up call'];
   showToast('Moved to ' + (names[step] || ('step ' + step)), 'success');
 }
 
