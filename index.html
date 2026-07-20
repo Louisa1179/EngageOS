@@ -2241,27 +2241,45 @@ function renderSidebar() {
       <div class="sidebar-section" style="margin-bottom: 0.5rem; margin-top: 1rem;">Today's actions</div>
       <div class="nav-item active" onclick="switchView('li-connect')" id="nav-li-connect">
         <div class="nav-left"><div class="nav-dot" style="background: #0077b5;"></div><span class="nav-label">LI requests</span></div>
-        <span class="nav-count count-red" id="count-li-connect">–</span>
+        <span class="nav-count-group" style="display:flex;align-items:center;gap:4px;">
+          <span class="nav-count count-red" id="count-li-connect-due" title="Due today or overdue">–</span>
+          <span class="nav-count count-gray" id="count-li-connect-future" title="Upcoming">–</span>
+        </span>
       </div>
       <div class="nav-item" onclick="switchView('email-1')" id="nav-email-1">
         <div class="nav-left"><div class="nav-dot" style="background: #4ecdc4;"></div><span class="nav-label">Email 1 - intro</span></div>
-        <span class="nav-count count-yellow" id="count-email-1">–</span>
+        <span class="nav-count-group" style="display:flex;align-items:center;gap:4px;">
+          <span class="nav-count count-red" id="count-email-1-due" title="Due today or overdue">–</span>
+          <span class="nav-count count-gray" id="count-email-1-future" title="Upcoming">–</span>
+        </span>
       </div>
       <div class="nav-item" onclick="switchView('email-2')" id="nav-email-2">
         <div class="nav-left"><div class="nav-dot" style="background: #4ecdc4;"></div><span class="nav-label">Email 2 - follow up</span></div>
-        <span class="nav-count count-gray" id="count-email-2">–</span>
+        <span class="nav-count-group" style="display:flex;align-items:center;gap:4px;">
+          <span class="nav-count count-red" id="count-email-2-due" title="Due today or overdue">–</span>
+          <span class="nav-count count-gray" id="count-email-2-future" title="Upcoming">–</span>
+        </span>
       </div>
       <div class="nav-item" onclick="switchView('li-message')" id="nav-li-message">
         <div class="nav-left"><div class="nav-dot" style="background: #0077b5;"></div><span class="nav-label">LI message / InMail</span></div>
-        <span class="nav-count count-gray" id="count-li-message">–</span>
+        <span class="nav-count-group" style="display:flex;align-items:center;gap:4px;">
+          <span class="nav-count count-red" id="count-li-message-due" title="Due today or overdue">–</span>
+          <span class="nav-count count-gray" id="count-li-message-future" title="Upcoming">–</span>
+        </span>
       </div>
       <div class="nav-item" onclick="switchView('email-3')" id="nav-email-3">
         <div class="nav-left"><div class="nav-dot" style="background: #4ecdc4;"></div><span class="nav-label">Email 3 - candidate</span></div>
-        <span class="nav-count count-gray" id="count-email-3">–</span>
+        <span class="nav-count-group" style="display:flex;align-items:center;gap:4px;">
+          <span class="nav-count count-red" id="count-email-3-due" title="Due today or overdue">–</span>
+          <span class="nav-count count-gray" id="count-email-3-future" title="Upcoming">–</span>
+        </span>
       </div>
       <div class="nav-item" onclick="switchView('follow-up')" id="nav-follow-up">
         <div class="nav-left"><div class="nav-dot" style="background: #e8c547;"></div><span class="nav-label">Follow-up call</span></div>
-        <span class="nav-count count-gray" id="count-follow-up">–</span>
+        <span class="nav-count-group" style="display:flex;align-items:center;gap:4px;">
+          <span class="nav-count count-red" id="count-follow-up-due" title="Due today or overdue">–</span>
+          <span class="nav-count count-gray" id="count-follow-up-future" title="Upcoming">–</span>
+        </span>
       </div>
       <div class="nav-item" onclick="switchView('reminders')" id="nav-reminders">
         <div class="nav-left"><div class="nav-dot" style="background: #fb923c;"></div><span class="nav-label">Reminders</span></div>
@@ -2734,6 +2752,21 @@ function updateCounts() {
     const contacts = getContactsForView(view);
     const el = document.getElementById(`count-${view}`);
     if (el) el.textContent = contacts.length;
+  });
+  // Today's Actions sequence buckets get a due-today/overdue count and a separate
+  // future count, instead of one combined total.
+  const SEQUENCE_STEP_VIEWS = ['li-connect','email-1','email-2','li-message','email-3','follow-up'];
+  SEQUENCE_STEP_VIEWS.forEach(view => {
+    const contacts = getContactsForView(view);
+    let due = 0, future = 0;
+    contacts.forEach(c => {
+      const diff = dueDiff(c.nextActionDue);
+      if (diff !== null && diff <= 0) due++; else future++;
+    });
+    const dueEl = document.getElementById(`count-${view}-due`);
+    const futureEl = document.getElementById(`count-${view}-future`);
+    if (dueEl) dueEl.textContent = due;
+    if (futureEl) futureEl.textContent = future;
   });
   // DNC count — loaded separately since filtered out of main load
   const dncEl = document.getElementById('count-do-not-contact');
