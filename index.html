@@ -5397,6 +5397,7 @@ let dashOwner = 'All';         // 'Louisa Daly' | 'John Daly' | 'All'
 let dashInteractions = null;   // cached interaction records for the last 90 days
 let dashAddedByData = null;    // cached { contacts, orgs, candidates } creation records
 let dashAddedByLoading = false;
+let dashAddedByFailed = false; // set on failure so we stop silently re-attempting on every render
 let dashLoading = false;
 
 function dashPeriodStart(period) {
@@ -5581,8 +5582,6 @@ function dashChrome() {
   return `<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:0.5rem;">
     <div style="font-size:1.2rem;font-weight:600;color:var(--tee-text);">BD performance</div>
     <div style="display:flex;align-items:center;gap:8px;">
-      <span onclick="migrateLegacyActions()" title="One-off: creates an Actions row for any contact whose existing next action isn't in the new table yet. Safe to run more than once." style="cursor:pointer;font-size:0.72rem;color:var(--tee-muted);text-decoration:underline;">⚙ Migrate legacy actions</span>
-      <span onclick="fixGenericActionLabels()" title="One-off: rewrites any Actions row still showing the generic 'Next action' placeholder with the correct step label. Safe to run more than once." style="cursor:pointer;font-size:0.72rem;color:var(--tee-muted);text-decoration:underline;">🔧 Fix generic labels</span>
       <div style="display:inline-flex;border:1px solid var(--tee-border);border-radius:8px;overflow:hidden;">${seg('Louisa Daly',dashOwner,'dashSetOwner','Louisa')}${seg('John Daly',dashOwner,'dashSetOwner','John')}${seg('All',dashOwner,'dashSetOwner','All')}</div>
       <div style="display:inline-flex;border:1px solid var(--tee-border);border-radius:8px;overflow:hidden;">${seg('week',dashPeriod,'dashSetPeriod','Week')}${seg('month',dashPeriod,'dashSetPeriod','Month')}${seg('90d',dashPeriod,'dashSetPeriod','90 days')}</div>
     </div>
@@ -5612,8 +5611,18 @@ async function loadAddedByStats() {
       fetchTable('Clients'), fetchTable('Organisations'), fetchTable('Candidates')
     ]);
     dashAddedByData = { contacts: contacts || [], orgs: orgs || [], candidates: candidates || [] };
-  } catch(e) { console.log('loadAddedByStats error:', e); }
+    dashAddedByFailed = false;
+  } catch(e) { console.log('loadAddedByStats error:', e); dashAddedByFailed = true; }
   dashAddedByLoading = false;
+}
+
+// Manual retry for the "New records added" card after a failed load — called
+// from the "Couldn't load — retry" link so a bad connection doesn't leave the
+// dashboard silently re-fetching (or stuck saying "Loading…") forever.
+function dashRetryAddedByStats() {
+  dashAddedByFailed = false;
+  loadAddedByStats().then(() => { if (document.getElementById('tab-dashboard')?.classList.contains('active')) renderDashboard(); });
+  if (document.getElementById('tab-dashboard')?.classList.contains('active')) renderDashboard();
 }
 
 function dashAddedByCounts(kind) {
@@ -5648,7 +5657,9 @@ function dashRenderBody() {
         dashCard('New organisations', newO.total, `Louisa ${newO['Louisa Daly']} · John ${newO['John Daly']}`),
         dashCard('New candidates', newCand.total, `Louisa ${newCand['Louisa Daly']} · John ${newCand['John Daly']}`)
       ], 150)
-      : `<div style="font-size:0.8rem;color:var(--tee-muted);padding:0.5rem 0;">Loading…</div>`)
+      : dashAddedByFailed
+        ? `<div style="font-size:0.8rem;color:var(--overdue);padding:0.5rem 0;">Couldn't load this — <span onclick="dashRetryAddedByStats()" style="cursor:pointer;text-decoration:underline;">retry</span></div>`
+        : `<div style="font-size:0.8rem;color:var(--tee-muted);padding:0.5rem 0;">Loading…</div>`)
     + dashSection('Engagement')
     + dashGrid([dashCard('Connection acceptance', eng.acceptance + '%', eng.connected + ' of ' + eng.approached + ' approached'), dashCard('Response rate', eng.respRate + '%', eng.responded + ' of ' + eng.contacted + ' contacted'), dashCard('Warm relationships', eng.warm, 'being nurtured')], 150)
     + dashSection('Pipeline health · live snapshot')
@@ -5680,7 +5691,7 @@ async function renderDashboard() {
     await loadDashboardInteractions();
     dashLoading = false;
   }
-  if (dashAddedByData === null) {
+  if (dashAddedByData === null && !dashAddedByFailed && !dashAddedByLoading) {
     loadAddedByStats().then(() => { if (document.getElementById('tab-dashboard')?.classList.contains('active')) renderDashboard(); });
   }
   el.innerHTML = '<div style="max-width:1100px;margin:0 auto;">' + dashChrome() + dashRenderBody() + '</div>';
