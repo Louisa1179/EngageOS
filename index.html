@@ -398,6 +398,7 @@
       <button class="workspace-tab" id="tab-orgs" onclick="switchWorkspace('orgs')">Organisations</button>
       <button class="workspace-tab" id="tab-candidates" onclick="switchWorkspace('candidates')">Candidates</button>
       <button class="workspace-tab" id="tab-assignments" onclick="switchWorkspace('assignments')">Assignments</button>
+      <button class="workspace-tab" id="tab-leads" onclick="switchWorkspace('leads')">Leads</button>
       <button class="workspace-tab" id="tab-dashboard" onclick="switchWorkspace('dashboard')">Dashboard</button>
     </div>
     <div class="header-right">
@@ -1309,6 +1310,181 @@
 
 </div>
 
+<!-- LEADS WORKSPACE -->
+<div id="leads-workspace" style="display:none;">
+
+  <!-- LEADS SIDEBAR -->
+  <div style="width:220px;flex-shrink:0;background:var(--tee-mid);border-right:1px solid var(--tee-border);overflow-y:auto;padding:1.25rem 0;">
+    <div class="sidebar-section">Status</div>
+    <div class="nav-item active" id="lead-filter-all" onclick="setLeadFilter('all',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:var(--tee-accent);"></div><span class="nav-label">All leads</span></div>
+      <span class="nav-count count-gray" id="lead-count-all">–</span>
+    </div>
+    <div class="nav-item" id="lead-filter-New" onclick="setLeadFilter('New',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:#0891b2;"></div><span class="nav-label">New</span></div>
+      <span class="nav-count count-gray" id="lead-count-New">–</span>
+    </div>
+    <div class="nav-item" id="lead-filter-Active" onclick="setLeadFilter('Active',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:var(--tee-accent);"></div><span class="nav-label">Active</span></div>
+      <span class="nav-count count-gray" id="lead-count-Active">–</span>
+    </div>
+    <div class="nav-item" id="lead-filter-Converted" onclick="setLeadFilter('Converted',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:#059669;"></div><span class="nav-label">Converted</span></div>
+      <span class="nav-count count-gray" id="lead-count-Converted">–</span>
+    </div>
+    <div class="nav-item" id="lead-filter-Lost" onclick="setLeadFilter('Lost',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:#dc2626;"></div><span class="nav-label">Lost</span></div>
+      <span class="nav-count count-gray" id="lead-count-Lost">–</span>
+    </div>
+    <div class="nav-item" id="lead-filter-Dormant" onclick="setLeadFilter('Dormant',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:var(--tee-muted);"></div><span class="nav-label">Dormant</span></div>
+      <span class="nav-count count-gray" id="lead-count-Dormant">–</span>
+    </div>
+    <div style="padding:1.25rem 1.25rem 0.25rem;margin-top:0.5rem;border-top:1px solid var(--tee-border);">
+      <button onclick="openLeadEditModal(null)" style="width:100%;background:var(--tee-accent);color:white;border:none;border-radius:8px;padding:0.6rem;font-family:'DM Sans',sans-serif;font-size:0.82rem;font-weight:500;cursor:pointer;">+ New lead</button>
+    </div>
+  </div>
+
+  <!-- LEADS LIST -->
+  <div style="width:340px;flex-shrink:0;border-right:1px solid var(--tee-border);display:flex;flex-direction:column;overflow:hidden;">
+    <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--tee-border);background:var(--tee-mid);">
+      <input type="text" id="lead-search" placeholder="Search leads..." oninput="filterLeads()"
+        style="width:100%;background:#f5f7fa;border:1px solid var(--tee-border);border-radius:8px;padding:0.5rem 0.875rem;font-family:'DM Sans',sans-serif;font-size:0.82rem;color:var(--tee-text);outline:none;"
+        onfocus="this.style.borderColor='var(--tee-accent)'" onblur="this.style.borderColor='var(--tee-border)'" />
+    </div>
+    <div id="lead-list" style="flex:1;overflow-y:auto;padding:1rem;align-self:flex-start;width:100%;">
+      <div style="color:var(--tee-muted);font-size:0.85rem;padding:2rem 0;text-align:center;">Loading leads...</div>
+    </div>
+  </div>
+
+  <!-- LEAD DETAIL PANEL -->
+  <div id="lead-detail" style="flex:1;overflow-y:auto;padding:2rem;background:var(--tee-dark);">
+    <div style="color:var(--tee-muted);font-size:0.85rem;padding:4rem 0;text-align:center;">Select a lead to view details</div>
+  </div>
+
+</div>
+
+<!-- LEAD EDIT MODAL -->
+<div class="modal-overlay" id="lead-edit-modal">
+  <div class="modal edit-modal" style="max-width:560px;max-height:90vh;overflow-y:auto;">
+    <div class="modal-title" id="lead-modal-title">New lead</div>
+    <div class="modal-sub" id="lead-modal-sub">Log a new lead so you can track it through to a live assignment.</div>
+
+    <div class="edit-field-group">
+      <label class="edit-label">Lead name</label>
+      <input type="text" class="edit-input" id="le-name" placeholder="e.g. Interim HR Manager" />
+    </div>
+
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">Organisation</label>
+        <select id="le-org" class="edit-input"><option value="">Select organisation...</option></select>
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Owner</label>
+        <select id="le-owner" class="edit-input">
+          <option value="">Select...</option>
+          <option>Louisa Daly</option><option>John Daly</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">Status</label>
+        <select id="le-status" class="edit-input">
+          <option>New</option><option>Active</option><option>Converted</option><option>Lost</option><option>Dormant</option>
+        </select>
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Discipline</label>
+        <select id="le-discipline" class="edit-input">
+          <option value="">Select...</option>
+          <option>HR</option><option>Governance & Compliance</option><option>Transformation & Change</option>
+          <option>CEO</option><option>Operations</option><option>Director of Resources</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">Source type</label>
+        <select id="le-source-type" class="edit-input" onchange="toggleLeadSourceDetail()">
+          <option value="">Select...</option>
+          <option>Contact conversation</option><option>Candidate conversation</option><option>Job Advert</option><option>Other</option>
+        </select>
+      </div>
+      <div class="edit-field-group" id="le-source-detail-wrap" style="display:none;">
+        <label class="edit-label">Source detail</label>
+        <input type="text" class="edit-input" id="le-source-detail" placeholder="e.g. saw it on LinkedIn jobs" />
+      </div>
+    </div>
+
+    <div class="edit-field-group">
+      <label class="edit-label">Source contact</label>
+      <select id="le-source-contact" class="edit-input"><option value="">Select contact... (optional)</option></select>
+    </div>
+
+    <div class="edit-field-group">
+      <label class="edit-label">Related contacts</label>
+      <select id="le-related-contacts" class="edit-input" multiple size="4"></select>
+      <div style="font-size:0.72rem;color:var(--tee-muted);margin-top:0.3rem;">Hold Ctrl/Cmd to select more than one.</div>
+    </div>
+
+    <div class="edit-field-group">
+      <label class="edit-label">Date identified</label>
+      <input type="date" class="edit-input" id="le-date-identified" />
+    </div>
+
+    <div class="edit-field-group">
+      <label class="edit-label">Description</label>
+      <textarea id="le-description" class="edit-input" rows="3" placeholder="What was said, why this is a lead..." style="resize:vertical;"></textarea>
+    </div>
+
+    <div style="display:flex;gap:0.75rem;margin-top:1.25rem;align-items:center;">
+      <button onclick="saveLeadEdit()" style="background:var(--tee-accent);color:white;border:none;border-radius:10px;padding:0.65rem 1.5rem;font-family:'DM Sans',sans-serif;font-size:0.9rem;font-weight:500;cursor:pointer;">Save</button>
+      <button onclick="closeLeadEditModal()" style="background:transparent;color:var(--tee-muted);border:1px solid var(--tee-border);border-radius:10px;padding:0.65rem 1.25rem;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Cancel</button>
+      <div id="lead-edit-saving" style="display:none;color:var(--tee-muted);font-size:0.82rem;">Saving...</div>
+      <div id="lead-delete-btn" style="display:none;margin-left:auto;">
+        <button onclick="deleteLead()" style="background:transparent;color:#ef4444;border:1px solid rgba(239,68,68,0.3);border-radius:10px;padding:0.65rem 1.25rem;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Delete</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- LEAD ACTION MODAL -->
+<div class="modal-overlay" id="lead-action-modal">
+  <div class="modal edit-modal" style="max-width:460px;">
+    <div class="modal-title">New action</div>
+    <div class="modal-sub">Set an action against this lead — for yourself or the other desk.</div>
+    <div class="edit-field-group">
+      <label class="edit-label">Action</label>
+      <input type="text" class="edit-input" id="la-action" placeholder="e.g. Send HR Manager profile to CPO" />
+    </div>
+    <div class="edit-row">
+      <div class="edit-field-group">
+        <label class="edit-label">For contact</label>
+        <select id="la-contact" class="edit-input"><option value="">No specific contact</option></select>
+      </div>
+      <div class="edit-field-group">
+        <label class="edit-label">Owner</label>
+        <select id="la-owner" class="edit-input">
+          <option>Louisa Daly</option><option>John Daly</option>
+        </select>
+      </div>
+    </div>
+    <div class="edit-field-group">
+      <label class="edit-label">Due date</label>
+      <input type="date" class="edit-input" id="la-due" />
+    </div>
+    <div style="display:flex;gap:0.75rem;margin-top:1.25rem;align-items:center;">
+      <button onclick="saveLeadAction()" style="background:var(--tee-accent);color:white;border:none;border-radius:10px;padding:0.65rem 1.5rem;font-family:'DM Sans',sans-serif;font-size:0.9rem;font-weight:500;cursor:pointer;">Save</button>
+      <button onclick="closeLeadActionModal()" style="background:transparent;color:var(--tee-muted);border:1px solid var(--tee-border);border-radius:10px;padding:0.65rem 1.25rem;font-family:'DM Sans',sans-serif;font-size:0.9rem;cursor:pointer;">Cancel</button>
+      <div id="lead-action-saving" style="display:none;color:var(--tee-muted);font-size:0.82rem;">Saving...</div>
+    </div>
+  </div>
+</div>
+
 <!-- ASSIGNMENT CANDIDATE MODAL -->
 <div class="modal-overlay" id="ac-modal">
   <div class="modal edit-modal" style="max-width:560px;max-height:90vh;overflow-y:auto;">
@@ -2036,7 +2212,9 @@ async function loadActions() {
       dueDate: r.fields['Due Date'] || '',
       completed: !!r.fields['Completed'],
       source: r.fields['Source'] || 'Manual',
-      detail: r.fields['Detail'] || ''
+      detail: r.fields['Detail'] || '',
+      leadId: Array.isArray(r.fields['Lead']) ? (r.fields['Lead'][0] || '') : '',
+      ownerField: r.fields['Owner'] || ''
     }));
     actionsLoaded = true;
   } catch(e) { console.log('loadActions error:', e); }
@@ -2048,6 +2226,12 @@ function getContactActions(contactId) {
     .sort((a, b) => (a.dueDate || '9999-99-99').localeCompare(b.dueDate || '9999-99-99'));
 }
 
+// All open actions for a lead, soonest due first (undated last).
+function getLeadActions(leadId) {
+  return allActions.filter(a => a.leadId === leadId && !a.completed)
+    .sort((a, b) => (a.dueDate || '9999-99-99').localeCompare(b.dueDate || '9999-99-99'));
+}
+
 // Earliest open Manual (bespoke reminder) due date for a contact, or '' if none.
 function earliestManualActionDue(contactId) {
   const manual = allActions.filter(a => a.contactId === contactId && a.source === 'Manual' && !a.completed && a.dueDate);
@@ -2055,10 +2239,16 @@ function earliestManualActionDue(contactId) {
   return manual.reduce((min, a) => a.dueDate < min ? a.dueDate : min, manual[0].dueDate);
 }
 
-async function createAction(contactId, action, dueDate, source, detail) {
-  const fields = { 'Contact': [contactId], 'Action': action, 'Source': source || 'Manual' };
+// contactId may be '' / null for a lead action that isn't targeted at a specific
+// person (e.g. "research the organisation"). leadId/ownerField are optional so
+// every existing call site (contact-sequence actions) keeps working unchanged.
+async function createAction(contactId, action, dueDate, source, detail, leadId, ownerField) {
+  const fields = { 'Action': action, 'Source': source || 'Manual' };
+  if (contactId) fields['Contact'] = [contactId];
   if (dueDate) fields['Due Date'] = dueDate;
   if (detail) fields['Detail'] = detail;
+  if (leadId) fields['Lead'] = [leadId];
+  if (ownerField) fields['Owner'] = ownerField;
   try {
     const resp = await airtableFetch(ACTIONS_URL, {
       method: 'POST',
@@ -2067,7 +2257,7 @@ async function createAction(contactId, action, dueDate, source, detail) {
     });
     const data = await resp.json();
     if (!resp.ok) { console.error('createAction error:', JSON.stringify(data)); return null; }
-    const rec = { id: data.id, contactId, action, dueDate: dueDate || '', completed: false, source: source || 'Manual', detail: detail || '' };
+    const rec = { id: data.id, contactId: contactId || '', action, dueDate: dueDate || '', completed: false, source: source || 'Manual', detail: detail || '', leadId: leadId || '', ownerField: ownerField || '' };
     allActions.push(rec);
     return rec;
   } catch(e) { console.error('createAction error:', e); return null; }
@@ -4490,18 +4680,21 @@ function switchWorkspace(ws) {
   const orgsBody = document.getElementById('orgs-workspace');
   const candsBody = document.getElementById('candidates-workspace');
   const assignBody = document.getElementById('assignments-workspace');
+  const leadsBody = document.getElementById('leads-workspace');
   const dashBody = document.getElementById('dashboard-workspace');
   const tabBd = document.getElementById('tab-bd');
   const tabOrgs = document.getElementById('tab-orgs');
   const tabCands = document.getElementById('tab-candidates');
   const tabAssign = document.getElementById('tab-assignments');
+  const tabLeads = document.getElementById('tab-leads');
   const tabDash = document.getElementById('tab-dashboard');
   bdBody.style.display = 'none';
   orgsBody.style.display = 'none';
   candsBody.style.display = 'none';
   if (assignBody) assignBody.style.display = 'none';
+  if (leadsBody) leadsBody.style.display = 'none';
   if (dashBody) dashBody.style.display = 'none';
-  [tabBd, tabOrgs, tabCands, tabAssign, tabDash].forEach(t => t && t.classList.remove('active'));
+  [tabBd, tabOrgs, tabCands, tabAssign, tabLeads, tabDash].forEach(t => t && t.classList.remove('active'));
   const deskBar = document.querySelector('.desk-bar');
   if (ws === 'bd') {
     bdBody.style.display = 'flex';
@@ -4528,6 +4721,14 @@ function switchWorkspace(ws) {
     if (tabAssign) tabAssign.classList.add('active');
     if (allAssignments.length === 0) loadAssignments();
     else { updateAssignCounts(); filterAssignments(); }
+    if (allOrgs.length === 0) ensureOrgsLoaded();
+  } else if (ws === 'leads') {
+    if (deskBar) deskBar.style.display = 'none';
+    if (leadsBody) leadsBody.style.display = 'flex';
+    if (tabLeads) tabLeads.classList.add('active');
+    if (!actionsLoaded) loadActions();
+    if (allLeads.length === 0) loadLeads();
+    else { updateLeadCounts(); filterLeads(); }
     if (allOrgs.length === 0) ensureOrgsLoaded();
   } else if (ws === 'dashboard') {
     if (deskBar) deskBar.style.display = 'none';
@@ -5694,13 +5895,36 @@ function dashRenderBody() {
         <div style="display:flex;align-items:center;gap:8px;border-top:1px solid var(--tee-border);padding-top:10px;margin-top:8px;font-size:0.8rem;color:${overdue > 0 ? 'var(--overdue)' : 'var(--tee-muted)'};">${overdue > 0 ? '⏰ ' + overdue + ' follow-up' + (overdue !== 1 ? 's' : '') + ' overdue across all stages' : '✓ No overdue follow-ups'}</div>
       </div>`
     + dashSection('Outcomes · all assignments')
-    + dashGrid([dashCard('Live assignments', out.live), dashCard('Placements YTD', out.placedYtd), dashCard('Placed (all time)', out.placed), dashCard('Fees in pipeline', gbp(out.feePipeline), 'sum of open fee amounts')], 120);
+    + dashGrid([dashCard('Live assignments', out.live), dashCard('Placements YTD', out.placedYtd), dashCard('Placed (all time)', out.placed), dashCard('Fees in pipeline', gbp(out.feePipeline), 'sum of open fee amounts')], 120)
+    + dashLeadsSection();
+}
+
+function dashLeadsSection() {
+  const newC = allLeads.filter(l => l.status === 'New').length;
+  const active = allLeads.filter(l => l.status === 'Active').length;
+  const converted = allLeads.filter(l => l.status === 'Converted').length;
+  const lost = allLeads.filter(l => l.status === 'Lost').length;
+  const dormant = allLeads.filter(l => l.status === 'Dormant').length;
+  const decided = converted + lost;
+  const convRate = decided ? Math.round((converted / decided) * 100) : 0;
+  const leadIds = new Set(allLeads.map(l => l.id));
+  const leadActionsOpen = allActions.filter(a => a.leadId && leadIds.has(a.leadId) && !a.completed);
+  const today = new Date().toISOString().split('T')[0];
+  const overdue = leadActionsOpen.filter(a => a.dueDate && a.dueDate < today).length;
+  return dashSection('Leads')
+    + dashGrid([dashCard('Total leads', allLeads.length), dashCard('New', newC), dashCard('Active', active), dashCard('Converted', converted), dashCard('Lost', lost), dashCard('Dormant', dormant)], 105)
+    + dashGrid([
+        dashCard('Conversion rate', convRate + '%', decided ? converted + ' of ' + decided + ' decided' : 'no leads decided yet'),
+        dashCard('Open lead actions', leadActionsOpen.length),
+        dashCard('Overdue lead actions', overdue)
+      ], 150);
 }
 
 async function renderDashboard() {
   const el = document.getElementById('dashboard-workspace');
   if (!el) return;
   if (allAssignments.length === 0) { try { await loadAssignments(); } catch(_) {} }
+  if (allLeads.length === 0) { try { await loadLeads(); } catch(_) {} }
   ensureParkedListsLoaded();
   if (dashInteractions === null && !dashLoading) {
     dashLoading = true;
@@ -9650,6 +9874,452 @@ async function loadAllInterviewStages() {
       assignmentRef: Array.isArray(asg) ? (asg[0] || '') : asg
     };
   });
+}
+
+// ===== LEADS =====
+const LEADS_URL = `https://api.airtable.com/v0/${BASE_ID}/Leads`;
+let allLeads = [];
+let selectedLead = null;
+let currentLeadFilter = 'all';
+let editingLeadId = null;
+let leadActionEditingLeadId = null;
+
+function escLead(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+async function loadLeads() {
+  const listEl = document.getElementById('lead-list');
+  if (listEl) listEl.innerHTML = '<div style="color:var(--tee-muted);font-size:0.85rem;padding:2rem 0;text-align:center;">Loading leads...</div>';
+  try {
+    let records = [], offset = null;
+    do {
+      let url = `${LEADS_URL}?pageSize=100`;
+      if (offset) url += `&offset=${offset}`;
+      const resp = await airtableFetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error?.message || 'Load failed');
+      records = records.concat(data.records || []);
+      offset = data.offset;
+    } while (offset);
+
+    allLeads = records.map(r => ({
+      id: r.id,
+      name: r.fields['Lead Name'] || '(Unnamed lead)',
+      orgId: Array.isArray(r.fields['Organisation']) ? (r.fields['Organisation'][0] || '') : '',
+      sector: Array.isArray(r.fields['Sector']) ? (r.fields['Sector'][0] || '') : (r.fields['Sector'] || ''),
+      sourceContactId: Array.isArray(r.fields['Source Contact']) ? (r.fields['Source Contact'][0] || '') : '',
+      relatedContactIds: r.fields['Related Contacts'] || [],
+      owner: r.fields['Owner'] || '',
+      status: r.fields['Status'] || 'New',
+      sourceType: r.fields['Source Type'] || '',
+      sourceDetail: r.fields['Source Detail'] || '',
+      discipline: r.fields['Discipline'] || '',
+      dateIdentified: r.fields['Date Identified'] || '',
+      description: r.fields['Description'] || '',
+      assignmentId: Array.isArray(r.fields['Linked Assignment']) ? (r.fields['Linked Assignment'][0] || '') : '',
+      lostReason: r.fields['Lost Reason'] || ''
+    }));
+
+    if (!actionsLoaded) await loadActions();
+    updateLeadCounts();
+    filterLeads();
+  } catch(e) {
+    if (listEl) listEl.innerHTML = `<div style="color:#dc2626;font-size:0.82rem;padding:1rem;">Error: ${e.message}</div>`;
+  }
+}
+
+function updateLeadCounts() {
+  const statuses = ['New','Active','Converted','Lost','Dormant'];
+  const el = id => document.getElementById(id);
+  if (el('lead-count-all')) el('lead-count-all').textContent = allLeads.length;
+  statuses.forEach(s => {
+    const c = allLeads.filter(l => l.status === s).length;
+    if (el(`lead-count-${s}`)) el(`lead-count-${s}`).textContent = c;
+  });
+}
+
+function setLeadFilter(filter, el) {
+  currentLeadFilter = filter;
+  document.querySelectorAll('#leads-workspace .nav-item').forEach(n => n.classList.remove('active'));
+  if (el) el.classList.add('active');
+  filterLeads();
+}
+
+function filterLeads() {
+  const search = (document.getElementById('lead-search')?.value || '').toLowerCase();
+  let filtered = allLeads;
+  if (currentLeadFilter !== 'all') filtered = filtered.filter(l => l.status === currentLeadFilter);
+  if (search) filtered = filtered.filter(l => {
+    const org = allOrgs.find(o => o.id === l.orgId);
+    return l.name.toLowerCase().includes(search) || (org && org.name.toLowerCase().includes(search)) || l.description.toLowerCase().includes(search);
+  });
+  renderLeadList(filtered);
+}
+
+// Reads open actions for a lead and returns a badge describing due state, or
+// null if there are none open. "Overdue" beats "due today" beats "not due yet"
+// so the list surfaces the most urgent state at a glance.
+function leadActionBadge(leadId) {
+  const acts = allActions.filter(a => a.leadId === leadId && !a.completed);
+  if (!acts.length) return null;
+  const today = new Date().toISOString().split('T')[0];
+  const overdue = acts.filter(a => a.dueDate && a.dueDate < today).length;
+  if (overdue) return { label: overdue + ' overdue', color: '#dc2626' };
+  const dueToday = acts.filter(a => a.dueDate === today).length;
+  if (dueToday) return { label: dueToday + ' due today', color: '#f59e0b' };
+  return { label: acts.length + ' action' + (acts.length === 1 ? '' : 's') + ' set', color: 'var(--tee-muted)' };
+}
+
+function renderLeadList(leads) {
+  const listEl = document.getElementById('lead-list');
+  if (!listEl) return;
+  if (!leads.length) {
+    listEl.innerHTML = '<div style="color:var(--tee-muted);font-size:0.85rem;padding:2rem 0;text-align:center;">No leads found</div>';
+    return;
+  }
+  const statusColors = { New: '#0891b2', Active: 'var(--tee-accent)', Converted: '#059669', Lost: '#dc2626', Dormant: 'var(--tee-muted)' };
+  listEl.innerHTML = leads.map(l => {
+    const org = allOrgs.find(o => o.id === l.orgId);
+    const badge = leadActionBadge(l.id);
+    const sc = statusColors[l.status] || 'var(--tee-muted)';
+    return `<div class="assign-card${selectedLead?.id === l.id ? ' selected' : ''}" onclick="selectLead('${l.id}')">
+      <div class="assign-card-title">${escLead(l.name)}</div>
+      ${org ? `<div class="assign-card-org">${escLead(org.name)}</div>` : ''}
+      <div class="assign-card-meta">
+        <span class="assign-status" style="background:${sc}22;color:${sc};">${l.status}</span>
+        ${l.owner ? `<span style="font-size:0.72rem;color:var(--tee-muted);">${l.owner.split(' ')[0]}</span>` : ''}
+        ${badge ? `<span style="font-size:0.72rem;font-weight:600;color:${badge.color};">${badge.label}</span>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function selectLead(id) {
+  selectedLead = allLeads.find(l => l.id === id);
+  filterLeads();
+  renderLeadDetail(selectedLead);
+}
+
+function dueStateLabel(dueDate) {
+  if (!dueDate) return { label: 'Not due yet', color: 'var(--tee-muted)' };
+  const today = new Date().toISOString().split('T')[0];
+  if (dueDate < today) return { label: 'Overdue', color: '#dc2626' };
+  if (dueDate === today) return { label: 'Due today', color: '#f59e0b' };
+  return { label: 'Due ' + dueDate, color: 'var(--tee-muted)' };
+}
+
+function renderLeadDetail(lead) {
+  const el = document.getElementById('lead-detail');
+  if (!el) return;
+  if (!lead) { el.innerHTML = '<div style="color:var(--tee-muted);font-size:0.85rem;padding:4rem 0;text-align:center;">Select a lead to view details</div>'; return; }
+
+  const org = allOrgs.find(o => o.id === lead.orgId);
+  const sourceContact = allContactsAll.find(c => c.id === lead.sourceContactId) || allContacts.find(c => c.id === lead.sourceContactId);
+  const relatedNames = (lead.relatedContactIds || []).map(id => {
+    const c = allContactsAll.find(x => x.id === id) || allContacts.find(x => x.id === id);
+    return c ? c.name : null;
+  }).filter(Boolean);
+  const actions = getLeadActions(lead.id);
+  const assignment = lead.assignmentId ? allAssignments.find(a => a.id === lead.assignmentId) : null;
+
+  const actionsHtml = actions.length ? actions.map(a => {
+    const contact = a.contactId ? (allContactsAll.find(c => c.id === a.contactId) || allContacts.find(c => c.id === a.contactId)) : null;
+    const state = dueStateLabel(a.dueDate);
+    return `<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:0.6rem 0;border-bottom:1px solid var(--tee-border);">
+      <div>
+        <div style="font-size:0.85rem;color:var(--tee-text);">${escLead(a.action)}</div>
+        <div style="font-size:0.72rem;color:var(--tee-muted);margin-top:2px;">${contact ? escLead(contact.name) + ' · ' : ''}${a.ownerField ? escLead(a.ownerField.split(' ')[0]) + ' · ' : ''}<span style="color:${state.color};">${state.label}</span></div>
+      </div>
+      <button onclick="completeLeadAction('${a.id}')" style="background:transparent;border:1px solid var(--tee-border);border-radius:8px;padding:0.25rem 0.7rem;font-size:0.72rem;color:var(--tee-muted);cursor:pointer;font-family:'DM Sans',sans-serif;flex-shrink:0;">Done</button>
+    </div>`;
+  }).join('') : '<div style="color:var(--tee-muted);font-size:0.82rem;padding:0.5rem 0;">No open actions.</div>';
+
+  el.innerHTML = `<div style="max-width:640px;">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:0.25rem;">
+      <div style="font-size:1.3rem;font-weight:600;color:var(--tee-text);">${escLead(lead.name)}</div>
+      <div style="display:flex;gap:0.5rem;">
+        <button onclick="openLeadEditModal('${lead.id}')" style="background:var(--tee-card);border:1px solid var(--tee-border);border-radius:8px;padding:0.35rem 0.875rem;font-size:0.78rem;color:var(--tee-muted);cursor:pointer;font-family:'DM Sans',sans-serif;">Edit</button>
+      </div>
+    </div>
+    ${org ? `<div style="font-size:0.9rem;color:var(--tee-muted);margin-bottom:0.75rem;">${escLead(org.name)}${lead.sector ? ' · ' + escLead(lead.sector) : ''}</div>` : ''}
+
+    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:1.25rem;">
+      ${['New','Active','Converted','Lost','Dormant'].map(s => `<button onclick="setLeadStatus('${lead.id}','${s}')" style="background:${lead.status===s?'var(--tee-accent)':'var(--tee-card)'};color:${lead.status===s?'white':'var(--tee-muted)'};border:1px solid var(--tee-border);border-radius:20px;padding:0.3rem 0.9rem;font-size:0.76rem;cursor:pointer;font-family:'DM Sans',sans-serif;">${s}</button>`).join('')}
+    </div>
+
+    <div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1rem 1.25rem;margin-bottom:1.25rem;">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.6rem;font-size:0.82rem;">
+        <div><span style="color:var(--tee-muted);">Owner</span><br>${escLead(lead.owner || '—')}</div>
+        <div><span style="color:var(--tee-muted);">Discipline</span><br>${escLead(lead.discipline || '—')}</div>
+        <div><span style="color:var(--tee-muted);">Source</span><br>${escLead(lead.sourceType || '—')}${lead.sourceType==='Other' && lead.sourceDetail ? ' — ' + escLead(lead.sourceDetail) : ''}</div>
+        <div><span style="color:var(--tee-muted);">Source contact</span><br>${sourceContact ? escLead(sourceContact.name) : '—'}</div>
+        <div><span style="color:var(--tee-muted);">Date identified</span><br>${escLead(lead.dateIdentified || '—')}</div>
+        <div><span style="color:var(--tee-muted);">Related contacts</span><br>${relatedNames.length ? escLead(relatedNames.join(', ')) : '—'}</div>
+      </div>
+      ${lead.description ? `<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--tee-border);font-size:0.85rem;color:var(--tee-text);white-space:pre-wrap;">${escLead(lead.description)}</div>` : ''}
+      ${assignment ? `<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--tee-border);font-size:0.82rem;"><span style="color:var(--tee-muted);">Converted to:</span> ${escLead(assignment.name)}</div>` : ''}
+      ${lead.status==='Lost' && lead.lostReason ? `<div style="margin-top:0.75rem;padding-top:0.75rem;border-top:1px solid var(--tee-border);font-size:0.82rem;"><span style="color:var(--tee-muted);">Lost reason:</span> ${escLead(lead.lostReason)}</div>` : ''}
+    </div>
+
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.6rem;">
+      <div style="font-size:0.72rem;font-weight:500;color:var(--tee-muted);text-transform:uppercase;letter-spacing:0.08em;">Actions</div>
+      <button onclick="openLeadActionModal('${lead.id}')" style="background:var(--tee-accent);color:white;border:none;border-radius:8px;padding:0.3rem 0.875rem;font-size:0.76rem;cursor:pointer;font-family:'DM Sans',sans-serif;">+ Add action</button>
+    </div>
+    <div>${actionsHtml}</div>
+  </div>`;
+}
+
+async function setLeadStatus(id, status) {
+  const fields = { 'Status': status };
+  if (status === 'Lost') {
+    const reason = prompt('Reason lost (optional):', '');
+    if (reason) fields['Lost Reason'] = reason;
+  }
+  try {
+    const resp = await fetch(`${LEADS_URL}/${id}`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields })
+    });
+    if (!resp.ok) throw new Error((await resp.json().catch(()=>({}))).error?.message || 'Update failed');
+    const idx = allLeads.findIndex(l => l.id === id);
+    if (idx > -1) { allLeads[idx].status = status; if (fields['Lost Reason']) allLeads[idx].lostReason = fields['Lost Reason']; }
+    if (selectedLead && selectedLead.id === id) selectedLead = allLeads[idx];
+    updateLeadCounts();
+    filterLeads();
+    renderLeadDetail(selectedLead);
+    showToast('Lead status updated ✓', 'success');
+  } catch(e) { showToast('Failed: ' + e.message, 'error'); }
+}
+
+function toggleLeadSourceDetail() {
+  const type = document.getElementById('le-source-type').value;
+  const wrap = document.getElementById('le-source-detail-wrap');
+  if (wrap) wrap.style.display = type === 'Other' ? 'block' : 'none';
+}
+
+function contactListForSelect() {
+  return (allContactsAll && allContactsAll.length ? allContactsAll : allContacts).slice().sort((a,b) => a.name.localeCompare(b.name));
+}
+
+function openLeadEditModal(id) {
+  editingLeadId = id;
+  const delBtn = document.getElementById('lead-delete-btn');
+  if (delBtn) delBtn.style.display = id ? 'inline-block' : 'none';
+  const modal = document.getElementById('lead-edit-modal');
+  const title = document.getElementById('lead-modal-title');
+  const sub = document.getElementById('lead-modal-sub');
+
+  const orgSel = document.getElementById('le-org');
+  orgSel.innerHTML = '<option value="">Select organisation...</option>' +
+    allOrgs.slice().sort((a,b) => a.name.localeCompare(b.name)).map(o => `<option value="${o.id}">${escLead(o.name)}</option>`).join('');
+
+  const contacts = contactListForSelect();
+  const scSel = document.getElementById('le-source-contact');
+  scSel.innerHTML = '<option value="">Select contact... (optional)</option>' +
+    contacts.map(c => `<option value="${c.id}">${escLead(c.name)}</option>`).join('');
+  const rcSel = document.getElementById('le-related-contacts');
+  rcSel.innerHTML = contacts.map(c => `<option value="${c.id}">${escLead(c.name)}</option>`).join('');
+
+  if (id) {
+    const l = allLeads.find(x => x.id === id);
+    if (!l) return;
+    title.textContent = 'Edit lead';
+    sub.textContent = 'Update this lead record.';
+    document.getElementById('le-name').value = l.name === '(Unnamed lead)' ? '' : l.name;
+    orgSel.value = l.orgId || '';
+    document.getElementById('le-owner').value = l.owner || '';
+    document.getElementById('le-status').value = l.status || 'New';
+    document.getElementById('le-discipline').value = l.discipline || '';
+    document.getElementById('le-source-type').value = l.sourceType || '';
+    document.getElementById('le-source-detail').value = l.sourceDetail || '';
+    scSel.value = l.sourceContactId || '';
+    Array.from(rcSel.options).forEach(o => { o.selected = (l.relatedContactIds || []).includes(o.value); });
+    document.getElementById('le-date-identified').value = l.dateIdentified || '';
+    document.getElementById('le-description').value = l.description || '';
+  } else {
+    title.textContent = 'New lead';
+    sub.textContent = 'Log a new lead so you can track it through to a live assignment.';
+    document.getElementById('le-name').value = '';
+    orgSel.value = '';
+    document.getElementById('le-owner').value = '';
+    document.getElementById('le-status').value = 'New';
+    document.getElementById('le-discipline').value = '';
+    document.getElementById('le-source-type').value = '';
+    document.getElementById('le-source-detail').value = '';
+    scSel.value = '';
+    Array.from(rcSel.options).forEach(o => o.selected = false);
+    document.getElementById('le-date-identified').value = new Date().toISOString().split('T')[0];
+    document.getElementById('le-description').value = '';
+  }
+  toggleLeadSourceDetail();
+  document.getElementById('lead-edit-saving').style.display = 'none';
+  modal.style.display = 'flex';
+}
+
+function closeLeadEditModal() {
+  document.getElementById('lead-edit-modal').style.display = 'none';
+  editingLeadId = null;
+}
+
+async function saveLeadEdit() {
+  const name = document.getElementById('le-name').value.trim();
+  if (!name) { showToast('Lead name is required', 'error'); return; }
+  document.getElementById('lead-edit-saving').style.display = 'inline';
+
+  const fields = { 'Lead Name': name };
+  const orgId = document.getElementById('le-org').value;
+  const owner = document.getElementById('le-owner').value;
+  const status = document.getElementById('le-status').value;
+  const discipline = document.getElementById('le-discipline').value;
+  const sourceType = document.getElementById('le-source-type').value;
+  const sourceDetail = document.getElementById('le-source-detail').value.trim();
+  const sourceContactId = document.getElementById('le-source-contact').value;
+  const relatedIds = Array.from(document.getElementById('le-related-contacts').selectedOptions).map(o => o.value);
+  const dateIdentified = document.getElementById('le-date-identified').value;
+  const description = document.getElementById('le-description').value.trim();
+
+  if (orgId) fields['Organisation'] = [orgId];
+  if (owner) fields['Owner'] = owner;
+  if (status) fields['Status'] = status;
+  if (discipline) fields['Discipline'] = discipline;
+  if (sourceType) fields['Source Type'] = sourceType;
+  if (sourceDetail) fields['Source Detail'] = sourceDetail;
+  if (sourceContactId) fields['Source Contact'] = [sourceContactId];
+  if (relatedIds.length) fields['Related Contacts'] = relatedIds;
+  if (dateIdentified) fields['Date Identified'] = dateIdentified;
+  if (description) fields['Description'] = description;
+
+  try {
+    const isNew = !editingLeadId;
+    const url = isNew ? LEADS_URL : `${LEADS_URL}/${editingLeadId}`;
+    const resp = await fetch(url, {
+      method: isNew ? 'POST' : 'PATCH',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error?.message || JSON.stringify(data));
+
+    const updated = {
+      id: data.id,
+      name: data.fields['Lead Name'] || name,
+      orgId: (data.fields['Organisation'] || [])[0] || '',
+      sector: Array.isArray(data.fields['Sector']) ? (data.fields['Sector'][0] || '') : '',
+      sourceContactId: (data.fields['Source Contact'] || [])[0] || '',
+      relatedContactIds: data.fields['Related Contacts'] || [],
+      owner: data.fields['Owner'] || '',
+      status: data.fields['Status'] || 'New',
+      sourceType: data.fields['Source Type'] || '',
+      sourceDetail: data.fields['Source Detail'] || '',
+      discipline: data.fields['Discipline'] || '',
+      dateIdentified: data.fields['Date Identified'] || '',
+      description: data.fields['Description'] || '',
+      assignmentId: (data.fields['Linked Assignment'] || [])[0] || '',
+      lostReason: data.fields['Lost Reason'] || ''
+    };
+    const idx = allLeads.findIndex(l => l.id === updated.id);
+    if (idx > -1) allLeads[idx] = updated; else allLeads.unshift(updated);
+    selectedLead = updated;
+    closeLeadEditModal();
+    updateLeadCounts();
+    filterLeads();
+    renderLeadDetail(selectedLead);
+    showToast(isNew ? 'Lead created ✓' : 'Lead updated ✓', 'success');
+  } catch(e) {
+    showToast('Failed: ' + e.message, 'error');
+  } finally {
+    document.getElementById('lead-edit-saving').style.display = 'none';
+  }
+}
+
+async function deleteLead() {
+  if (!editingLeadId) return;
+  const l = allLeads.find(x => x.id === editingLeadId);
+  if (!confirm(`Delete "${l?.name || 'this lead'}"? This can't be undone.`)) return;
+  try {
+    await fetch(`${LEADS_URL}/${editingLeadId}`, { method: 'DELETE', headers: { Authorization: `Bearer ${getToken()}` } });
+    allLeads = allLeads.filter(x => x.id !== editingLeadId);
+    if (selectedLead && selectedLead.id === editingLeadId) selectedLead = null;
+    closeLeadEditModal();
+    updateLeadCounts();
+    filterLeads();
+    renderLeadDetail(null);
+    showToast('Lead deleted', 'success');
+  } catch(e) { showToast('Failed to delete', 'error'); }
+}
+
+// ---- LEAD ACTIONS ----
+function openLeadActionModal(leadId) {
+  leadActionEditingLeadId = leadId;
+  document.getElementById('la-action').value = '';
+  document.getElementById('la-due').value = '';
+  const lead = allLeads.find(l => l.id === leadId);
+  document.getElementById('la-owner').value = lead?.owner || getOwner();
+  const contactSel = document.getElementById('la-contact');
+  const contacts = contactListForSelect();
+  contactSel.innerHTML = '<option value="">No specific contact</option>' + contacts.map(c => `<option value="${c.id}">${escLead(c.name)}</option>`).join('');
+  document.getElementById('lead-action-saving').style.display = 'none';
+  document.getElementById('lead-action-modal').style.display = 'flex';
+}
+
+function closeLeadActionModal() {
+  document.getElementById('lead-action-modal').style.display = 'none';
+  leadActionEditingLeadId = null;
+}
+
+async function saveLeadAction() {
+  const action = document.getElementById('la-action').value.trim();
+  if (!action) { showToast('Action text is required', 'error'); return; }
+  const contactId = document.getElementById('la-contact').value;
+  const owner = document.getElementById('la-owner').value;
+  const due = document.getElementById('la-due').value;
+  document.getElementById('lead-action-saving').style.display = 'inline';
+  const rec = await createAction(contactId, action, due, 'Lead', '', leadActionEditingLeadId, owner);
+  document.getElementById('lead-action-saving').style.display = 'none';
+  if (!rec) { showToast('Failed to save action', 'error'); return; }
+  closeLeadActionModal();
+  renderLeadDetail(selectedLead);
+  renderLeadList(allLeads.filter(l => currentLeadFilter === 'all' || l.status === currentLeadFilter));
+  updateLeadCounts();
+  showToast('Action set ✓', 'success');
+}
+
+// Completing a lead action also logs it as an interaction — on the lead, and
+// on the contact card if the action was targeted at someone specific.
+async function completeLeadAction(actionId) {
+  const a = allActions.find(x => x.id === actionId);
+  if (!a) return;
+  const ok = await completeAction(actionId);
+  if (!ok) { showToast('Failed to complete action', 'error'); return; }
+  try {
+    await logLeadInteraction(a.leadId, a.contactId, a.action, 'Note', 'Lead action completed.');
+  } catch(e) { console.log('logLeadInteraction error:', e); }
+  renderLeadDetail(selectedLead);
+  updateLeadCounts();
+  filterLeads();
+  showToast('Action completed ✓', 'success');
+}
+
+async function logLeadInteraction(leadId, contactId, subject, type, notes) {
+  const fields = {
+    'Interaction Subject': subject,
+    'Type': type || 'Note',
+    'Date': new Date().toISOString().split('T')[0],
+    'Logged by': getOwner()
+  };
+  if (notes) fields['Notes'] = notes;
+  if (leadId) fields['Lead'] = [leadId];
+  if (contactId) fields['Related Contact'] = [contactId];
+  try {
+    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ fields })
+    });
+    const data = await resp.json();
+    if (resp.ok && contactId) linkInteractionLocally(contactId, data.id);
+    return resp.ok ? data.id : null;
+  } catch(e) { console.log('logLeadInteraction error:', e); return null; }
 }
 
 // ---- NED / BOARD LINKS ----
