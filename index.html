@@ -1206,6 +1206,14 @@
       <div class="nav-left"><div class="nav-dot" style="background:#f59e0b;"></div><span class="nav-label">Due today</span></div>
       <span class="nav-count count-yellow" id="cand-count-duetoday">–</span>
     </div>
+    <div class="nav-item" id="cand-filter-duesoon" onclick="setCandFilter('duesoon',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:#40cae9;"></div><span class="nav-label">Due next week</span></div>
+      <span class="nav-count count-teal" id="cand-count-duesoon">–</span>
+    </div>
+    <div class="nav-item" id="cand-filter-duelater" onclick="setCandFilter('duelater',this)">
+      <div class="nav-left"><div class="nav-dot" style="background:#a78bfa;"></div><span class="nav-label">Due later</span></div>
+      <span class="nav-count count-purple" id="cand-count-duelater">–</span>
+    </div>
     <div class="nav-item" id="cand-filter-noaction" onclick="setCandFilter('noaction',this)">
       <div class="nav-left"><div class="nav-dot" style="background:var(--tee-muted);"></div><span class="nav-label">No action set</span></div>
       <span class="nav-count count-gray" id="cand-count-noaction">–</span>
@@ -7703,6 +7711,8 @@ function buildCandSelects() {
 function candFieldStr(v) { return Array.isArray(v) ? v.join(', ') : (v||''); }
 function updateCandCounts() {
   const today = new Date().toISOString().split('T')[0];
+  const weekOut = new Date(); weekOut.setDate(weekOut.getDate() + 7);
+  const weekOutStr = weekOut.toISOString().split('T')[0];
   document.getElementById('cand-count-all').textContent = allCandidates.length;
   document.getElementById('cand-count-warm').textContent = allCandidates.filter(c => candFieldStr(c.status).toLowerCase().includes('warm') || candFieldStr(c.relationship).toLowerCase().includes('warm')).length;
   document.getElementById('cand-count-active').textContent = allCandidates.filter(c => c.status === 'Active').length;
@@ -7711,6 +7721,8 @@ function updateCandCounts() {
   document.getElementById('cand-count-dormant').textContent = allCandidates.filter(c => c.status === 'Dormant').length;
   document.getElementById('cand-count-overdue').textContent = allCandidates.filter(c => c.nextActionDate && c.nextActionDate < today && candOwnerMatch(c.nextActionBy)).length;
   document.getElementById('cand-count-duetoday').textContent = allCandidates.filter(c => c.nextActionDate === today && candOwnerMatch(c.nextActionBy)).length;
+  document.getElementById('cand-count-duesoon').textContent = allCandidates.filter(c => c.nextActionDate && c.nextActionDate > today && c.nextActionDate <= weekOutStr && candOwnerMatch(c.nextActionBy)).length;
+  document.getElementById('cand-count-duelater').textContent = allCandidates.filter(c => c.nextActionDate && c.nextActionDate > weekOutStr && candOwnerMatch(c.nextActionBy)).length;
   document.getElementById('cand-count-noaction').textContent = allCandidates.filter(c => !c.nextActionDate && candOwnerMatch(c.addedBy)).length;
 }
 
@@ -7742,6 +7754,8 @@ function filterCandidates() {
   else if (currentCandFilter === 'dormant') candidates = candidates.filter(c => c.status === 'Dormant');
   else if (currentCandFilter === 'overdue') candidates = candidates.filter(c => c.nextActionDate && c.nextActionDate < today && candOwnerMatch(c.nextActionBy));
   else if (currentCandFilter === 'duetoday') candidates = candidates.filter(c => c.nextActionDate === today && candOwnerMatch(c.nextActionBy));
+  else if (currentCandFilter === 'duesoon') { const w = new Date(); w.setDate(w.getDate() + 7); const wStr = w.toISOString().split('T')[0]; candidates = candidates.filter(c => c.nextActionDate && c.nextActionDate > today && c.nextActionDate <= wStr && candOwnerMatch(c.nextActionBy)); }
+  else if (currentCandFilter === 'duelater') { const w = new Date(); w.setDate(w.getDate() + 7); const wStr = w.toISOString().split('T')[0]; candidates = candidates.filter(c => c.nextActionDate && c.nextActionDate > wStr && candOwnerMatch(c.nextActionBy)); }
   else if (currentCandFilter === 'noaction') candidates = candidates.filter(c => !c.nextActionDate && candOwnerMatch(c.addedBy));
   if (query.length >= 2) candidates = candidates.filter(c =>
     c.name.toLowerCase().includes(query) ||
@@ -7846,15 +7860,21 @@ function updateCandRefineHeader() {
 // RENDER LIST
 function renderCandList(candidates) {
   const today = new Date().toISOString().split('T')[0];
-  const filterTitles = { all:'All candidates', warm:'Warm', active:'Active', available:'Available now', placed:'Placed', dormant:'Dormant', overdue:'Overdue', duetoday:'Due today', noaction:'No action set' };
+  const filterTitles = { all:'All candidates', warm:'Warm', active:'Active', available:'Available now', placed:'Placed', dormant:'Dormant', overdue:'Overdue', duetoday:'Due today', duesoon:'Due next week', duelater:'Due later', noaction:'No action set' };
   document.getElementById('cand-list-title').textContent = filterTitles[currentCandFilter] || 'Candidates';
   document.getElementById('cand-list-sub').textContent = `${candidates.length} candidate${candidates.length !== 1 ? 's' : ''}`;
   if (candidates.length === 0) {
     document.getElementById('cand-list').innerHTML = '<div class="empty-state"><div class="empty-state-title">No candidates</div><div class="empty-state-text">None match the current filter.</div></div>';
     return;
   }
-  // Always present alphabetically: first name, then surname (full-name compare).
-  candidates = [...candidates].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  // Actions-due buckets sort soonest-due first, so you can glance and know what's next.
+  // Every other view stays alphabetical, which is what people expect when browsing.
+  const dueSortFilters = ['overdue','duetoday','duesoon','duelater'];
+  if (dueSortFilters.includes(currentCandFilter)) {
+    candidates = [...candidates].sort((a, b) => (a.nextActionDate || '9999-99-99').localeCompare(b.nextActionDate || '9999-99-99'));
+  } else {
+    candidates = [...candidates].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+  }
   const avatarColors = ['#e8c547','#4ecdc4','#a78bfa','#ff6b6b','#74b9ff'];
   const html = candidates.map(c => {
     const initials = c.name.split(' ').map(n => n[0]).join('').slice(0,2).toUpperCase();
