@@ -5661,7 +5661,8 @@ let dashLoading = false;
 
 function dashPeriodStart(period) {
   const d = new Date();
-  if (period === 'week') d.setDate(d.getDate() - 7);
+  if (period === 'day') { /* today only — no subtraction */ }
+  else if (period === 'week') d.setDate(d.getDate() - 7);
   else if (period === '90d') d.setDate(d.getDate() - 90);
   else d.setDate(d.getDate() - 30);
   return d.toISOString().split('T')[0];
@@ -5749,7 +5750,7 @@ function dashWeeklyTrend() {
 }
 
 function dashPool() {
-  const merged = [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts];
+  const merged = allContactsAll.length > 0 ? allContactsAll : [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts];
   const seen = new Set(); const all = [];
   merged.forEach(c => { if (!seen.has(c.id)) { seen.add(c.id); all.push(c); } });
   return all.filter(c => dashOwner === 'All' || (c.owner || 'Louisa Daly') === dashOwner);
@@ -5842,7 +5843,7 @@ function dashChrome() {
     <div style="font-size:1.2rem;font-weight:600;color:var(--tee-text);">BD performance</div>
     <div style="display:flex;align-items:center;gap:8px;">
       <div style="display:inline-flex;border:1px solid var(--tee-border);border-radius:8px;overflow:hidden;">${seg('Louisa Daly',dashOwner,'dashSetOwner','Louisa')}${seg('John Daly',dashOwner,'dashSetOwner','John')}${seg('All',dashOwner,'dashSetOwner','All')}</div>
-      <div style="display:inline-flex;border:1px solid var(--tee-border);border-radius:8px;overflow:hidden;">${seg('week',dashPeriod,'dashSetPeriod','Week')}${seg('month',dashPeriod,'dashSetPeriod','Month')}${seg('90d',dashPeriod,'dashSetPeriod','90 days')}</div>
+      <div style="display:inline-flex;border:1px solid var(--tee-border);border-radius:8px;overflow:hidden;">${seg('day',dashPeriod,'dashSetPeriod','Today')}${seg('week',dashPeriod,'dashSetPeriod','Week')}${seg('month',dashPeriod,'dashSetPeriod','Month')}${seg('90d',dashPeriod,'dashSetPeriod','90 days')}</div>
     </div>
   </div>`;
 }
@@ -5900,7 +5901,7 @@ function dashAddedByCounts(kind) {
 
 function dashRenderBody() {
   const a = dashActivity(), eng = dashEngagement(), pipe = dashPipeline(), out = dashOutcomes(), weeks = dashWeeklyTrend();
-  const periodLabel = dashPeriod === 'week' ? 'last 7 days' : dashPeriod === '90d' ? 'last 90 days' : 'last 30 days';
+  const periodLabel = dashPeriod === 'day' ? 'today' : dashPeriod === 'week' ? 'last 7 days' : dashPeriod === '90d' ? 'last 90 days' : 'last 30 days';
   const gbp = n => '£' + Math.round(n).toLocaleString();
   const pmax = Math.max(pipe.start.count,pipe.li.count,pipe.e1.count,pipe.e2.count,pipe.e3.count,pipe.lim.count,pipe.call.count,pipe.warm.count,pipe.responded.count,1);
   const today = new Date().toISOString().split('T')[0];
@@ -5966,7 +5967,7 @@ async function renderDashboard() {
   if (!el) return;
   if (allAssignments.length === 0) { try { await loadAssignments(); } catch(_) {} }
   if (allLeads.length === 0) { try { await loadLeads(); } catch(_) {} }
-  ensureParkedListsLoaded();
+  await ensureParkedListsLoaded();
   if (dashInteractions === null && !dashLoading) {
     dashLoading = true;
     el.innerHTML = '<div style="max-width:1100px;margin:0 auto;">' + dashChrome() + '<div style="padding:3rem;text-align:center;color:var(--tee-muted);">Loading activity…</div></div>';
