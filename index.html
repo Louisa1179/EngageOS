@@ -2363,6 +2363,10 @@ function switchUser(name) {
   if (btn) btn.classList.add('active');
   filterOrgs();
   loadContacts();
+  if (typeof allCandidates !== 'undefined' && allCandidates.length) {
+    updateCandCounts();
+    filterCandidates();
+  }
 }
 
 function updateToggleUI(name) {
@@ -7422,7 +7426,7 @@ async function loadCandidates() {
       availability: cf(r, 'Candidate Availability'),
       notice: cf(r, 'Notice Period'),
       contractType: cf(r, 'Contract type'),
-      dayRate: cf(r, 'Day Rate Range'),
+      dayRate: Array.isArray(r.fields['Day Rate Range']) ? r.fields['Day Rate Range'] : (r.fields['Day Rate Range'] ? [r.fields['Day Rate Range']] : []),
       specialisms: Array.isArray(r.fields['Specialisms']) ? r.fields['Specialisms'] : (r.fields['Specialisms'] ? [r.fields['Specialisms']] : []),
       qualifications: Array.isArray(r.fields['Qualifications']) ? r.fields['Qualifications'] : (r.fields['Qualifications'] ? [r.fields['Qualifications']] : []),
       sectors: r.fields['Sector Expertise'] ? r.fields['Sector Expertise'].split(', ').map(s => s.trim()).filter(Boolean) : [],
@@ -7444,6 +7448,7 @@ async function loadCandidates() {
       nextActionDate: cf(r, 'Next action date'),
       nextActionNotes: cf(r, 'Next action notes'),
       nextActionBy: cf(r, 'Next action by'),
+      addedBy: cf(r, 'Added By'),
       firstCallCompleted: r.fields['First call completed'] || r.fields['First Call Completed'] || false,
       linkedContacts: Array.isArray(r.fields['Linked Contacts']) ? r.fields['Linked Contacts'] : [],
       interactionIds: Array.isArray(r.fields['Interactions']) ? r.fields['Interactions'] : [],
@@ -7704,9 +7709,9 @@ function updateCandCounts() {
   document.getElementById('cand-count-available').textContent = allCandidates.filter(c => candFieldStr(c.availability).toLowerCase().includes('immediately') || candFieldStr(c.availability).toLowerCase().includes('available')).length;
   document.getElementById('cand-count-placed').textContent = allCandidates.filter(c => c.status === 'Placed').length;
   document.getElementById('cand-count-dormant').textContent = allCandidates.filter(c => c.status === 'Dormant').length;
-  document.getElementById('cand-count-overdue').textContent = allCandidates.filter(c => c.nextActionDate && c.nextActionDate < today).length;
-  document.getElementById('cand-count-duetoday').textContent = allCandidates.filter(c => c.nextActionDate === today).length;
-  document.getElementById('cand-count-noaction').textContent = allCandidates.filter(c => !c.nextActionDate).length;
+  document.getElementById('cand-count-overdue').textContent = allCandidates.filter(c => c.nextActionDate && c.nextActionDate < today && candOwnerMatch(c.nextActionBy)).length;
+  document.getElementById('cand-count-duetoday').textContent = allCandidates.filter(c => c.nextActionDate === today && candOwnerMatch(c.nextActionBy)).length;
+  document.getElementById('cand-count-noaction').textContent = allCandidates.filter(c => !c.nextActionDate && candOwnerMatch(c.addedBy)).length;
 }
 
 // FILTER
@@ -7715,6 +7720,15 @@ function setCandFilter(filter, el) {
   document.querySelectorAll('#candidates-workspace .nav-item').forEach(n => n.classList.remove('active'));
   el.classList.add('active');
   filterCandidates();
+}
+
+// True if the given owner value matches the current Louisa/John/All toggle.
+// 'All' always matches. Otherwise the value must match the selected person's full name.
+function candOwnerMatch(ownerVal) {
+  const v = getViewUser();
+  if (!v || v === 'All') return true;
+  const val = Array.isArray(ownerVal) ? ownerVal[0] : ownerVal;
+  return val === v;
 }
 
 function filterCandidates() {
@@ -7726,9 +7740,9 @@ function filterCandidates() {
   else if (currentCandFilter === 'available') candidates = candidates.filter(c => candFieldStr(c.availability).toLowerCase().includes('immediately') || candFieldStr(c.availability).toLowerCase().includes('available'));
   else if (currentCandFilter === 'placed') candidates = candidates.filter(c => c.status === 'Placed');
   else if (currentCandFilter === 'dormant') candidates = candidates.filter(c => c.status === 'Dormant');
-  else if (currentCandFilter === 'overdue') candidates = candidates.filter(c => c.nextActionDate && c.nextActionDate < today);
-  else if (currentCandFilter === 'duetoday') candidates = candidates.filter(c => c.nextActionDate === today);
-  else if (currentCandFilter === 'noaction') candidates = candidates.filter(c => !c.nextActionDate);
+  else if (currentCandFilter === 'overdue') candidates = candidates.filter(c => c.nextActionDate && c.nextActionDate < today && candOwnerMatch(c.nextActionBy));
+  else if (currentCandFilter === 'duetoday') candidates = candidates.filter(c => c.nextActionDate === today && candOwnerMatch(c.nextActionBy));
+  else if (currentCandFilter === 'noaction') candidates = candidates.filter(c => !c.nextActionDate && candOwnerMatch(c.addedBy));
   if (query.length >= 2) candidates = candidates.filter(c =>
     c.name.toLowerCase().includes(query) ||
     c.orgName.toLowerCase().includes(query) ||
@@ -8508,7 +8522,7 @@ async function saveCandidateEdit() {
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || selectedCandidate.orgName) : selectedCandidate.orgName;
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
       if (idx > -1) {
-        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, region: fields['Region']!==undefined?fields['Region']:allCandidates[idx].region, county: fields['County']!==undefined?fields['County']:allCandidates[idx].county, cityTown: fields['City / Town']!==undefined?fields['City / Town']:allCandidates[idx].cityTown, email: fields['Email']||allCandidates[idx].email, phone: fields['Landline']||allCandidates[idx].phone, mobile: fields['Mobile']||allCandidates[idx].mobile, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary Objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary, previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
+        allCandidates[idx] = { ...allCandidates[idx], name: fullName, orgId, orgName, role: fields['Employment History']||allCandidates[idx].role, status: fields['Candidate Status']||allCandidates[idx].status, relationship: fields['Relationship Context']||allCandidates[idx].relationship, availability: fields['Candidate Availability']||allCandidates[idx].availability, notice: fields['Notice Period']||allCandidates[idx].notice, contractType: fields['Contract type']||allCandidates[idx].contractType, dayRate: fields['Day Rate Range']||allCandidates[idx].dayRate, specialisms, sectors, location: fields['Base Location']||allCandidates[idx].location, willTravel: fields['Will Travel']||allCandidates[idx].willTravel, region: fields['Region']!==undefined?fields['Region']:allCandidates[idx].region, county: fields['County']!==undefined?fields['County']:allCandidates[idx].county, cityTown: fields['City / Town']!==undefined?fields['City / Town']:allCandidates[idx].cityTown, email: fields['Email']||allCandidates[idx].email, phone: fields['Landline']||allCandidates[idx].phone, mobile: fields['Mobile']||allCandidates[idx].mobile, linkedin: fields['LinkedIn']||allCandidates[idx].linkedin, cvUrl: fields['CV URL']||allCandidates[idx].cvUrl, salary: fields['Salary objective']||allCandidates[idx].salary, summary: fields['Notes']||allCandidates[idx].summary, previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
         selectedCandidate = allCandidates[idx];
       }
       closeCandidateModal();
@@ -8522,7 +8536,7 @@ async function saveCandidateEdit() {
       data = await resp.json();
       if (!resp.ok) throw new Error(data.error?.message || 'Create failed');
       const orgName = orgId ? (allOrgs.find(o => o.id === orgId)?.name || '') : '';
-      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', region: fields['Region']||'', county: fields['County']||'', cityTown: fields['City / Town']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary Objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', nextActionBy: '', firstCallCompleted: false, interactionIds: [], linkedContacts: [], previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
+      const newCand = { id: data.id, name: fullName, orgId, orgName, role: fields['Employment History']||'', status: fields['Candidate Status']||'', relationship: fields['Relationship Context']||'', availability: fields['Candidate Availability']||'', notice: fields['Notice Period']||'', contractType: fields['Contract type']||'', dayRate: fields['Day Rate Range']||'', specialisms, sectors, location: fields['Base Location']||'', willTravel: fields['Will Travel']||'', region: fields['Region']||'', county: fields['County']||'', cityTown: fields['City / Town']||'', email: fields['Email']||'', phone: fields['Landline']||'', mobile: fields['Mobile']||'', linkedin: fields['LinkedIn']||'', salary: fields['Salary objective']||'', summary: fields['Notes']||'', notes: '', nextActionDate: '', nextActionNotes: '', nextActionBy: '', addedBy: fields['Added By']||'', firstCallCompleted: false, interactionIds: [], linkedContacts: [], previousEmployerIds: prevEmpIds, previousEmployerNames: prevEmpSelected.map(e => e.name), qualifications };
       allCandidates.push(newCand);
       // If created from an assignment, create AC record linking them
       if (window._pendingACAssignmentId) {
@@ -8638,6 +8652,7 @@ async function saveCandReminder() {
     if (!r1.ok) { const e = await r1.json(); throw new Error(e.error?.message || 'Save failed'); }
     // Next action notes saved separately, matching saveCandidateLog
     await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action notes': note } }) });
+    await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action by': by } }) });
     const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
     if (idx > -1) {
       allCandidates[idx].nextActionDate = date;
@@ -8696,6 +8711,7 @@ async function saveCandidateLog() {
       if (nextActionNotes) {
         await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action notes': nextActionNotes } }) });
       }
+      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action by': loggedBy } }) });
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
       if (idx > -1) { allCandidates[idx].nextActionDate = reminderDate; if(nextActionNotes) allCandidates[idx].nextActionNotes = [nextActionNotes]; allCandidates[idx].nextActionBy = loggedBy; selectedCandidate = allCandidates[idx]; }
     }
