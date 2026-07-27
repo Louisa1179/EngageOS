@@ -2281,7 +2281,9 @@ function earliestManualActionDue(contactId) {
 // contactId may be '' / null for a lead action that isn't targeted at a specific
 // person (e.g. "research the organisation"). leadId/ownerField are optional so
 // every existing call site (contact-sequence actions) keeps working unchanged.
+let lastCreateActionError = '';
 async function createAction(contactId, action, dueDate, source, detail, leadId, ownerField) {
+  lastCreateActionError = '';
   const fields = { 'Action': action, 'Source': source || 'Manual' };
   if (contactId) fields['Contact'] = [contactId];
   if (dueDate) fields['Due Date'] = dueDate;
@@ -2295,11 +2297,11 @@ async function createAction(contactId, action, dueDate, source, detail, leadId, 
       body: JSON.stringify({ fields })
     });
     const data = await resp.json();
-    if (!resp.ok) { console.error('createAction error:', JSON.stringify(data)); return null; }
+    if (!resp.ok) { lastCreateActionError = data?.error?.message || `HTTP ${resp.status}`; console.error('createAction error:', JSON.stringify(data)); return null; }
     const rec = { id: data.id, contactId: contactId || '', action, dueDate: dueDate || '', completed: false, source: source || 'Manual', detail: detail || '', leadId: leadId || '', ownerField: ownerField || '' };
     allActions.push(rec);
     return rec;
-  } catch(e) { console.error('createAction error:', e); return null; }
+  } catch(e) { lastCreateActionError = e.message || 'Network error'; console.error('createAction error:', e); return null; }
 }
 
 // Edits an existing open action in place — e.g. changing "not connected" to
@@ -10459,8 +10461,14 @@ function openLeadActionModal(leadId) {
   const lead = allLeads.find(l => l.id === leadId);
   document.getElementById('la-owner').value = lead?.owner || getOwner();
   const contactSel = document.getElementById('la-contact');
-  const contacts = contactListForSelect();
-  contactSel.innerHTML = '<option value="">No specific contact</option>' + contacts.map(c => `<option value="${c.id}">${escLead(c.name)}</option>`).join('');
+  const allContactsList = contactListForSelect();
+  const idSet = new Set();
+  if (lead?.sourceContactId) idSet.add(lead.sourceContactId);
+  (lead?.relatedContactIds || []).forEach(rid => idSet.add(rid));
+  const leadContacts = allContactsList.filter(c => idSet.has(c.id))
+    .sort((a,b) => a.name.localeCompare(b.name));
+  contactSel.innerHTML = '<option value="">No specific contact</option>' +
+    leadContacts.map(c => `<option value="${c.id}">${escLead(c.name)}${c.role ? ' — ' + escLead(c.role) : ''}</option>`).join('');
   document.getElementById('lead-action-saving').style.display = 'none';
   document.getElementById('lead-action-modal').style.display = 'flex';
 }
@@ -10479,7 +10487,7 @@ async function saveLeadAction() {
   document.getElementById('lead-action-saving').style.display = 'inline';
   const rec = await createAction(contactId, action, due, 'Lead', '', leadActionEditingLeadId, owner);
   document.getElementById('lead-action-saving').style.display = 'none';
-  if (!rec) { showToast('Failed to save action', 'error'); return; }
+  if (!rec) { showToast('Failed to save action' + (lastCreateActionError ? ': ' + lastCreateActionError : ''), 'error'); return; }
   closeLeadActionModal();
   renderLeadDetail(selectedLead);
   renderLeadList(allLeads.filter(l => currentLeadFilter === 'all' || l.status === currentLeadFilter));
