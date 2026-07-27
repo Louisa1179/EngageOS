@@ -362,6 +362,9 @@
   .org-selected-badge span { cursor: pointer; opacity: 0.7; }
   .org-selected-badge span:hover { opacity: 1; }
 
+  .cp-tab { background: none; border: 1px solid var(--tee-border); border-radius: 20px; padding: 0.3rem 0.75rem; font-family: 'DM Sans', sans-serif; font-size: 0.76rem; color: var(--tee-muted); cursor: pointer; }
+  .cp-tab.active { background: rgba(53,150,194,0.1); border-color: rgba(53,150,194,0.35); color: var(--tee-accent); font-weight: 500; }
+
   /* ADD ORG INLINE FORM */
   .add-org-box { background: rgba(53,150,194,0.04); border: 1px solid rgba(53,150,194,0.2); border-radius: 10px; padding: 0.875rem 1rem; margin-top: 0.5rem; display: none; }
   .add-org-title { font-size: 0.78rem; font-weight: 500; color: var(--tee-accent); margin-bottom: 0.75rem; }
@@ -1423,13 +1426,48 @@
 
     <div class="edit-field-group">
       <label class="edit-label">Source contact</label>
-      <select id="le-source-contact" class="edit-input"><option value="">Select contact... (optional)</option></select>
+      <div class="org-typeahead-wrap">
+        <input type="text" class="edit-input" id="le-source-contact-search" placeholder="Type a name... (optional)" autocomplete="off"
+          oninput="searchLeSourceContact(this.value)" onfocus="searchLeSourceContact(this.value)"
+          onblur="setTimeout(function(){var d=document.getElementById('le-source-contact-dropdown'); if(d) d.style.display='none';},200)" />
+        <div class="org-dropdown" id="le-source-contact-dropdown"></div>
+      </div>
+      <div id="le-source-contact-selected-display" style="display:none;">
+        <div class="org-selected-badge">
+          <span id="le-source-contact-selected-name"></span>
+          <span onclick="clearLeSourceContact()" title="Clear" style="cursor:pointer;">✕</span>
+        </div>
+      </div>
+      <input type="hidden" id="le-source-contact" value="" />
     </div>
 
     <div class="edit-field-group">
       <label class="edit-label">Related contacts</label>
-      <select id="le-related-contacts" class="edit-input" multiple size="4"></select>
-      <div style="font-size:0.72rem;color:var(--tee-muted);margin-top:0.3rem;">Hold Ctrl/Cmd to select more than one.</div>
+      <div style="display:flex;gap:0.4rem;margin-bottom:0.5rem;">
+        <button type="button" class="cp-tab active" id="le-rc-tab-search" onclick="setRelatedContactMode('search')">Search by name</button>
+        <button type="button" class="cp-tab" id="le-rc-tab-org" onclick="setRelatedContactMode('org')">Pick from organisation</button>
+      </div>
+
+      <div id="le-rc-search-mode">
+        <div class="org-typeahead-wrap">
+          <input type="text" class="edit-input" id="le-related-search" placeholder="Type a name..." autocomplete="off"
+            oninput="searchLeRelatedContacts(this.value)" onfocus="searchLeRelatedContacts(this.value)"
+            onblur="setTimeout(function(){var d=document.getElementById('le-related-dropdown'); if(d) d.style.display='none';},200)" />
+          <div class="org-dropdown" id="le-related-dropdown"></div>
+        </div>
+      </div>
+
+      <div id="le-rc-org-mode" style="display:none;">
+        <div class="org-typeahead-wrap">
+          <input type="text" class="edit-input" id="le-related-org-search" placeholder="Type an organisation..." autocomplete="off"
+            oninput="searchLeRelatedOrgs(this.value)" onfocus="searchLeRelatedOrgs(this.value)"
+            onblur="setTimeout(function(){var d=document.getElementById('le-related-org-dropdown'); if(d) d.style.display='none';},200)" />
+          <div class="org-dropdown" id="le-related-org-dropdown"></div>
+        </div>
+        <div id="le-related-org-contact-list" style="display:none;margin-top:0.5rem;max-height:180px;overflow-y:auto;border:1px solid var(--tee-border);border-radius:8px;"></div>
+      </div>
+
+      <div id="le-related-chips" style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-top:0.6rem;"></div>
     </div>
 
     <div class="edit-field-group">
@@ -10102,6 +10140,160 @@ function contactListForSelect() {
   return (allContactsAll && allContactsAll.length ? allContactsAll : allContacts).slice().sort((a,b) => a.name.localeCompare(b.name));
 }
 
+// ---- LEAD SOURCE / RELATED CONTACT PICKERS ----
+let leSourceContactSelected = null;
+let leRelatedContactsSelected = [];
+
+function contactOptionRow(c) {
+  return `<div class="org-option" data-id="${c.id}">${escLead(c.name)}` +
+    (c.role ? `<span style="font-size:0.72rem;color:var(--tee-muted);margin-left:6px;">· ${escLead(c.role)}</span>` : '') +
+    (c.orgName ? `<span style="font-size:0.72rem;color:var(--tee-muted);"> · ${escLead(c.orgName)}</span>` : '') +
+    `</div>`;
+}
+
+function searchLeSourceContact(val) {
+  const dd = document.getElementById('le-source-contact-dropdown');
+  if (!dd) return;
+  const q = (val || '').toLowerCase().trim();
+  const list = contactListForSelect();
+  const matches = q ? list.filter(c => c.name && c.name.toLowerCase().includes(q)).slice(0, 8) : list.slice(0, 8);
+  if (matches.length === 0) { dd.innerHTML = '<div class="org-option" style="cursor:default;color:var(--tee-muted);">No matches</div>'; dd.style.display = 'block'; return; }
+  const matchMap = {}; matches.forEach(c => { matchMap[c.id] = c; });
+  dd.innerHTML = matches.map(contactOptionRow).join('');
+  dd.querySelectorAll('.org-option[data-id]').forEach(el => {
+    el.onmousedown = (e) => {
+      e.preventDefault();
+      const c = matchMap[el.getAttribute('data-id')];
+      if (!c) return;
+      leSourceContactSelected = c;
+      document.getElementById('le-source-contact').value = c.id;
+      document.getElementById('le-source-contact-search').style.display = 'none';
+      document.getElementById('le-source-contact-selected-name').textContent = c.name + (c.role ? ' · ' + c.role : '');
+      document.getElementById('le-source-contact-selected-display').style.display = 'block';
+      dd.style.display = 'none';
+    };
+  });
+  dd.onwheel = (e) => { e.stopPropagation(); };
+  dd.style.display = 'block';
+}
+
+function clearLeSourceContact() {
+  leSourceContactSelected = null;
+  document.getElementById('le-source-contact').value = '';
+  const si = document.getElementById('le-source-contact-search');
+  if (si) { si.value = ''; si.style.display = ''; }
+  document.getElementById('le-source-contact-selected-display').style.display = 'none';
+}
+
+function setRelatedContactMode(mode) {
+  const searchMode = document.getElementById('le-rc-search-mode');
+  const orgMode = document.getElementById('le-rc-org-mode');
+  const tabSearch = document.getElementById('le-rc-tab-search');
+  const tabOrg = document.getElementById('le-rc-tab-org');
+  if (mode === 'org') {
+    searchMode.style.display = 'none';
+    orgMode.style.display = 'block';
+    tabSearch.classList.remove('active');
+    tabOrg.classList.add('active');
+  } else {
+    searchMode.style.display = 'block';
+    orgMode.style.display = 'none';
+    tabOrg.classList.remove('active');
+    tabSearch.classList.add('active');
+  }
+}
+
+function searchLeRelatedContacts(val) {
+  const dd = document.getElementById('le-related-dropdown');
+  if (!dd) return;
+  const q = (val || '').toLowerCase().trim();
+  const list = contactListForSelect().filter(c => !leRelatedContactsSelected.some(s => s.id === c.id));
+  const matches = q ? list.filter(c => c.name && c.name.toLowerCase().includes(q)).slice(0, 8) : list.slice(0, 8);
+  if (matches.length === 0) { dd.innerHTML = '<div class="org-option" style="cursor:default;color:var(--tee-muted);">No matches</div>'; dd.style.display = 'block'; return; }
+  const matchMap = {}; matches.forEach(c => { matchMap[c.id] = c; });
+  dd.innerHTML = matches.map(contactOptionRow).join('');
+  dd.querySelectorAll('.org-option[data-id]').forEach(el => {
+    el.onmousedown = (e) => {
+      e.preventDefault();
+      addLeRelatedContact(matchMap[el.getAttribute('data-id')]);
+      const si = document.getElementById('le-related-search');
+      if (si) si.value = '';
+      dd.style.display = 'none';
+    };
+  });
+  dd.onwheel = (e) => { e.stopPropagation(); };
+  dd.style.display = 'block';
+}
+
+function searchLeRelatedOrgs(val) {
+  const dd = document.getElementById('le-related-org-dropdown');
+  if (!dd) return;
+  const q = (val || '').toLowerCase().trim();
+  const matches = q ? allOrgs.filter(o => o.name && o.name.toLowerCase().includes(q)).slice(0, 8) : allOrgs.slice(0, 8);
+  if (matches.length === 0) { dd.innerHTML = '<div class="org-option" style="cursor:default;color:var(--tee-muted);">No matches</div>'; dd.style.display = 'block'; return; }
+  const matchMap = {}; matches.forEach(o => { matchMap[o.id] = o; });
+  dd.innerHTML = matches.map(o => `<div class="org-option" data-id="${o.id}">${escLead(o.name)}</div>`).join('');
+  dd.querySelectorAll('.org-option[data-id]').forEach(el => {
+    el.onmousedown = (e) => {
+      e.preventDefault();
+      selectLeRelatedOrg(matchMap[el.getAttribute('data-id')]);
+      dd.style.display = 'none';
+    };
+  });
+  dd.onwheel = (e) => { e.stopPropagation(); };
+  dd.style.display = 'block';
+}
+
+function selectLeRelatedOrg(org) {
+  if (!org) return;
+  const si = document.getElementById('le-related-org-search');
+  if (si) si.value = org.name;
+  const listWrap = document.getElementById('le-related-org-contact-list');
+  const orgContacts = contactListForSelect().filter(c => c.org === org.id);
+  if (orgContacts.length === 0) {
+    listWrap.innerHTML = '<div style="padding:0.75rem;font-size:0.8rem;color:var(--tee-muted);">No contacts found for this organisation.</div>';
+    listWrap.style.display = 'block';
+    return;
+  }
+  listWrap.innerHTML = orgContacts.map(c => {
+    const checked = leRelatedContactsSelected.some(s => s.id === c.id);
+    return `<label style="display:flex;align-items:center;gap:0.5rem;padding:0.5rem 0.75rem;border-bottom:1px solid var(--tee-border);font-size:0.82rem;cursor:pointer;">
+      <input type="checkbox" data-id="${c.id}" ${checked ? 'checked' : ''} onchange="toggleLeRelatedOrgContact('${c.id}', this.checked)" />
+      <span>${escLead(c.name)}${c.role ? '<span style="color:var(--tee-muted);"> · ' + escLead(c.role) + '</span>' : ''}</span>
+    </label>`;
+  }).join('');
+  listWrap.style.display = 'block';
+}
+
+function toggleLeRelatedOrgContact(id, checked) {
+  const c = contactListForSelect().find(x => x.id === id);
+  if (!c) return;
+  if (checked) addLeRelatedContact(c); else removeLeRelatedContact(id);
+}
+
+function addLeRelatedContact(c) {
+  if (!c || leRelatedContactsSelected.some(s => s.id === c.id)) return;
+  leRelatedContactsSelected.push(c);
+  renderLeRelatedChips();
+}
+
+function removeLeRelatedContact(id) {
+  leRelatedContactsSelected = leRelatedContactsSelected.filter(c => c.id !== id);
+  renderLeRelatedChips();
+  const cb = document.querySelector('#le-related-org-contact-list input[data-id="' + id + '"]');
+  if (cb) cb.checked = false;
+}
+
+function renderLeRelatedChips() {
+  const wrap = document.getElementById('le-related-chips');
+  if (!wrap) return;
+  wrap.innerHTML = leRelatedContactsSelected.map(c => `
+    <div class="org-selected-badge" style="margin-top:0;">
+      <span>${escLead(c.name)}${c.role ? ' · ' + escLead(c.role) : ''}</span>
+      <span onclick="removeLeRelatedContact('${c.id}')" title="Remove" style="cursor:pointer;">✕</span>
+    </div>`).join('');
+}
+
 function openLeadEditModal(id) {
   editingLeadId = id;
   const delBtn = document.getElementById('lead-delete-btn');
@@ -10115,11 +10307,13 @@ function openLeadEditModal(id) {
     allOrgs.slice().sort((a,b) => a.name.localeCompare(b.name)).map(o => `<option value="${o.id}">${escLead(o.name)}</option>`).join('');
 
   const contacts = contactListForSelect();
-  const scSel = document.getElementById('le-source-contact');
-  scSel.innerHTML = '<option value="">Select contact... (optional)</option>' +
-    contacts.map(c => `<option value="${c.id}">${escLead(c.name)}</option>`).join('');
-  const rcSel = document.getElementById('le-related-contacts');
-  rcSel.innerHTML = contacts.map(c => `<option value="${c.id}">${escLead(c.name)}</option>`).join('');
+  clearLeSourceContact();
+  leRelatedContactsSelected = [];
+  setRelatedContactMode('search');
+  const rcOrgSearch = document.getElementById('le-related-org-search');
+  if (rcOrgSearch) rcOrgSearch.value = '';
+  const rcOrgList = document.getElementById('le-related-org-contact-list');
+  if (rcOrgList) { rcOrgList.style.display = 'none'; rcOrgList.innerHTML = ''; }
 
   if (id) {
     const l = allLeads.find(x => x.id === id);
@@ -10133,8 +10327,18 @@ function openLeadEditModal(id) {
     document.getElementById('le-discipline').value = l.discipline || '';
     document.getElementById('le-source-type').value = l.sourceType || '';
     document.getElementById('le-source-detail').value = l.sourceDetail || '';
-    scSel.value = l.sourceContactId || '';
-    Array.from(rcSel.options).forEach(o => { o.selected = (l.relatedContactIds || []).includes(o.value); });
+    if (l.sourceContactId) {
+      const sc = contacts.find(c => c.id === l.sourceContactId);
+      if (sc) {
+        leSourceContactSelected = sc;
+        document.getElementById('le-source-contact').value = sc.id;
+        document.getElementById('le-source-contact-search').style.display = 'none';
+        document.getElementById('le-source-contact-selected-name').textContent = sc.name + (sc.role ? ' · ' + sc.role : '');
+        document.getElementById('le-source-contact-selected-display').style.display = 'block';
+      }
+    }
+    leRelatedContactsSelected = (l.relatedContactIds || []).map(rid => contacts.find(c => c.id === rid)).filter(Boolean);
+    renderLeRelatedChips();
     document.getElementById('le-date-identified').value = l.dateIdentified || '';
     document.getElementById('le-description').value = l.description || '';
   } else {
@@ -10147,8 +10351,6 @@ function openLeadEditModal(id) {
     document.getElementById('le-discipline').value = '';
     document.getElementById('le-source-type').value = '';
     document.getElementById('le-source-detail').value = '';
-    scSel.value = '';
-    Array.from(rcSel.options).forEach(o => o.selected = false);
     document.getElementById('le-date-identified').value = new Date().toISOString().split('T')[0];
     document.getElementById('le-description').value = '';
   }
@@ -10175,7 +10377,7 @@ async function saveLeadEdit() {
   const sourceType = document.getElementById('le-source-type').value;
   const sourceDetail = document.getElementById('le-source-detail').value.trim();
   const sourceContactId = document.getElementById('le-source-contact').value;
-  const relatedIds = Array.from(document.getElementById('le-related-contacts').selectedOptions).map(o => o.value);
+  const relatedIds = leRelatedContactsSelected.map(c => c.id);
   const dateIdentified = document.getElementById('le-date-identified').value;
   const description = document.getElementById('le-description').value.trim();
 
