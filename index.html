@@ -838,7 +838,7 @@
           <input type="checkbox" id="log-set-hold" onchange="toggleHoldSection(this.checked)" style="accent-color: #fb923c; width: 15px; height: 15px; cursor: pointer;" />
           <span style="font-size: 0.82rem; color: var(--tee-text); font-weight: 500;">Set a reminder alongside the sequence</span>
         </label>
-        <div style="font-size: 0.72rem; color: var(--tee-muted); margin-top: 0.35rem; margin-left: 1.5rem;">Adds this to your Reminders list and holds this contact's due date until the date you pick.</div>
+        <div style="font-size: 0.72rem; color: var(--tee-muted); margin-top: 0.35rem; margin-left: 1.5rem;">Adds this to your Reminders list on the chosen date. Sits alongside the sequence's own action — except when withdrawing an LI invitation on the connection-request step, where it replaces it.</div>
         <div id="hold-fields" style="display:none; margin-top: 0.875rem;">
           <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.4rem;">Reminder date</label>
           <input type="date" id="log-followup" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 8px; padding: 0.65rem 0.875rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.88rem;" />
@@ -2337,6 +2337,20 @@ async function completeAction(actionId) {
   } catch(e) { console.error('completeAction error:', e); return false; }
 }
 
+// Hard-deletes an action row outright (as opposed to completeAction, which marks
+// it done) — for when the person wants it gone rather than logged as actioned.
+async function deleteActionRow(actionId) {
+  try {
+    const resp = await airtableFetch(`${ACTIONS_URL}/${actionId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${getToken()}` }
+    });
+    if (!resp.ok) { console.error('deleteActionRow error:', JSON.stringify(await resp.json().catch(() => ({})))); return false; }
+    allActions = allActions.filter(a => a.id !== actionId);
+    return true;
+  } catch(e) { console.error('deleteActionRow error:', e); return false; }
+}
+
 // Completes whatever Sequence-sourced action is currently open for a contact (there
 // should only ever be one, since the sequence is linear) and creates the next one.
 // Used by every sequence-progression call site so the panel's chronological list
@@ -3624,8 +3638,29 @@ function renderUpcomingActionsHtml(contact) {
         ${a.detail ? `<div style="font-size:0.74rem;color:var(--tee-muted);margin-top:2px;line-height:1.4;white-space:pre-wrap;">${a.detail.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>` : ''}
       </div>
       <span class="due-pill ${pill.cls}" style="font-size:0.68rem;flex-shrink:0;">${pill.label}</span>
+      <div onclick="confirmDeleteActionRow('${a.id}','${a.source}')" title="Delete" style="flex-shrink:0;width:18px;height:18px;margin-top:1px;display:flex;align-items:center;justify-content:center;border-radius:5px;cursor:pointer;color:var(--tee-muted);font-size:0.85rem;" onmouseover="this.style.color='var(--overdue)';this.style.background='rgba(220,38,38,0.1)'" onmouseout="this.style.color='var(--tee-muted)';this.style.background='transparent'">✕</div>
     </div>`;
   }).join('');
+}
+
+// Hard-delete with a confirm — separate from completeActionRow, which marks
+// something as done. Deleting a Sequence-sourced row just removes that row;
+// it doesn't reset the contact's step, so warn accordingly.
+async function confirmDeleteActionRow(actionId, source) {
+  const isSeq = source === 'Sequence';
+  const msg = isSeq
+    ? 'Delete this sequence action? This removes the action row only — it won\'t change the contact\'s step or status.'
+    : 'Delete this action? This can\'t be undone.';
+  if (!confirm(msg)) return;
+  const ok = await deleteActionRow(actionId);
+  if (ok) {
+    const list = document.getElementById('upcoming-actions-list');
+    if (list && selectedContact) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
+    updateCounts();
+    renderView();
+  } else {
+    showToast('Could not delete that — check the console', 'error');
+  }
 }
 
 // Ticking a row done: a sequence-sourced row advances the sequence properly
@@ -4271,6 +4306,7 @@ async function saveLogAction() {
   const notes = document.getElementById('log-notes').value.trim();
   const setHold = document.getElementById('log-set-hold').checked;
   const followup = document.getElementById('log-followup').value;
+  const liSubtype = document.getElementById('log-li-subtype')?.value || '';
   
   if (setHold && !followup) {
     showToast('Please set a follow-up date to hold the sequence', 'error');
@@ -4309,12 +4345,20 @@ async function saveLogAction() {
     const nextActionNotes = (document.getElementById('log-na-note')?.value || '').trim();
     const nextActionDetail = (document.getElementById('log-na-detail')?.value || '').trim();
 
-    // A bespoke reminder becomes its own row in the Actions table — Source: Manual —
-    // and we also push the date onto the contact's own Next Action fields, so the
-    // stage view's overdue badge reflects the new date instead of the old one.
+    // A bespoke reminder becomes its own row in the Actions table — Source: Manual.
+    // In one specific case it also supersedes the sequence's own open action row:
+    // withdrawing an LI invitation while the contact is still on the "Send LI
+    // connection request" step, since the reminder IS the replacement for that
+    // exact pending action. Any other reminder sits alongside the sequence row
+    // as before — it doesn't touch it.
     if (setHold && followup) {
       const created = await createAction(selectedContact.id, nextActionNotes || subject, followup, 'Manual', nextActionDetail);
-      await updateContact(selectedContact.id, { 'Next Action Notes': [nextActionNotes || subject], 'Next Action Due': followup }, { silent: true });
+      const supersedesLiRequest = liSubtype === 'Withdrew LI invitation' && selectedContact.step === 1;
+      if (supersedesLiRequest) {
+        const openSeq = allActions.filter(a => a.contactId === selectedContact.id && a.source === 'Sequence' && !a.completed);
+        for (const a of openSeq) { await completeAction(a.id); }
+        await updateContact(selectedContact.id, { 'Next Action Notes': [nextActionNotes || subject], 'Next Action Due': followup }, { silent: true });
+      }
       closeLogModal();
       updateCounts();
       renderView();
