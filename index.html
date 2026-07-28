@@ -4345,7 +4345,7 @@ async function saveLogAction() {
     };
     if (notes) fields['Notes'] = notes;
     
-    const resp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
+    const resp = await airtableFetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields })
@@ -4812,7 +4812,7 @@ function switchWorkspace(ws) {
     if (deskBar) deskBar.style.display = 'flex';
     orgsBody.style.display = 'flex';
     tabOrgs.classList.add('active');
-    if (allOrgs.length === 0) loadOrganisations();
+    if (!orgsFullyLoaded) loadOrganisations();
     else { updateOrgCounts(); filterOrgs(); }
   } else if (ws === 'candidates') {
     if (deskBar) deskBar.style.display = 'none';
@@ -5516,13 +5516,27 @@ async function saveOrgEdit() {
 let allOrgs = [];
 let currentOrgFilter = 'all';
 let selectedOrg = null;
+// True only once the FULL org record set has loaded (all fields) — distinct from
+// allOrgs.length, since ensureOrgsLoaded() can populate allOrgs early with just
+// Name+Sector for lightweight lookups elsewhere in the app. Switching to the
+// Organisations tab must check this flag, not just array length, or it can get
+// stuck showing that lightweight data with every other field blank.
+let orgsFullyLoaded = false;
+
+// Airtable returns linked-record and lookup fields as arrays even when there's
+// only one value — this normalises either shape down to a plain display string
+// so a genuinely-set field can never render as blank due to a type mismatch.
+function unwrapAirtableField(v) {
+  if (Array.isArray(v)) return v.length > 0 ? String(v[0]) : '';
+  return v || '';
+}
 
 async function loadOrganisations() {
   document.getElementById('org-list').innerHTML = '<div class="loading"><div class="spinner"></div> Loading organisations...</div>';
   try {
     let records = [], offset = null;
     do {
-      let url = `https://api.airtable.com/v0/${BASE_ID}/Organisations?pageSize=100&fields[]=Organisation Name&fields[]=Sector&fields[]=Subsector&fields[]=Website (AI)&fields[]=Country&fields[]=Region&fields[]=Employee Size Range&fields[]=Notes&fields[]=Owner`;
+      let url = `https://api.airtable.com/v0/${BASE_ID}/Organisations?pageSize=100&fields[]=Organisation Name&fields[]=Sector&fields[]=Subsector&fields[]=Website (AI)&fields[]=Website plain text&fields[]=Country&fields[]=Region&fields[]=County&fields[]=City&fields[]=Address Line 1&fields[]=Postcode&fields[]=Employee Size Range&fields[]=Notes&fields[]=Owner`;
       if (offset) url += `&offset=${offset}`;
       const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
       if (!resp.ok) throw new Error('Failed to load organisations');
@@ -5534,7 +5548,7 @@ async function loadOrganisations() {
       id: r.id,
       name: r.fields['Organisation Name'] || '',
       sector: r.fields['Sector'] || '',
-      subsector: String(r.fields['Subsector'] || ''),
+      subsector: unwrapAirtableField(r.fields['Subsector']),
       website: (() => {
         const plain = r.fields['Website plain text'];
         if (plain) return plain;
@@ -5551,15 +5565,16 @@ async function loadOrganisations() {
         return String(ai);
       })(),
       address1: r.fields['Address Line 1'] || '',
-      city: r.fields['City'] || '',
-      county: r.fields['County'] || '',
+      city: unwrapAirtableField(r.fields['City']),
+      county: unwrapAirtableField(r.fields['County']),
       postcode: r.fields['Postcode'] || '',
-      country: r.fields['Country'] || '',
-      region: String(r.fields['Region'] || ''),
+      country: unwrapAirtableField(r.fields['Country']),
+      region: unwrapAirtableField(r.fields['Region']),
       size: r.fields['Employee Size Range'] || '',
       notes: r.fields['Notes'] || '',
       owner: (() => { const o = r.fields['Owner']; if (!o) return ''; if (typeof o === 'string') return o; if (Array.isArray(o)) { const first = o[0]; if (!first) return ''; if (typeof first === 'string') return first; return first.name || first.value || first.id || ''; } if (typeof o === 'object') return o.name || o.value || ''; return String(o); })()
     })).sort((a,b) => a.name.localeCompare(b.name));
+    orgsFullyLoaded = true;
     // If contacts haven't loaded yet, load all contacts for counting
     if (allContactsUnfiltered.length === 0) await loadAllContactsForCounting();
     updateOrgCounts();
@@ -6966,32 +6981,18 @@ function buildOrgSelects() {
   });
 }
 
-// ensureOrgsLoaded — quietly loads orgs and field options
+// ensureOrgsLoaded — quietly loads full org data and field options. Previously
+// this had its own lightweight Name+Sector-only fetch, which is what caused
+// orgs to get permanently stuck showing every other field blank if this ran
+// before the Organisations tab's own full load. Now there is exactly one org
+// loading path, so that class of bug can't recur.
 async function ensureOrgsLoaded() {
-  const needsOrgs = allOrgs.length === 0;
+  const needsOrgs = !orgsFullyLoaded;
   const needsOptions = Object.keys(orgFieldOptions).length === 0;
   await Promise.all([
-    needsOrgs ? (async () => {
-      try {
-        let records = [], offset = null;
-        do {
-          let url = `https://api.airtable.com/v0/${BASE_ID}/Organisations?pageSize=100&fields[]=Organisation Name&fields[]=Sector`;
-          if (offset) url += '&offset=' + offset;
-          const resp = await fetch(url, { headers: { Authorization: `Bearer ${getToken()}` } });
-          const data = await resp.json();
-          records = records.concat(data.records);
-          offset = data.offset;
-        } while (offset);
-        allOrgs = records.map(r => ({
-          id: r.id, name: r.fields['Organisation Name'] || '',
-          sector: r.fields['Sector'] || '',
-          subsector: '', website: '', country: '', region: '', size: '', notes: ''
-        })).sort((a,b) => a.name.localeCompare(b.name));
-      } catch(e) { console.log('Org preload error:', e); }
-    })() : Promise.resolve(),
+    needsOrgs ? loadOrganisations() : Promise.resolve(),
     needsOptions ? loadOrgFieldOptions() : Promise.resolve()
   ]);
-  // Always rebuild selects — uses live options if loaded, fallbacks otherwise
   buildOrgSelects();
 }
 
@@ -9051,7 +9052,7 @@ async function saveCandidateLog() {
     const loggedBy = getViewUser() && getViewUser() !== 'All' ? getViewUser() : getOwner();
     const intFields = { 'Interaction Subject': subject, 'Type': type, 'Date': new Date().toISOString().split('T')[0], 'Logged by': loggedBy };
     if (notes) intFields['Notes'] = notes;
-    const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: intFields, typecast: true }) });
+    const intResp = await airtableFetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: intFields, typecast: true }) });
     const intData = await intResp.json();
     if (!intResp.ok) throw new Error(intData.error?.message || 'Log failed');
     // Update candidate interaction IDs — save back to Airtable linked field AND update locally
@@ -9060,7 +9061,7 @@ async function saveCandidateLog() {
       const existingIds = idx > -1 ? (allCandidates[idx].interactionIds || []) : [];
       const updatedIds = [intData.id, ...existingIds];
       // Save linked interaction IDs back to Candidates table
-      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, {
+      await airtableFetch(`${CAND_API_URL}/${selectedCandidate.id}`, {
         method: 'PATCH',
         headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ fields: { 'Interactions': updatedIds } })
@@ -9070,12 +9071,12 @@ async function saveCandidateLog() {
     // Save reminder date and next action notes
     if (setReminder && reminderDate) {
       // Save date and owner first
-      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': reminderDate } }) });
+      await airtableFetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action date': reminderDate } }) });
       // Save next action notes separately (multiple select field)
       if (nextActionNotes) {
-        await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action notes': nextActionNotes } }) });
+        await airtableFetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action notes': nextActionNotes } }) });
       }
-      await fetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action by': loggedBy } }) });
+      await airtableFetch(`${CAND_API_URL}/${selectedCandidate.id}`, { method: 'PATCH', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: { 'Next action by': loggedBy } }) });
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
       if (idx > -1) { allCandidates[idx].nextActionDate = reminderDate; if(nextActionNotes) allCandidates[idx].nextActionNotes = [nextActionNotes]; allCandidates[idx].nextActionBy = loggedBy; selectedCandidate = allCandidates[idx]; }
     }
@@ -9663,7 +9664,7 @@ async function saveAssignLog() {
   document.getElementById('assign-log-saving').style.display = 'block';
   const loggedBy = getViewUser() && getViewUser() !== 'All' ? getViewUser() : getOwner();
   try {
-    const intResp = await fetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
+    const intResp = await airtableFetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields: {
@@ -9680,7 +9681,7 @@ async function saveAssignLog() {
     const assign = allAssignments.find(a => a.id === assignId);
     const existingIds = assign?.interactionIds || [];
     const updatedIds = [intData.id, ...existingIds];
-    await fetch(`https://api.airtable.com/v0/${BASE_ID}/Assignments/${assignId}`, {
+    await airtableFetch(`https://api.airtable.com/v0/${BASE_ID}/Assignments/${assignId}`, {
       method: 'PATCH',
       headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ fields: { 'Interactions': updatedIds } })
