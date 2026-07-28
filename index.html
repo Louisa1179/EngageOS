@@ -819,6 +819,7 @@
           <option value="Sent LI connection request">Connection request</option>
           <option value="Connected on LinkedIn">Acceptance</option>
           <option value="Sent LI message / InMail">Message / InMail</option>
+          <option value="Withdrew LI invitation">Withdrew LI invitation</option>
         </select>
       </div>
       <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.5rem;">Logged by</label>
@@ -4185,7 +4186,7 @@ function applyLiSubtype() {
   const subtypeSelect = document.getElementById('log-li-subtype');
   const subjectEl = document.getElementById('log-subject');
   if (!subtypeSelect || !subjectEl) return;
-  const seeded = ['Sent LI connection request', 'Connected on LinkedIn', 'Sent LI message / InMail'];
+  const seeded = ['Sent LI connection request', 'Connected on LinkedIn', 'Sent LI message / InMail', 'Withdrew LI invitation'];
   if (!subjectEl.value.trim() || seeded.includes(subjectEl.value.trim())) {
     subjectEl.value = subtypeSelect.value;
   }
@@ -5756,6 +5757,17 @@ function dashPool() {
   return all.filter(c => dashOwner === 'All' || (c.owner || 'Louisa Daly') === dashOwner);
 }
 
+function dashInSequenceCounts() {
+  const merged = allContactsAll.length > 0 ? allContactsAll : [...allContacts, ...dnsContacts, ...unsubContacts, ...dncContacts];
+  const seen = new Set(); const all = [];
+  merged.forEach(c => { if (!seen.has(c.id)) { seen.add(c.id); all.push(c); } });
+  const parked = ['Do Not Contact', 'Do Not Sequence', 'Unsubscribed'];
+  const active = all.filter(c => !parked.includes(c.status));
+  const louisa = active.filter(c => (c.owner || 'Louisa Daly') === 'Louisa Daly').length;
+  const john = active.filter(c => c.owner === 'John Daly').length;
+  return { all: active.length, louisa, john };
+}
+
 function dashPipeline() {
   const today = new Date().toISOString().split('T')[0];
   const active = dashPool().filter(c => !['Do Not Contact','Do Not Sequence','Unsubscribed'].includes(c.status));
@@ -5900,14 +5912,16 @@ function dashAddedByCounts(kind) {
 }
 
 function dashRenderBody() {
-  const a = dashActivity(), eng = dashEngagement(), pipe = dashPipeline(), out = dashOutcomes(), weeks = dashWeeklyTrend();
+  const a = dashActivity(), eng = dashEngagement(), pipe = dashPipeline(), out = dashOutcomes(), weeks = dashWeeklyTrend(), inSeq = dashInSequenceCounts();
   const periodLabel = dashPeriod === 'day' ? 'today' : dashPeriod === 'week' ? 'last 7 days' : dashPeriod === '90d' ? 'last 90 days' : 'last 30 days';
   const gbp = n => '£' + Math.round(n).toLocaleString();
   const pmax = Math.max(pipe.start.count,pipe.li.count,pipe.e1.count,pipe.e2.count,pipe.e3.count,pipe.lim.count,pipe.call.count,pipe.warm.count,pipe.responded.count,1);
   const today = new Date().toISOString().split('T')[0];
   const overdue = dashPool().filter(c => c.nextActionDue && c.nextActionDue < today && !['Do Not Contact','Do Not Sequence','Unsubscribed'].includes(c.status)).length;
   const newC = dashAddedByCounts('contacts'), newO = dashAddedByCounts('orgs'), newCand = dashAddedByCounts('candidates');
-  return dashSection('Activity · ' + periodLabel)
+  return dashSection('In sequence · live snapshot')
+    + dashGrid([dashCard('All', inSeq.all), dashCard('Louisa', inSeq.louisa), dashCard('John', inSeq.john)], 120)
+    + dashSection('Activity · ' + periodLabel)
     + dashGrid([dashCard('Total touches', a.total), dashCard('LinkedIn', a.linkedin), dashCard('Emails', a.email), dashCard('Calls / meetings', a.call + a.meeting)], 120)
     + dashGrid([dashCard('LI connection requests', a.liRequest), dashCard('LI acceptances', a.liAccept), dashCard('LI messages / InMail', a.liMessage + a.liOther)], 130)
     + `<div style="background:var(--tee-mid);border:1px solid var(--tee-border);border-radius:12px;padding:1rem 1.25rem;margin-top:12px;"><div style="font-size:0.78rem;color:var(--tee-muted);margin-bottom:6px;">Weekly outreach, last 8 weeks</div>${dashTrend(weeks)}</div>`
