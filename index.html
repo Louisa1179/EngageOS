@@ -3646,14 +3646,37 @@ function renderUpcomingActionsHtml(contact) {
 // Hard-delete with a confirm — separate from completeActionRow, which marks
 // something as done. Deleting a Sequence-sourced row just removes that row;
 // it doesn't reset the contact's step, so warn accordingly.
+// Keeps a contact's own Next Action Due/Notes fields (the ones the overdue badge
+// and card date actually read from) in sync with whatever open action is now
+// earliest for them in the Actions table — called after any create/edit/complete/
+// delete so those fields can't silently drift out of step with the actions list.
+async function syncContactNextActionFromRemaining(contactId) {
+  if (!contactId) return;
+  const remaining = allActions.filter(a => a.contactId === contactId && !a.completed)
+    .sort((a, b) => (a.dueDate || '9999-99-99').localeCompare(b.dueDate || '9999-99-99'));
+  const next = remaining[0];
+  await updateContact(contactId, {
+    'Next Action Due': next ? (next.dueDate || null) : null,
+    'Next Action Notes': next ? [next.action] : []
+  }, { silent: true });
+  if (selectedContact && selectedContact.id === contactId) {
+    selectedContact.nextActionDue = next ? (next.dueDate || '') : '';
+  }
+}
+
 async function confirmDeleteActionRow(actionId, source) {
   const isSeq = source === 'Sequence';
   const msg = isSeq
     ? 'Delete this sequence action? This removes the action row only — it won\'t change the contact\'s step or status.'
     : 'Delete this action? This can\'t be undone.';
   if (!confirm(msg)) return;
+  const contactId = selectedContact?.id;
   const ok = await deleteActionRow(actionId);
   if (ok) {
+    // Re-sync the contact's own Next Action fields to whatever open action is now
+    // earliest for them — otherwise a deleted row can leave the overdue badge
+    // pointing at a due date that no longer has any row behind it.
+    await syncContactNextActionFromRemaining(contactId);
     const list = document.getElementById('upcoming-actions-list');
     if (list && selectedContact) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
     updateCounts();
@@ -3672,6 +3695,7 @@ async function completeActionRow(actionId, source) {
   }
   const ok = await completeAction(actionId);
   if (ok) {
+    await syncContactNextActionFromRemaining(selectedContact?.id);
     const list = document.getElementById('upcoming-actions-list');
     if (list && selectedContact) list.innerHTML = renderUpcomingActionsHtml(selectedContact);
     updateCounts();
@@ -3736,14 +3760,9 @@ async function saveAddAction() {
     ? await updateAction(editingActionId, label, dueDate, detail)
     : await createAction(selectedContact.id, label, dueDate, 'Manual', detail);
   if (!ok) { showToast('Could not save that action — check the console', 'error'); return; }
-  // Sequence rows are the source the bucket badge and card date read from —
-  // keep the Clients field in step so editing here doesn't silently drift again.
-  if (isSequenceRow) {
-    await updateContact(selectedContact.id, { 'Next Action Due': dueDate }, { silent: true });
-    const idx = allContacts.findIndex(c => c.id === selectedContact.id);
-    if (idx > -1) allContacts[idx].nextActionDue = dueDate;
-    selectedContact.nextActionDue = dueDate;
-  }
+  // Keep the contact's own Next Action fields in step with whatever is now the
+  // earliest open action for them, whichever row this was.
+  await syncContactNextActionFromRemaining(selectedContact.id);
   const wasEditing = !!editingActionId;
   closeAddActionModal();
   const list = document.getElementById('upcoming-actions-list');
