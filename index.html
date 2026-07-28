@@ -838,7 +838,7 @@
           <input type="checkbox" id="log-set-hold" onchange="toggleHoldSection(this.checked)" style="accent-color: #fb923c; width: 15px; height: 15px; cursor: pointer;" />
           <span style="font-size: 0.82rem; color: var(--tee-text); font-weight: 500;">Set a reminder alongside the sequence</span>
         </label>
-        <div style="font-size: 0.72rem; color: var(--tee-muted); margin-top: 0.35rem; margin-left: 1.5rem;">Adds this to your Reminders list on the chosen date — without touching the sequence.</div>
+        <div style="font-size: 0.72rem; color: var(--tee-muted); margin-top: 0.35rem; margin-left: 1.5rem;">Adds this to your Reminders list and holds this contact's due date until the date you pick.</div>
         <div id="hold-fields" style="display:none; margin-top: 0.875rem;">
           <label style="font-size: 0.75rem; color: var(--tee-muted); text-transform: uppercase; letter-spacing: 0.08em; display: block; margin-bottom: 0.4rem;">Reminder date</label>
           <input type="date" id="log-followup" style="width:100%; background: #f5f7fa; border: 1px solid var(--tee-border); border-radius: 8px; padding: 0.65rem 0.875rem; color: var(--tee-text); font-family: var(--font-sans, sans-serif); font-size: 0.88rem;" />
@@ -4310,10 +4310,11 @@ async function saveLogAction() {
     const nextActionDetail = (document.getElementById('log-na-detail')?.value || '').trim();
 
     // A bespoke reminder becomes its own row in the Actions table — Source: Manual —
-    // rather than overwriting the contact's Next Action fields, so it can sit
-    // alongside the sequence's own action instead of clobbering it.
+    // and we also push the date onto the contact's own Next Action fields, so the
+    // stage view's overdue badge reflects the new date instead of the old one.
     if (setHold && followup) {
       const created = await createAction(selectedContact.id, nextActionNotes || subject, followup, 'Manual', nextActionDetail);
+      await updateContact(selectedContact.id, { 'Next Action Notes': [nextActionNotes || subject], 'Next Action Due': followup }, { silent: true });
       closeLogModal();
       updateCounts();
       renderView();
