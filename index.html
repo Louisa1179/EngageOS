@@ -9048,24 +9048,23 @@ async function saveCandidateLog() {
   if (setReminder && !reminderDate) { showToast('Please set a reminder date', 'error'); return; }
   document.getElementById('cand-log-saving').style.display = 'block';
   try {
-    // Log interaction — link to candidate via Related Contact if possible, else just save
+    // Log interaction — linked to the candidate in this same save via the
+    // Candidates field on the Interactions table, the same one-step pattern
+    // Contacts already uses (via Related Contact). No separate follow-up save
+    // is needed to establish the link, so there's no window where the note
+    // exists but isn't connected to the candidate.
     const loggedBy = getViewUser() && getViewUser() !== 'All' ? getViewUser() : getOwner();
-    const intFields = { 'Interaction Subject': subject, 'Type': type, 'Date': new Date().toISOString().split('T')[0], 'Logged by': loggedBy };
+    const intFields = { 'Interaction Subject': subject, 'Type': type, 'Date': new Date().toISOString().split('T')[0], 'Logged by': loggedBy, 'Candidates': [selectedCandidate.id] };
     if (notes) intFields['Notes'] = notes;
     const intResp = await airtableFetch(`https://api.airtable.com/v0/${BASE_ID}/Interactions`, { method: 'POST', headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ fields: intFields, typecast: true }) });
     const intData = await intResp.json();
     if (!intResp.ok) throw new Error(intData.error?.message || 'Log failed');
-    // Update candidate interaction IDs — save back to Airtable linked field AND update locally
+    // Airtable populates the candidate's own Interactions field automatically
+    // via the link above — just mirror it in local state for an instant UI update.
     if (intData.id) {
       const idx = allCandidates.findIndex(c => c.id === selectedCandidate.id);
       const existingIds = idx > -1 ? (allCandidates[idx].interactionIds || []) : [];
       const updatedIds = [intData.id, ...existingIds];
-      // Save linked interaction IDs back to Candidates table
-      await airtableFetch(`${CAND_API_URL}/${selectedCandidate.id}`, {
-        method: 'PATCH',
-        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ fields: { 'Interactions': updatedIds } })
-      });
       if (idx > -1) { allCandidates[idx].interactionIds = updatedIds; selectedCandidate = allCandidates[idx]; }
     }
     // Save reminder date and next action notes
