@@ -3821,10 +3821,15 @@ function renderPanel(contact, interactions) {
       <div class="panel-badges">${tierLabel}${liTag}<span class="due-pill ${due.cls}" style="font-size:0.72rem;">${due.label}</span></div>
       <div class="contact-alert-note" style="margin-top:0.75rem;"></div>
       <div class="contact-ned-roles" style="margin-top:0.75rem;"></div>
-      ${contact.previousEmployerNames && contact.previousEmployerNames.length > 0 ? `<div style="background:rgba(53,150,194,0.08);border:1.5px solid rgba(53,150,194,0.3);border-radius:12px;padding:0.7rem 1rem;margin-top:0.75rem;">
+      ${(() => {
+        // Guard against any raw Airtable record ID (e.g. "recXXXXXXXXXXXXXX")
+        // ever surfacing here unresolved — filters it out rather than showing it.
+        const names = (contact.previousEmployerNames || []).filter(n => n && !/^rec[a-zA-Z0-9]{14,}$/.test(n));
+        return names.length > 0 ? `<div style="background:rgba(53,150,194,0.08);border:1.5px solid rgba(53,150,194,0.3);border-radius:12px;padding:0.7rem 1rem;margin-top:0.75rem;">
         <div style="font-size:0.72rem;font-weight:700;color:var(--tee-accent);text-transform:uppercase;letter-spacing:0.08em;display:flex;align-items:center;gap:0.4rem;margin-bottom:0.5rem;">🕒 Previously at</div>
-        <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">${contact.previousEmployerNames.map(n => `<span style="font-size:0.76rem;padding:3px 11px;border-radius:10px;background:rgba(255,255,255,0.7);color:var(--tee-text);border:1px solid rgba(53,150,194,0.3);font-weight:500;">${n}</span>`).join('')}</div>
-      </div>` : ''}
+        <div style="display:flex;flex-wrap:wrap;gap:0.4rem;">${names.map(n => `<span style="font-size:0.76rem;padding:3px 11px;border-radius:10px;background:rgba(255,255,255,0.7);color:var(--tee-text);border:1px solid rgba(53,150,194,0.3);font-weight:500;">${n}</span>`).join('')}</div>
+      </div>` : '';
+      })()}
       <div style="display:flex;align-items:center;gap:0.5rem;margin-top:0.75rem;position:relative;">
         <span style="font-size:0.72rem;color:var(--tee-muted);">Owner:</span>
         <span id="contact-owner-display" style="font-size:0.72rem;padding:2px 8px;border-radius:10px;background:rgba(53,150,194,0.1);color:var(--tee-accent);font-weight:500;">${contact.owner || 'Unassigned'}</span>
@@ -5713,10 +5718,17 @@ async function loadAllContactsFull() {
       owner: getField(r, 'Owner'),
       alertNote: getField(r, 'Alert Note')
     }));
-    // Resolve org names from already-loaded orgs where possible
+    // Resolve org names from already-loaded orgs where possible — both the
+    // current employer AND previous employers. Previous employers were being
+    // left as raw record IDs here, which is why they could show up unresolved
+    // in the "Previously at" pills on a contact reached via an org page.
     if (allOrgs && allOrgs.length) {
       const omap = {}; allOrgs.forEach(o => { omap[o.id] = o.name; });
-      allContactsAll = allContactsAll.map(c => ({ ...c, orgName: c.org && omap[c.org] ? omap[c.org] : c.orgName }));
+      allContactsAll = allContactsAll.map(c => ({
+        ...c,
+        orgName: c.org && omap[c.org] ? omap[c.org] : c.orgName,
+        previousEmployerNames: (c.previousEmployerIds || []).map(id => omap[id] || '').filter(Boolean)
+      }));
     }
     if (selectedOrg) {
       renderOrgDetail(selectedOrg);
